@@ -37,5 +37,4 @@ pytest-cov>=5.0
 pyshark>=0.6            # requires tshark installed separately (see docs/data_pipeline.md)
 scapy>=2.5
 
-# --- dev tooling ---
-jupyter>=1.0
+# Notebooks (optional, large install): pip install -r requirements-dev.txt

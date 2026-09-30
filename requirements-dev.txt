@@ -1,0 +1,3 @@
+# Optional tooling for notebooks/01_eda.ipynb
+-r requirements.txt
+jupyter>=1.0

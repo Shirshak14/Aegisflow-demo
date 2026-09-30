@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from aegisflow.config import load_config
@@ -59,6 +59,15 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     ledger = Ledger(db_path or default_db_path())
     engine = ReplayEngine(ledger)
     app.state.ledger, app.state.engine = ledger, engine
+
+    @app.exception_handler(FileNotFoundError)
+    def missing_artifact(_: Request, exc: FileNotFoundError) -> JSONResponse:
+        # Dataset files and trained models are not in the git repo; tell a fresh checkout what to run.
+        name = Path(exc.filename).name if exc.filename else "a required file"
+        return JSONResponse(status_code=503, content={"detail": (
+            f"Missing {name}: processed data / trained model not found. Run "
+            "`python -m aegisflow preprocess --dataset cic_ids2017` then "
+            "`python -m aegisflow train --dataset cic_ids2017` (see README).")})
     if warm_up:
         engine.warm_up()
 

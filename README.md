@@ -271,7 +271,7 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 
-The project uses several machine-learning and scientific-computing packages, so the initial installation may take several minutes.
+The project uses several machine-learning and scientific-computing packages, so the initial installation may take several minutes. On Windows, keep the project path short (e.g. `C:\AegisFlow`) because very long paths can make `pip` fail. Jupyter is optional: `pip install -r requirements-dev.txt`.
 
 
 # Dataset Setup
@@ -320,6 +320,8 @@ Then open:
 http://127.0.0.1:8000
 
 The dashboard provides access to the project's monitoring and replay interface.
+
+Note: until the dataset has been preprocessed and the model trained, the dashboard loads but `/dataset/status`, `/model/status` and `/replay/start` return HTTP 503 explaining what is missing.
 
 
 # Replay
