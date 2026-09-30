@@ -22,7 +22,9 @@ The demo replays real held-out CIC-IDS2017 traffic through the trained model. Th
 # 1. Environment
 python -m venv .venv
 .venv\Scripts\activate            # Windows;  macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt   # ~15 min (torch, shap, xgboost, jupyter). Windows: clone to a short
+                                  # path such as C:\Users\<you>\Aegisflow-demo; very long paths hit the
+                                  # 260-character limit inside lxml and pip fails (or enable long paths)
 
 # 2. Dataset: download GeneratedLabelledFlows.zip from the official CIC page and unzip
 #    the 8 day CSVs anywhere under data/raw/cic_ids2017/ (instructions: docs/data_pipeline.md)
