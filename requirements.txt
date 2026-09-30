@@ -1,0 +1,41 @@
+# AegisFlow dependencies, grouped by the phase that introduces them.
+# Install everything up front: pip install -r requirements.txt
+# On Windows, run this inside WSL2 or a native venv; PyTorch CPU wheels work on both.
+
+# --- Phase 1: config, ingestion, schema, EDA ---
+pandas>=2.2
+numpy>=1.26
+pyarrow>=15.0          # Parquet read/write
+PyYAML>=6.0
+matplotlib>=3.8
+pydantic>=2.6
+
+# --- Phase 2: feature engineering / windowing ---
+scipy>=1.12
+
+# --- Phase 3: classical and temporal baseline models ---
+scikit-learn>=1.4
+xgboost>=2.0
+
+# --- Phase 3: temporal deep baseline ---
+# CPU-only by default; if you have a CUDA GPU, install torch per
+# https://pytorch.org/get-started/locally/ instead of this line.
+torch>=2.2
+
+# --- Phase 5: explainability ---
+shap>=0.45
+
+# --- Phase 6: backend, database, replay ---
+fastapi>=0.110
+uvicorn[standard]>=0.29
+sqlalchemy>=2.0
+python-multipart>=0.0.9
+
+# --- Phase 8: testing, PCAP support ---
+pytest>=8.0
+pytest-cov>=5.0
+pyshark>=0.6            # requires tshark installed separately (see docs/data_pipeline.md)
+scapy>=2.5
+
+# --- dev tooling ---
+jupyter>=1.0

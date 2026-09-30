@@ -1,0 +1,85 @@
+# Dataset-label -> normalized attack class -> inferred attack stage.
+# This mapping is a documented PROXY, not ground truth. Every dataset label
+# used by an adapter must appear here or ingestion raises LabelMappingError.
+#
+# label_type meanings (surfaced in the dashboard so nobody mistakes a proxy for a fact):
+#   "ground_truth"  -> the dataset's own benign/attack-name label (dataset_label / normalized_attack_class)
+#   "inferred"      -> AegisFlow's attack_stage column, derived via this file's mapping
+
+stages_order:
+  - "Benign"
+  - "Reconnaissance"
+  - "Initial Access"
+  - "Lateral Movement"
+  - "Command and Control"
+  - "Exfiltration"
+  - "Impact"
+
+cic_ids2017:
+  BENIGN:
+    normalized_attack_class: "Benign"
+    attack_stage: "Benign"
+    confidence: "ground_truth"
+  PortScan:
+    normalized_attack_class: "Reconnaissance"
+    attack_stage: "Reconnaissance"
+    confidence: "inferred"
+    note: "Port scanning is a classic recon technique; direct mapping is reasonably strong."
+  FTP-Patator:
+    normalized_attack_class: "Brute Force"
+    attack_stage: "Initial Access"
+    confidence: "inferred"
+  SSH-Patator:
+    normalized_attack_class: "Brute Force"
+    attack_stage: "Initial Access"
+    confidence: "inferred"
+  "Web Attack – Brute Force":
+    normalized_attack_class: "Web Attack"
+    attack_stage: "Initial Access"
+    confidence: "inferred"
+  "Web Attack – XSS":
+    normalized_attack_class: "Web Attack"
+    attack_stage: "Initial Access"
+    confidence: "inferred"
+  "Web Attack – Sql Injection":
+    normalized_attack_class: "Web Attack"
+    attack_stage: "Initial Access"
+    confidence: "inferred"
+  Infiltration:
+    normalized_attack_class: "Infiltration"
+    attack_stage: "Lateral Movement"
+    confidence: "inferred"
+    note: "CIC-IDS2017 documentation describes this as an internal foothold/pivot scenario."
+  Heartbleed:
+    normalized_attack_class: "Heartbleed"
+    attack_stage: "Lateral Movement"
+    confidence: "inferred"
+    note: "Modeled as credential/memory-disclosure exploitation enabling lateral movement; weak proxy."
+  Bot:
+    normalized_attack_class: "Botnet"
+    attack_stage: "Command and Control"
+    confidence: "inferred"
+  DoS:
+    normalized_attack_class: "Denial of Service"
+    attack_stage: "Impact"
+    confidence: "inferred"
+  DoS slowloris:
+    normalized_attack_class: "Denial of Service"
+    attack_stage: "Impact"
+    confidence: "inferred"
+  DoS Slowhttptest:
+    normalized_attack_class: "Denial of Service"
+    attack_stage: "Impact"
+    confidence: "inferred"
+  DoS Hulk:
+    normalized_attack_class: "Denial of Service"
+    attack_stage: "Impact"
+    confidence: "inferred"
+  DoS GoldenEye:
+    normalized_attack_class: "Denial of Service"
+    attack_stage: "Impact"
+    confidence: "inferred"
+  DDoS:
+    normalized_attack_class: "Denial of Service"
+    attack_stage: "Impact"
+    confidence: "inferred"

@@ -1,0 +1,39 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# datasets are large and licensed -- never commit them
+data/raw/**
+!data/raw/.gitkeep
+data/interim/**
+!data/interim/.gitkeep
+data/processed/**
+!data/processed/.gitkeep
+
+# trained artifacts
+models/**
+!models/.gitkeep
+
+reports/figures/*.png
+reports/eda/*.json
+reports/logs/*.jsonl
+reports/metrics/*.json
+
+node_modules/
+frontend/dist/
+.env
+*.db
+*.db-wal
+*.db-shm
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Phase 3+ outputs: trained models are regenerated with `python -m aegisflow train`
+artifacts/models/**
+artifacts/archive/**
+# archived copies of processed data (derived from the licensed dataset)
+data/archive/**
+# per-run pytest basetemp directories
+.pytest_*/

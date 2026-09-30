@@ -1,0 +1,82 @@
+# Master configuration. Every tunable pipeline parameter lives here, not in source code.
+# Override any key on the CLI, e.g. --set model.batch_size=64
+
+paths:
+  data_raw: "data/raw"
+  data_interim: "data/interim"
+  data_processed: "data/processed"
+  models: "models"
+  reports: "reports"
+  configs: "configs"
+
+logging:
+  level: "INFO"
+  json_file: "reports/logs/pipeline.jsonl"
+
+active_dataset: "cic_ids2017"
+
+windowing:
+  window_size_seconds: 60
+  stride_seconds: 30
+  sequence_length: 10
+  # One-based rank among same-host windows whose window_start is strictly after
+  # the final input window's window_end; this is not a dataframe-row offset.
+  forecast_horizon: 1
+  min_flows_per_window: 1
+  group_by: "source_ip"
+
+split:
+  # Time-based split. Fractions apply to the sorted-by-time window index, never random.
+  train_fraction: 0.6
+  val_fraction: 0.2
+  test_fraction: 0.2
+
+model:
+  type: "gru"          # gru | lstm | transformer
+  hidden_size: 64
+  num_layers: 1
+  dropout: 0.2
+  learning_rate: 0.001
+  batch_size: 128
+  epochs: 20
+  num_workers: 0
+  early_stopping_patience: 4
+  device: "auto"        # auto | cpu | cuda
+
+confidence:
+  stage_prediction_threshold: 0.5
+  uncertain_label: "UNCERTAIN"
+
+risk_scoring:
+  weights:
+    attack_probability: 0.4
+    stage_severity: 0.25
+    prediction_confidence: 0.15
+    abnormality_score: 0.1
+    recent_attack_history: 0.1
+  stage_severity:
+    Benign: 0
+    Reconnaissance: 30
+    Initial Access: 55
+    Lateral Movement: 70
+    Command and Control: 85
+    Exfiltration: 95
+    Impact: 90
+  thresholds:
+    low: 33
+    medium: 66
+    high: 100
+
+replay:
+  default_speed: 10
+  allowed_speeds: [1, 10, 100, 1000]
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+
+database:
+  url: "sqlite:///data/processed/aegisflow.db"
+
+sample_size: null   # set via --sample-size for fast dev iterations; null = full dataset
+random_seed: 42

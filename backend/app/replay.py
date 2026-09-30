@@ -1,0 +1,242 @@
+"""Replay engine: plays the held-out TEST split through the saved Phase 3 models.
+
+Every score is a real model output on real held-out sequences:
+  - LSTM (artifacts/models/cic_ids2017/best.pt) -- primary detector; an alert is
+    written when its probability >= the validation-selected LSTM threshold.
+  - Logistic regression (logistic.joblib) -- scored alongside, with its own threshold.
+  - Reference rule "last input window under attack" -- reads the label-derived
+    attack_flow_ratio; shown for comparison only, never used in the risk score.
+Sequences are replayed in target_window_start order on a simulated clock that
+advances `speed` simulated seconds per wall-clock second.
+
+Risk score (0-100) = 100 * sum(weight_k * component_k), weights from config.yaml:
+  attack_probability     LSTM probability
+  stage_severity         0 -- no stage model exists (binary detector), see info.STAGE_NOTE
+  prediction_confidence  how far the LSTM probability is above its threshold, scaled to 0-1
+  abnormality_score      share of the 28 inputs in the last window beyond 3 robust-scaled
+                         units (scaler fitted on training data only); label-free
+  recent_attack_history  min(1, this host's alerts in the previous 10 simulated minutes / 5)
+"""
+from __future__ import annotations
+
+import json
+import threading
+import time
+import uuid
+from collections import deque
+from datetime import datetime, timezone
+from typing import Any
+
+import joblib
+import numpy as np
+import pandas as pd
+
+from aegisflow.config import load_config
+from aegisflow.ml.modeling import ForecastDataset, LSTMForecaster
+from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES
+
+from .audit import Ledger
+from .info import DATA_DIR, MODEL_DIR, model_version
+
+HISTORY_WINDOW = pd.Timedelta(minutes=10)
+
+
+class ReplayEngine:
+    def __init__(self, ledger: Ledger):
+        cfg = load_config().config
+        self.ledger = ledger
+        self.weights = dict(cfg.risk_scoring.weights)
+        self.levels = dict(cfg.risk_scoring.thresholds)
+        self.conf_threshold = float(cfg.confidence.stage_prediction_threshold)
+        self.uncertain = str(cfg.confidence.uncertain_label)
+        self.allowed_speeds = [int(s) for s in cfg.replay.allowed_speeds]
+        self.default_speed = int(cfg.replay.default_speed)
+        self._lock = threading.RLock()
+        self._prep_lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._stop = threading.Event()
+        self.events: pd.DataFrame | None = None
+        self._reset_state()
+
+    # ------------------------------------------------------------------ scoring
+    def prepare(self) -> None:
+        """Load the test split and score it once with the saved models (~seconds). Thread-safe."""
+        with self._prep_lock:
+            if self.events is None:
+                self._prepare()
+
+    def warm_up(self) -> None:
+        """Score in the background at server start so the first Start click is instant."""
+        threading.Thread(target=self._safe_prepare, name="warm-up", daemon=True).start()
+
+    def _safe_prepare(self) -> None:
+        try:
+            self.prepare()
+        except Exception as exc:
+            self.error = f"model warm-up failed: {exc!r}"
+
+    def _prepare(self) -> None:
+        import torch
+        frame = pd.read_parquet(DATA_DIR / "sequences.parquet")
+        frame = frame[frame["split"] == "test"].sort_values(["target_window_start", "host_id"]).reset_index(drop=True)
+        data = ForecastDataset.from_frame(frame)
+        meta = json.loads((MODEL_DIR / "metadata.json").read_text(encoding="utf-8"))
+        metrics = json.loads((MODEL_DIR / "metrics.json").read_text(encoding="utf-8"))
+        prep = joblib.load(MODEL_DIR / "preprocessor.joblib")
+        lr = joblib.load(MODEL_DIR / "logistic.joblib")
+        tc = meta["training_config"]
+        net = LSTMForecaster(len(meta["feature_names"]), tc["hidden_size"], tc["dropout"]).net
+        net.load_state_dict(torch.load(MODEL_DIR / "best.pt", map_location="cpu", weights_only=True))
+        net.eval()
+        x = prep.transform(data.X)
+        with torch.no_grad():
+            lstm_p = torch.sigmoid(net(torch.tensor(x))).numpy().astype(float)
+        lr_p = lr.predict_proba(x.reshape(len(x), -1))[:, 1].astype(float)
+        std = list(STANDARD_NUMERIC_WINDOW_FEATURES)
+        raw_last = np.stack([np.stack(v)[-1] for v in frame.sequence_features])
+        self.lstm_threshold = float(metrics["threshold"])
+        self.lr_threshold = float(metrics["models"]["logistic_regression"]["threshold"])
+        self.events = pd.DataFrame({
+            "sequence_id": frame.sequence_id.astype(str), "host_id": frame.host_id.astype(str),
+            "predicted_at": pd.to_datetime(frame.seq_end_time),
+            "target_window_start": pd.to_datetime(frame.target_window_start),
+            "target_window_end": pd.to_datetime(frame.target_window_end),
+            "lstm_p": lstm_p, "lr_p": lr_p,
+            "rule": (raw_last[:, std.index("attack_flow_ratio")] > 0).astype(int),
+            "abnormality": (np.abs(x[:, -1, :]) > 3).mean(axis=1),
+            "truth_attack": frame.target_attack_present.astype(int).to_numpy(),
+            "truth_class": frame.target_dominant_class.astype(str), "truth_stage": frame.target_dominant_stage.astype(str),
+        })
+        self.model_version = model_version()
+
+    def _risk(self, row, recent_alerts: int) -> tuple[float, dict[str, float]]:
+        p, t = float(row.lstm_p), self.lstm_threshold
+        comp = {"attack_probability": p, "stage_severity": 0.0,
+                "prediction_confidence": max(0.0, (p - t) / (1 - t)),
+                "abnormality_score": float(row.abnormality),
+                "recent_attack_history": min(1.0, recent_alerts / 5)}
+        risk = 100 * sum(self.weights[k] * v for k, v in comp.items())
+        return round(risk, 2), {k: round(v, 4) for k, v in comp.items()}
+
+    def level(self, risk: float) -> str:
+        return "low" if risk < self.levels["low"] else "medium" if risk < self.levels["medium"] else "high"
+
+    # ------------------------------------------------------------------ control
+    def _reset_state(self) -> None:
+        self.state, self.speed, self.session_id = "idle", self.default_speed, None
+        self.cursor, self.alerts_emitted, self.alerts_attack_label, self.sim_time = 0, 0, 0, None
+        self.started_at = self.finished_at = self.error = None
+        self.hosts: dict[str, dict[str, Any]] = {}
+        self._recent: dict[str, deque] = {}
+
+    def start(self, speed: int | None = None, reset: bool = True) -> dict[str, Any]:
+        speed = int(speed or self.default_speed)
+        if speed not in self.allowed_speeds:
+            raise ValueError(f"speed must be one of {self.allowed_speeds}")
+        with self._lock:
+            if self._thread and self._thread.is_alive():
+                raise RuntimeError("replay already running; stop it first")
+            self.prepare()
+            if reset:
+                self.ledger.reset()
+            self._reset_state()
+            self.state, self.speed, self.session_id = "running", speed, uuid.uuid4().hex[:8]
+            self.started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            self._stop.clear()
+            self._thread = threading.Thread(target=self._run, name="replay", daemon=True)
+            self._thread.start()
+        return self.status()
+
+    def stop(self) -> dict[str, Any]:
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=5)
+        with self._lock:
+            if self.state == "running":
+                self.state = "stopped"
+        return self.status()
+
+    def _run(self) -> None:
+        try:
+            ev = self.events
+            t0_sim = ev.target_window_start.iloc[0]
+            t0_wall = time.monotonic()
+            while self.cursor < len(ev) and not self._stop.is_set():
+                sim_now = t0_sim + pd.Timedelta(seconds=(time.monotonic() - t0_wall) * self.speed)
+                while self.cursor < len(ev) and ev.target_window_start.iloc[self.cursor] <= sim_now:
+                    self._process(ev.iloc[self.cursor])
+                    self.cursor += 1
+                with self._lock:
+                    self.sim_time = min(sim_now, ev.target_window_start.iloc[-1])
+                time.sleep(0.05)
+            with self._lock:
+                if self.cursor >= len(ev):
+                    self.state = "finished"
+                    self.finished_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        except Exception as exc:  # surface to /replay/status instead of dying silently
+            with self._lock:
+                self.state, self.error = "error", repr(exc)
+
+    def _process(self, row) -> None:
+        recent = self._recent.setdefault(row.host_id, deque())
+        while recent and recent[0] < row.target_window_start - HISTORY_WINDOW:
+            recent.popleft()
+        risk, comp = self._risk(row, len(recent))
+        alerted = row.lstm_p >= self.lstm_threshold
+        alert_id = None
+        if alerted:
+            conf = float(row.lstm_p)
+            rec = self.ledger.append({
+                "session_id": self.session_id, "sequence_id": row.sequence_id, "host_id": row.host_id,
+                "predicted_at": row.predicted_at.isoformat(), "target_window_start": row.target_window_start.isoformat(),
+                "target_window_end": row.target_window_end.isoformat(),
+                "lstm_probability": row.lstm_p, "lstm_threshold": self.lstm_threshold,
+                "lr_probability": row.lr_p, "lr_threshold": self.lr_threshold,
+                "lr_flag": int(row.lr_p >= self.lr_threshold), "reference_rule_flag": int(row.rule),
+                "risk_score": risk, "risk_components": comp, "confidence": conf,
+                "confidence_label": self.uncertain if conf < self.conf_threshold else "LIKELY_ATTACK",
+                "predicted_stage": self.uncertain,
+                "truth_attack": int(row.truth_attack), "truth_class": row.truth_class, "truth_stage": row.truth_stage,
+                "model_version": self.model_version,
+            })
+            alert_id = rec["id"]
+            recent.append(row.target_window_start)
+        with self._lock:
+            h = self.hosts.setdefault(row.host_id, {"host_id": row.host_id, "sequences": 0, "alerts": 0,
+                                                    "max_risk": 0.0, "timeline": []})
+            h["sequences"] += 1
+            h["alerts"] += int(alerted)
+            h["latest_risk"], h["latest_lstm_p"] = risk, round(float(row.lstm_p), 4)
+            h["max_risk"] = max(h["max_risk"], risk)
+            h["last_seen"] = row.target_window_start.isoformat()
+            h["timeline"].append({"t": row.target_window_start.isoformat(), "risk": risk,
+                                  "lstm_p": round(float(row.lstm_p), 4), "alert_id": alert_id})
+            if alerted:
+                self.alerts_emitted += 1
+                self.alerts_attack_label += int(row.truth_attack)
+
+    # ------------------------------------------------------------------ views
+    def status(self) -> dict[str, Any]:
+        with self._lock:
+            total = 0 if self.events is None else len(self.events)
+            return {"state": self.state, "model_ready": self.events is not None, "speed": self.speed, "allowed_speeds": self.allowed_speeds,
+                    "session_id": self.session_id, "processed": self.cursor, "total": total,
+                    "progress": round(self.cursor / total, 4) if total else 0.0,
+                    "alerts_emitted": self.alerts_emitted, "alerts_matching_attack_label": self.alerts_attack_label,
+                    "hosts_seen": len(self.hosts),
+                    "sim_time": None if self.sim_time is None else self.sim_time.isoformat(),
+                    "replay_window": None if self.events is None else
+                    [self.events.target_window_start.iloc[0].isoformat(), self.events.target_window_start.iloc[-1].isoformat()],
+                    "started_at": self.started_at, "finished_at": self.finished_at, "error": self.error,
+                    "lstm_threshold": getattr(self, "lstm_threshold", None)}
+
+    def host_list(self) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = [{k: v for k, v in h.items() if k != "timeline"} | {"level": self.level(h["latest_risk"])}
+                    for h in self.hosts.values()]
+        return sorted(rows, key=lambda r: (-r["alerts"], -r["latest_risk"]))
+
+    def host(self, host_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            h = self.hosts.get(host_id)
+            return None if h is None else {**h, "timeline": list(h["timeline"]), "level": self.level(h["latest_risk"])}

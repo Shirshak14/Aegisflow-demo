@@ -1,0 +1,53 @@
+# Normalized attack stage -> MITRE ATT&CK Enterprise tactic (+ representative techniques).
+# Tactic/technique IDs are taken from the public MITRE ATT&CK knowledge base (attack.mitre.org).
+# Where a specific technique cannot be confidently inferred from flow-level network data alone,
+# only the tactic is shown -- AegisFlow does not fabricate technique-level precision.
+
+Benign:
+  tactic_id: null
+  tactic_name: null
+  techniques: []
+
+Reconnaissance:
+  tactic_id: "TA0043"
+  tactic_name: "Reconnaissance"
+  techniques:
+    - id: "T1595"
+      name: "Active Scanning"
+
+Initial Access:
+  tactic_id: "TA0001"
+  tactic_name: "Initial Access"
+  techniques:
+    - id: "T1110"
+      name: "Brute Force"
+    - id: "T1190"
+      name: "Exploit Public-Facing Application"
+
+Lateral Movement:
+  tactic_id: "TA0008"
+  tactic_name: "Lateral Movement"
+  techniques:
+    - id: "T1210"
+      name: "Exploitation of Remote Services"
+
+Command and Control:
+  tactic_id: "TA0011"
+  tactic_name: "Command and Control"
+  techniques:
+    - id: "T1071"
+      name: "Application Layer Protocol"
+
+Exfiltration:
+  tactic_id: "TA0010"
+  tactic_name: "Exfiltration"
+  techniques:
+    - id: "T1041"
+      name: "Exfiltration Over C2 Channel"
+
+Impact:
+  tactic_id: "TA0040"
+  tactic_name: "Impact"
+  techniques:
+    - id: "T1498"
+      name: "Network Denial of Service"

@@ -1,0 +1,175 @@
+{
+  "dataset_key": "cic_ids2017",
+  "raw_rows_loaded": 500001,
+  "cleaned_rows_kept": 446137,
+  "dropped_rows_total": 53864,
+  "dropped_by_reason": {
+    "missing_timestamp": 46256,
+    "missing_source_ip": 0,
+    "missing_destination_ip": 0,
+    "negative_duration": 19,
+    "infinite_values": 0,
+    "exact_duplicate_flow": 7589
+  },
+  "unique_hosts_count": 9971,
+  "temporal_range_start": "2017-07-03 08:56:22",
+  "temporal_range_end": "2017-07-07 17:02:00",
+  "temporal_duration_hours": 104.09,
+  "total_host_windows": 132460,
+  "attack_host_windows": 1038,
+  "benign_host_windows": 131422,
+  "total_sequences": 85077,
+  "target_attack_sequences": 1012,
+  "target_benign_sequences": 84065,
+  "flow_class_distribution": {
+    "Benign": 360254,
+    "Denial of Service": 57610,
+    "Reconnaissance": 25419,
+    "Brute Force": 2128,
+    "Web Attack": 373,
+    "Botnet": 348,
+    "Infiltration": 5
+  },
+  "flow_stage_distribution": {
+    "Benign": 360254,
+    "Impact": 57610,
+    "Reconnaissance": 25419,
+    "Initial Access": 2501,
+    "Command and Control": 348,
+    "Lateral Movement": 5
+  },
+  "window_dominant_class_distribution": {
+    "Benign": 131422,
+    "Botnet": 422,
+    "Brute Force": 250,
+    "Denial of Service": 186,
+    "Web Attack": 130,
+    "Reconnaissance": 40,
+    "Infiltration": 10
+  },
+  "window_dominant_stage_distribution": {
+    "Benign": 131422,
+    "Command and Control": 422,
+    "Initial Access": 380,
+    "Impact": 186,
+    "Reconnaissance": 40,
+    "Lateral Movement": 10
+  },
+  "sequence_target_class_distribution": {
+    "Benign": 84065,
+    "Botnet": 409,
+    "Brute Force": 238,
+    "Denial of Service": 185,
+    "Web Attack": 130,
+    "Reconnaissance": 39,
+    "Infiltration": 11
+  },
+  "sequence_target_stage_distribution": {
+    "Benign": 84065,
+    "Command and Control": 409,
+    "Initial Access": 368,
+    "Impact": 185,
+    "Reconnaissance": 39,
+    "Lateral Movement": 11
+  },
+  "target_gap_seconds": {
+    "count": 85077,
+    "min": 30.0,
+    "median": 60.0,
+    "max": 350670.0,
+    "nonpositive_count": 0,
+    "overlap_count": 0
+  },
+  "unavailable_features": [
+    "ttl_mean",
+    "ttl_std",
+    "retransmission_count"
+  ],
+  "split_info": {
+    "dataset_key": "cic_ids2017",
+    "global_min_time": "2017-07-03 08:56:22",
+    "global_max_time": "2017-07-07 17:02:52",
+    "val_cutoff_time": "2017-07-06 09:20:22",
+    "test_cutoff_time": "2017-07-07 09:15:22",
+    "train_fraction": 0.6,
+    "val_fraction": 0.2,
+    "test_fraction": 0.2,
+    "total_sequences": 85077,
+    "train_sequences": 51093,
+    "val_sequences": 11970,
+    "test_sequences": 11379,
+    "boundary_excluded_sequences": 10635,
+    "class_distribution_by_split": {
+      "train": {
+        "Benign": 50711,
+        "Brute Force": 238,
+        "Denial of Service": 141,
+        "Web Attack": 3
+      },
+      "val": {
+        "Benign": 11843,
+        "Web Attack": 116,
+        "Infiltration": 11
+      },
+      "test": {
+        "Benign": 10892,
+        "Botnet": 409,
+        "Denial of Service": 44,
+        "Reconnaissance": 34
+      },
+      "boundary_excluded": {
+        "Benign": 10619,
+        "Web Attack": 11,
+        "Reconnaissance": 5
+      }
+    },
+    "stage_distribution_by_split": {
+      "train": {
+        "Benign": 50711,
+        "Initial Access": 241,
+        "Impact": 141
+      },
+      "val": {
+        "Benign": 11843,
+        "Initial Access": 116,
+        "Lateral Movement": 11
+      },
+      "test": {
+        "Benign": 10892,
+        "Command and Control": 409,
+        "Impact": 44,
+        "Reconnaissance": 34
+      },
+      "boundary_excluded": {
+        "Benign": 10619,
+        "Initial Access": 11,
+        "Reconnaissance": 5
+      }
+    }
+  },
+  "warnings": [
+    "Attack stages (Reconnaissance, Initial Access, Lateral Movement, C2, Impact) are PROXY INFERENCES derived from dataset labels (configs/stages.yaml) and must not be presented as ground truth."
+  ],
+  "onset_by_split": {
+    "train": {
+      "positive": 382,
+      "onset": 9,
+      "continuation": 373
+    },
+    "val": {
+      "positive": 127,
+      "onset": 6,
+      "continuation": 121
+    },
+    "test": {
+      "positive": 487,
+      "onset": 69,
+      "continuation": 418
+    },
+    "boundary_excluded": {
+      "positive": 16,
+      "onset": 2,
+      "continuation": 14
+    }
+  }
+}

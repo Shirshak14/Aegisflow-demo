@@ -1,0 +1,913 @@
+{
+  "notes": "Re-run the existing Phase 3 baselines on any-positive and onset-only targets.\n\nNo new model code: reuses SequencePreprocessor (train-only fit), the same\nLogisticRegression configuration as ``train_experiment``, ``select_threshold``\n(validation only) and ``metrics_at``. No deep model is trained; the existing\nLSTM checkpoint is only *scored* for the per-host shortcut check.\n\nTarget variants:\n  any    -- target_attack_present (all sequences).\n  onset  -- target_is_onset; continuation positives (attack target whose inputs\n            already contain attack traffic) are dropped from every split, since\n            they are neither onsets nor clean negatives.\n\nThe \"last input window was under attack\" rule reads the label-derived\nattack_flow_ratio of the final input window. It is a reference score only and\nis never a model input.",
+  "variants": {
+    "any": {
+      "split_counts": {
+        "train": {
+          "total": 51093,
+          "positive": 382,
+          "negative": 50711,
+          "positive_classes": {
+            "Brute Force": 238,
+            "Denial of Service": 141,
+            "Web Attack": 3
+          }
+        },
+        "val": {
+          "total": 11970,
+          "positive": 127,
+          "negative": 11843,
+          "positive_classes": {
+            "Web Attack": 116,
+            "Infiltration": 11
+          }
+        },
+        "test": {
+          "total": 11379,
+          "positive": 487,
+          "negative": 10892,
+          "positive_classes": {
+            "Botnet": 409,
+            "Denial of Service": 44,
+            "Reconnaissance": 34
+          }
+        }
+      },
+      "train_prior": 0.007476562347092557,
+      "models": {
+        "majority": {
+          "threshold": 0.5,
+          "threshold_reason": "fixed 0.5",
+          "val": {
+            "threshold": 0.5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "roc_auc": 0.5,
+            "pr_auc": 0.010609857978279031,
+            "false_positive_rate": 0.0,
+            "confusion_matrix": [
+              [
+                11843,
+                0
+              ],
+              [
+                127,
+                0
+              ]
+            ],
+            "positive_predictions": 0,
+            "actual_positives": 127,
+            "actual_negatives": 11843
+          },
+          "test": {
+            "threshold": 0.5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "roc_auc": 0.5,
+            "pr_auc": 0.04279813691888567,
+            "false_positive_rate": 0.0,
+            "confusion_matrix": [
+              [
+                10892,
+                0
+              ],
+              [
+                487,
+                0
+              ]
+            ],
+            "positive_predictions": 0,
+            "actual_positives": 487,
+            "actual_negatives": 10892
+          }
+        },
+        "logistic_regression": {
+          "threshold": 0.9986751675605774,
+          "threshold_reason": "validation F1 maximization",
+          "val": {
+            "threshold": 0.9986751675605774,
+            "precision": 0.7931034482758621,
+            "recall": 0.36220472440944884,
+            "f1": 0.4972972972972973,
+            "roc_auc": 0.5518187094805331,
+            "pr_auc": 0.35465100221867973,
+            "false_positive_rate": 0.0010132567761546906,
+            "confusion_matrix": [
+              [
+                11831,
+                12
+              ],
+              [
+                81,
+                46
+              ]
+            ],
+            "positive_predictions": 58,
+            "actual_positives": 127,
+            "actual_negatives": 11843
+          },
+          "test": {
+            "threshold": 0.9986751675605774,
+            "precision": 0.6419753086419753,
+            "recall": 0.10677618069815195,
+            "f1": 0.18309859154929578,
+            "roc_auc": 0.47274962465151604,
+            "pr_auc": 0.1428098366626665,
+            "false_positive_rate": 0.002662504590525156,
+            "confusion_matrix": [
+              [
+                10863,
+                29
+              ],
+              [
+                435,
+                52
+              ]
+            ],
+            "positive_predictions": 81,
+            "actual_positives": 487,
+            "actual_negatives": 10892
+          },
+          "host_check": {
+            "val": {
+              "per_host_roc_auc": {
+                "172.16.0.1": {
+                  "n": 159,
+                  "pos": 116,
+                  "roc_auc": 0.4536888532477947
+                },
+                "192.168.10.8": {
+                  "n": 635,
+                  "pos": 11,
+                  "roc_auc": 0.32036713286713286
+                }
+              },
+              "shortcut_host_vs_rest": {
+                "172.16.0.1": {
+                  "n": 159,
+                  "pos": 116,
+                  "neg_flagged": 2,
+                  "neg": 43,
+                  "pos_detected": 46,
+                  "roc_auc": 0.4536888532477947
+                },
+                "other_hosts": {
+                  "n": 11811,
+                  "pos": 11,
+                  "neg_flagged": 10,
+                  "neg": 11800,
+                  "pos_detected": 0,
+                  "roc_auc": 0.2050115562403698
+                }
+              },
+              "per_class_detection": {
+                "Infiltration": {
+                  "n": 11,
+                  "detected": 0
+                },
+                "Web Attack": {
+                  "n": 116,
+                  "detected": 46
+                }
+              }
+            },
+            "test": {
+              "per_host_roc_auc": {
+                "192.168.10.14": {
+                  "n": 632,
+                  "pos": 56,
+                  "roc_auc": 0.5770709325396826
+                },
+                "192.168.10.15": {
+                  "n": 710,
+                  "pos": 80,
+                  "roc_auc": 0.5856349206349206
+                },
+                "192.168.10.17": {
+                  "n": 610,
+                  "pos": 2,
+                  "roc_auc": 0.5304276315789473
+                },
+                "192.168.10.5": {
+                  "n": 668,
+                  "pos": 69,
+                  "roc_auc": 0.428008032711524
+                },
+                "192.168.10.50": {
+                  "n": 780,
+                  "pos": 2,
+                  "roc_auc": 0.023136246786632397
+                },
+                "192.168.10.8": {
+                  "n": 610,
+                  "pos": 62,
+                  "roc_auc": 0.5934041676477514
+                },
+                "192.168.10.9": {
+                  "n": 650,
+                  "pos": 67,
+                  "roc_auc": 0.3674509101149484
+                },
+                "205.174.165.73": {
+                  "n": 75,
+                  "pos": 73,
+                  "roc_auc": 0.3013698630136986
+                },
+                "172.16.0.1": {
+                  "n": 105,
+                  "pos": 76,
+                  "roc_auc": 0.48729582577132485
+                }
+              },
+              "shortcut_host_vs_rest": {
+                "172.16.0.1": {
+                  "n": 105,
+                  "pos": 76,
+                  "neg_flagged": 28,
+                  "neg": 29,
+                  "pos_detected": 52,
+                  "roc_auc": 0.48729582577132485
+                },
+                "other_hosts": {
+                  "n": 11274,
+                  "pos": 411,
+                  "neg_flagged": 1,
+                  "neg": 10863,
+                  "pos_detected": 0,
+                  "roc_auc": 0.379755114181423
+                }
+              },
+              "per_class_detection": {
+                "Botnet": {
+                  "n": 409,
+                  "detected": 0
+                },
+                "Denial of Service": {
+                  "n": 44,
+                  "detected": 38
+                },
+                "Reconnaissance": {
+                  "n": 34,
+                  "detected": 14
+                }
+              }
+            }
+          }
+        },
+        "last_window_under_attack_rule": {
+          "threshold": 0.5,
+          "threshold_reason": "binary rule",
+          "val": {
+            "threshold": 0.5,
+            "precision": 0.9147286821705426,
+            "recall": 0.9291338582677166,
+            "f1": 0.921875,
+            "roc_auc": 0.9641025197781208,
+            "pr_auc": 0.8506572694325082,
+            "false_positive_rate": 0.000928818711475133,
+            "confusion_matrix": [
+              [
+                11832,
+                11
+              ],
+              [
+                9,
+                118
+              ]
+            ],
+            "positive_predictions": 129,
+            "actual_positives": 127,
+            "actual_negatives": 11843
+          },
+          "test": {
+            "threshold": 0.5,
+            "precision": 0.5465587044534413,
+            "recall": 0.5544147843942505,
+            "f1": 0.5504587155963303,
+            "roc_auc": 0.7669246158475108,
+            "pr_auc": 0.32209044335488163,
+            "false_positive_rate": 0.02056555269922879,
+            "confusion_matrix": [
+              [
+                10668,
+                224
+              ],
+              [
+                217,
+                270
+              ]
+            ],
+            "positive_predictions": 494,
+            "actual_positives": 487,
+            "actual_negatives": 10892
+          }
+        },
+        "lstm_existing_checkpoint": {
+          "threshold": 0.3307546377182007,
+          "threshold_reason": "stored validation-selected threshold (not re-tuned)",
+          "val": {
+            "threshold": 0.3307546377182007,
+            "precision": 0.1935483870967742,
+            "recall": 0.7086614173228346,
+            "f1": 0.30405405405405406,
+            "roc_auc": 0.9420136550312785,
+            "pr_auc": 0.15069436454700771,
+            "false_positive_rate": 0.03166427425483408,
+            "confusion_matrix": [
+              [
+                11468,
+                375
+              ],
+              [
+                37,
+                90
+              ]
+            ],
+            "positive_predictions": 465,
+            "actual_positives": 127,
+            "actual_negatives": 11843
+          },
+          "test": {
+            "threshold": 0.3307546377182007,
+            "precision": 0.22636103151862463,
+            "recall": 0.162217659137577,
+            "f1": 0.18899521531100477,
+            "roc_auc": 0.5529727750752016,
+            "pr_auc": 0.17710914311135434,
+            "false_positive_rate": 0.02478883584282042,
+            "confusion_matrix": [
+              [
+                10622,
+                270
+              ],
+              [
+                408,
+                79
+              ]
+            ],
+            "positive_predictions": 349,
+            "actual_positives": 487,
+            "actual_negatives": 10892
+          },
+          "host_check": {
+            "val": {
+              "per_host_roc_auc": {
+                "172.16.0.1": {
+                  "n": 159,
+                  "pos": 116,
+                  "roc_auc": 0.5306736166800321
+                },
+                "192.168.10.8": {
+                  "n": 635,
+                  "pos": 11,
+                  "roc_auc": 0.7226107226107226
+                }
+              },
+              "shortcut_host_vs_rest": {
+                "172.16.0.1": {
+                  "n": 159,
+                  "pos": 116,
+                  "neg_flagged": 24,
+                  "neg": 43,
+                  "pos_detected": 88,
+                  "roc_auc": 0.5306736166800321
+                },
+                "other_hosts": {
+                  "n": 11811,
+                  "pos": 11,
+                  "neg_flagged": 351,
+                  "neg": 11800,
+                  "pos_detected": 2,
+                  "roc_auc": 0.6903466872110939
+                }
+              },
+              "per_class_detection": {
+                "Infiltration": {
+                  "n": 11,
+                  "detected": 2
+                },
+                "Web Attack": {
+                  "n": 116,
+                  "detected": 88
+                }
+              }
+            },
+            "test": {
+              "per_host_roc_auc": {
+                "192.168.10.14": {
+                  "n": 632,
+                  "pos": 56,
+                  "roc_auc": 0.6773313492063492
+                },
+                "192.168.10.15": {
+                  "n": 710,
+                  "pos": 80,
+                  "roc_auc": 0.6241468253968254
+                },
+                "192.168.10.17": {
+                  "n": 610,
+                  "pos": 2,
+                  "roc_auc": 0.05592105263157893
+                },
+                "192.168.10.5": {
+                  "n": 668,
+                  "pos": 69,
+                  "roc_auc": 0.5041978176187365
+                },
+                "192.168.10.50": {
+                  "n": 780,
+                  "pos": 2,
+                  "roc_auc": 0.11568123393316199
+                },
+                "192.168.10.8": {
+                  "n": 610,
+                  "pos": 62,
+                  "roc_auc": 0.6147574758653167
+                },
+                "192.168.10.9": {
+                  "n": 650,
+                  "pos": 67,
+                  "roc_auc": 0.4415657561250352
+                },
+                "205.174.165.73": {
+                  "n": 75,
+                  "pos": 73,
+                  "roc_auc": 0.2602739726027397
+                },
+                "172.16.0.1": {
+                  "n": 105,
+                  "pos": 76,
+                  "roc_auc": 0.7722323049001816
+                }
+              },
+              "shortcut_host_vs_rest": {
+                "172.16.0.1": {
+                  "n": 105,
+                  "pos": 76,
+                  "neg_flagged": 29,
+                  "neg": 29,
+                  "pos_detected": 75,
+                  "roc_auc": 0.7722323049001816
+                },
+                "other_hosts": {
+                  "n": 11274,
+                  "pos": 411,
+                  "neg_flagged": 241,
+                  "neg": 10863,
+                  "pos_detected": 4,
+                  "roc_auc": 0.47200669788493854
+                }
+              },
+              "per_class_detection": {
+                "Botnet": {
+                  "n": 409,
+                  "detected": 4
+                },
+                "Denial of Service": {
+                  "n": 44,
+                  "detected": 42
+                },
+                "Reconnaissance": {
+                  "n": 34,
+                  "detected": 33
+                }
+              }
+            }
+          }
+        }
+      },
+      "logistic_matches_saved_artifact": true
+    },
+    "onset": {
+      "split_counts": {
+        "train": {
+          "total": 50720,
+          "positive": 9,
+          "negative": 50711,
+          "positive_classes": {
+            "Denial of Service": 6,
+            "Web Attack": 3
+          }
+        },
+        "val": {
+          "total": 11849,
+          "positive": 6,
+          "negative": 11843,
+          "positive_classes": {
+            "Infiltration": 6
+          }
+        },
+        "test": {
+          "total": 10961,
+          "positive": 69,
+          "negative": 10892,
+          "positive_classes": {
+            "Botnet": 67,
+            "Denial of Service": 2
+          }
+        }
+      },
+      "train_prior": 0.0001774447949526814,
+      "models": {
+        "majority": {
+          "threshold": 0.5,
+          "threshold_reason": "fixed 0.5",
+          "val": {
+            "threshold": 0.5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "roc_auc": 0.5,
+            "pr_auc": 0.0005063718457253777,
+            "false_positive_rate": 0.0,
+            "confusion_matrix": [
+              [
+                11843,
+                0
+              ],
+              [
+                6,
+                0
+              ]
+            ],
+            "positive_predictions": 0,
+            "actual_positives": 6,
+            "actual_negatives": 11843
+          },
+          "test": {
+            "threshold": 0.5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "roc_auc": 0.5,
+            "pr_auc": 0.006295046072438646,
+            "false_positive_rate": 0.0,
+            "confusion_matrix": [
+              [
+                10892,
+                0
+              ],
+              [
+                69,
+                0
+              ]
+            ],
+            "positive_predictions": 0,
+            "actual_positives": 69,
+            "actual_negatives": 10892
+          }
+        },
+        "logistic_regression": {
+          "threshold": 0.0,
+          "threshold_reason": "validation F1 maximization",
+          "val": {
+            "threshold": 0.0,
+            "precision": 0.0005063718457253777,
+            "recall": 1.0,
+            "f1": 0.0010122311261071277,
+            "roc_auc": 0.2532579019955529,
+            "pr_auc": 0.00043321598220825085,
+            "false_positive_rate": 1.0,
+            "confusion_matrix": [
+              [
+                0,
+                11843
+              ],
+              [
+                0,
+                6
+              ]
+            ],
+            "positive_predictions": 11849,
+            "actual_positives": 6,
+            "actual_negatives": 11843
+          },
+          "test": {
+            "threshold": 0.0,
+            "precision": 0.006295046072438646,
+            "recall": 1.0,
+            "f1": 0.012511332728921125,
+            "roc_auc": 0.28421870592430554,
+            "pr_auc": 0.004401571331434026,
+            "false_positive_rate": 1.0,
+            "confusion_matrix": [
+              [
+                0,
+                10892
+              ],
+              [
+                0,
+                69
+              ]
+            ],
+            "positive_predictions": 10961,
+            "actual_positives": 69,
+            "actual_negatives": 10892
+          },
+          "host_check": {
+            "val": {
+              "per_host_roc_auc": {
+                "192.168.10.8": {
+                  "n": 630,
+                  "pos": 6,
+                  "roc_auc": 0.4244123931623931
+                }
+              },
+              "shortcut_host_vs_rest": {
+                "172.16.0.1": {
+                  "n": 43,
+                  "pos": 0,
+                  "neg_flagged": 43,
+                  "neg": 43,
+                  "pos_detected": 0,
+                  "roc_auc": null
+                },
+                "other_hosts": {
+                  "n": 11806,
+                  "pos": 6,
+                  "neg_flagged": 11800,
+                  "neg": 11800,
+                  "pos_detected": 6,
+                  "roc_auc": 0.25214689265536727
+                }
+              },
+              "per_class_detection": {
+                "Infiltration": {
+                  "n": 6,
+                  "detected": 6
+                }
+              }
+            },
+            "test": {
+              "per_host_roc_auc": {
+                "192.168.10.14": {
+                  "n": 588,
+                  "pos": 12,
+                  "roc_auc": 0.49963831018518523
+                },
+                "192.168.10.15": {
+                  "n": 642,
+                  "pos": 12,
+                  "roc_auc": 0.5421296296296296
+                },
+                "192.168.10.17": {
+                  "n": 610,
+                  "pos": 2,
+                  "roc_auc": 0.4539473684210526
+                },
+                "192.168.10.5": {
+                  "n": 609,
+                  "pos": 10,
+                  "roc_auc": 0.32487479131886476
+                },
+                "192.168.10.50": {
+                  "n": 780,
+                  "pos": 2,
+                  "roc_auc": 0.06555269922879176
+                },
+                "192.168.10.8": {
+                  "n": 559,
+                  "pos": 11,
+                  "roc_auc": 0.42451891174518913
+                },
+                "192.168.10.9": {
+                  "n": 603,
+                  "pos": 20,
+                  "roc_auc": 0.4176672384219554
+                }
+              },
+              "shortcut_host_vs_rest": {
+                "172.16.0.1": {
+                  "n": 29,
+                  "pos": 0,
+                  "neg_flagged": 29,
+                  "neg": 29,
+                  "pos_detected": 0,
+                  "roc_auc": null
+                },
+                "other_hosts": {
+                  "n": 10932,
+                  "pos": 69,
+                  "neg_flagged": 10863,
+                  "neg": 10863,
+                  "pos_detected": 69,
+                  "roc_auc": 0.2829075428225315
+                }
+              },
+              "per_class_detection": {
+                "Botnet": {
+                  "n": 67,
+                  "detected": 67
+                },
+                "Denial of Service": {
+                  "n": 2,
+                  "detected": 2
+                }
+              }
+            }
+          }
+        },
+        "last_window_under_attack_rule": {
+          "threshold": 0.5,
+          "threshold_reason": "binary rule",
+          "val": {
+            "threshold": 0.5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "roc_auc": 0.49953559064426245,
+            "pr_auc": 0.0005063718457253777,
+            "false_positive_rate": 0.000928818711475133,
+            "confusion_matrix": [
+              [
+                11832,
+                11
+              ],
+              [
+                6,
+                0
+              ]
+            ],
+            "positive_predictions": 11,
+            "actual_positives": 6,
+            "actual_negatives": 11843
+          },
+          "test": {
+            "threshold": 0.5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "roc_auc": 0.4897172236503856,
+            "pr_auc": 0.006295046072438646,
+            "false_positive_rate": 0.02056555269922879,
+            "confusion_matrix": [
+              [
+                10668,
+                224
+              ],
+              [
+                69,
+                0
+              ]
+            ],
+            "positive_predictions": 224,
+            "actual_positives": 69,
+            "actual_negatives": 10892
+          }
+        },
+        "lstm_existing_checkpoint": {
+          "threshold": 0.3307546377182007,
+          "threshold_reason": "stored validation-selected threshold (not re-tuned)",
+          "val": {
+            "threshold": 0.3307546377182007,
+            "precision": 0.005305039787798408,
+            "recall": 0.3333333333333333,
+            "f1": 0.010443864229765013,
+            "roc_auc": 0.6698330940921501,
+            "pr_auc": 0.00763210276412233,
+            "false_positive_rate": 0.03166427425483408,
+            "confusion_matrix": [
+              [
+                11468,
+                375
+              ],
+              [
+                4,
+                2
+              ]
+            ],
+            "positive_predictions": 377,
+            "actual_positives": 6,
+            "actual_negatives": 11843
+          },
+          "test": {
+            "threshold": 0.3307546377182007,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "roc_auc": 0.3242813499603485,
+            "pr_auc": 0.004242017187368819,
+            "false_positive_rate": 0.02478883584282042,
+            "confusion_matrix": [
+              [
+                10622,
+                270
+              ],
+              [
+                69,
+                0
+              ]
+            ],
+            "positive_predictions": 270,
+            "actual_positives": 69,
+            "actual_negatives": 10892
+          },
+          "host_check": {
+            "val": {
+              "per_host_roc_auc": {
+                "192.168.10.8": {
+                  "n": 630,
+                  "pos": 6,
+                  "roc_auc": 0.687232905982906
+                }
+              },
+              "shortcut_host_vs_rest": {
+                "172.16.0.1": {
+                  "n": 43,
+                  "pos": 0,
+                  "neg_flagged": 24,
+                  "neg": 43,
+                  "pos_detected": 0,
+                  "roc_auc": null
+                },
+                "other_hosts": {
+                  "n": 11806,
+                  "pos": 6,
+                  "neg_flagged": 351,
+                  "neg": 11800,
+                  "pos_detected": 2,
+                  "roc_auc": 0.6710593220338983
+                }
+              },
+              "per_class_detection": {
+                "Infiltration": {
+                  "n": 6,
+                  "detected": 2
+                }
+              }
+            },
+            "test": {
+              "per_host_roc_auc": {
+                "192.168.10.14": {
+                  "n": 588,
+                  "pos": 12,
+                  "roc_auc": 0.3980034722222222
+                },
+                "192.168.10.15": {
+                  "n": 642,
+                  "pos": 12,
+                  "roc_auc": 0.37645502645502643
+                },
+                "192.168.10.17": {
+                  "n": 610,
+                  "pos": 2,
+                  "roc_auc": 0.05592105263157893
+                },
+                "192.168.10.5": {
+                  "n": 609,
+                  "pos": 10,
+                  "roc_auc": 0.4308848080133556
+                },
+                "192.168.10.50": {
+                  "n": 780,
+                  "pos": 2,
+                  "roc_auc": 0.11568123393316199
+                },
+                "192.168.10.8": {
+                  "n": 559,
+                  "pos": 11,
+                  "roc_auc": 0.5131055076310551
+                },
+                "192.168.10.9": {
+                  "n": 603,
+                  "pos": 20,
+                  "roc_auc": 0.3143224699828473
+                }
+              },
+              "shortcut_host_vs_rest": {
+                "172.16.0.1": {
+                  "n": 29,
+                  "pos": 0,
+                  "neg_flagged": 29,
+                  "neg": 29,
+                  "pos_detected": 0,
+                  "roc_auc": null
+                },
+                "other_hosts": {
+                  "n": 10932,
+                  "pos": 69,
+                  "neg_flagged": 241,
+                  "neg": 10863,
+                  "pos_detected": 0,
+                  "roc_auc": 0.3251470554881815
+                }
+              },
+              "per_class_detection": {
+                "Botnet": {
+                  "n": 67,
+                  "detected": 0
+                },
+                "Denial of Service": {
+                  "n": 2,
+                  "detected": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

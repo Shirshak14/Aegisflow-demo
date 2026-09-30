@@ -1,0 +1,50 @@
+# Registry of dataset adapters. `active_dataset` in config.yaml selects one of these keys.
+# raw_dir is where the adapter looks for files; it never writes here.
+
+cic_ids2017:
+  display_name: "CIC-IDS2017"
+  adapter: "cic_ids2017"
+  raw_dir: "data/raw/cic_ids2017"
+  format: "csv"
+  source_variant: "GeneratedLabelledFlows"   # has IP/timestamp columns, unlike MachineLearningCSV
+  official_url: "https://www.unb.ca/cic/datasets/ids-2017.html"
+  citation: >
+    Sharafaldin, I., Lashkari, A.H., Ghorbani, A.A. (2018). Toward Generating a New
+    Intrusion Detection Dataset and Intrusion Traffic Characterization. ICISSP 2018.
+  expected_files_glob: "*/*.pcap_ISCX.csv"
+  status: "primary"
+
+cic_ids2018:
+  display_name: "CSE-CIC-IDS2018"
+  adapter: "cic_ids2018"
+  raw_dir: "data/raw/cic_ids2018"
+  format: "csv"
+  official_url: "https://www.unb.ca/cic/datasets/ids-2018.html"
+  citation: >
+    Canadian Institute for Cybersecurity, CSE-CIC-IDS2018 on AWS, 2018.
+  expected_files_glob: "*.csv"
+  status: "planned"
+
+unsw_nb15:
+  display_name: "UNSW-NB15"
+  adapter: "unsw_nb15"
+  raw_dir: "data/raw/unsw_nb15"
+  format: "csv"
+  official_url: "https://research.unsw.edu.au/projects/unsw-nb15-dataset"
+  citation: >
+    Moustafa, N., Slay, J. (2015). UNSW-NB15: a comprehensive data set for network
+    intrusion detection systems. MilCIS 2015.
+  expected_files_glob: "UNSW-NB15_*.csv"
+  status: "planned"
+
+ctu_13:
+  display_name: "CTU-13"
+  adapter: "ctu_13"
+  raw_dir: "data/raw/ctu_13"
+  format: "csv"
+  official_url: "https://www.stratosphereips.org/datasets-ctu13"
+  citation: >
+    Garcia, S. et al. (2014). An empirical comparison of botnet detection methods.
+    Computers & Security.
+  expected_files_glob: "**/*.binetflow"
+  status: "planned"
