@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -150,4 +151,21 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     return app
 
 
-app = create_app()
+_default_app: FastAPI | None = None
+_default_app_lock = threading.Lock()
+
+
+def __getattr__(name: str) -> Any:
+    """Build the default ``app`` on first access instead of at import time.
+
+    ``uvicorn backend.app.main:app`` looks the attribute up with ``getattr``, so it still gets a
+    fully built app. Merely importing this module (e.g. for ``create_app`` in tests) no longer
+    opens the live ledger DB, starts the model warm-up thread, or loads torch.
+    """
+    global _default_app
+    if name == "app":
+        with _default_app_lock:
+            if _default_app is None:
+                _default_app = create_app()
+            return _default_app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
