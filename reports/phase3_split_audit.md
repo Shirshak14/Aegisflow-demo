@@ -1,3 +1,5 @@
+> **SUPERSEDED — historical record.** The 12-hour-clock bug described here was fixed (`aegisflow/ml/datasets/cic_ids2017.py`, PM shift for hours < 8) and the data was regenerated. Current results: `phase3_training_report.md`, `phase3_onset_baseline_audit.md`, `lodo_pilot_report.md`, `data_quality_report.md`.
+
 # Phase 3 split audit — no revised split created
 
 **Decision:** The chronological split was not changed. `sequences.parquet` and `split_metadata.json` are unchanged. The existing 60/20/20 split is still the only split. It is not fit for model selection, and no revised development split exists. The LSTM was not retrained.

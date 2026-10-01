@@ -1,3 +1,5 @@
+> **SUPERSEDED — historical record.** Numbers below come from an earlier, mis-clocked dataset (4 test positives). Kept as an audit trail of bugs found and fixed. Current results: `phase3_training_report.md`, `phase3_onset_baseline_audit.md`, `lodo_pilot_report.md`, `data_quality_report.md`.
+
 # Phase 3 temporal alignment repair and model rerun
 
 ## Previous bug
