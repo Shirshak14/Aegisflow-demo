@@ -10,6 +10,7 @@ Until `preprocess` and `train` have been run, endpoints that need data or the mo
 | GET | `/health` | Status, alert count in the ledger, replay state |
 | GET | `/dataset/status` | Dataset summary and split (from `reports/data_quality_report.json`, `split_metadata.json`) |
 | GET | `/model/status` | Model version, features, thresholds, training config, test metrics, limitations |
+| GET | `/risk/config` | Risk weights, low/medium bands, max reachable risk, confidence cutoff, uncertain label, replay speeds. Read from `configs/config.yaml`; the dashboard uses it instead of hard-coded copies |
 | GET | `/evaluation` | Baseline tables (any/onset targets), host check, leave-one-day-out DoS summary |
 | POST | `/replay/start` | Body `{"speed": 1\|10\|100\|1000, "reset": true}`. `reset: true` clears the ledger. 409 if already running, 422 for a bad speed |
 | POST | `/replay/stop` | Stop the replay |

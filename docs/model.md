@@ -18,8 +18,8 @@ Tensor `[batch, 10, 28]`: 28 numeric traffic features per window (counts, byte/p
 | Logistic regression | Flattened normalised history, `class_weight="balanced"`. |
 | LSTM (demo model) | 1-layer LSTM (hidden 16), dropout 0.2 on the last hidden state, linear output; `BCEWithLogitsLoss` with `pos_weight` 132.75; Adam 1e-3, batch 256; early stopping on validation loss. About 3k parameters. Best checkpoint was epoch 1 of 4. |
 
-Hyperparameters are CLI flags, not `config.yaml`:
-`python -m aegisflow train --dataset cic_ids2017 --epochs 8 --batch-size 256 --learning-rate 0.001 --hidden-size 16 --dropout 0.2 --patience 3`
+Hyperparameters are the defaults in `configs/config.yaml` under `model:` (epochs 8, batch 256, lr 0.001, hidden 16, dropout 0.2, patience 3 = the committed model). CLI flags or `--set model.hidden_size=8` override them; `model.type` must be `lstm`.
+`python -m aegisflow train --dataset cic_ids2017`
 
 There is no stage-prediction head, attention, or explainability module. Predicted stage is always `UNCERTAIN`.
 

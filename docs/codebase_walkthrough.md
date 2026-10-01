@@ -35,7 +35,7 @@ Raw CSV → demo screen. `python -m aegisflow <cmd>` is wired in `aegisflow/__ma
 
 **Say this plainly in the viva:** the demo does not run the model on live traffic. Scoring happens in one batch at startup (`_prepare`); the replay only paces the release of those precomputed scores and applies the threshold. Those scores are genuine model outputs on genuine held-out sequences (a test in `backend/tests/test_replay.py` checks that the replay reproduces the offline confusion matrix `[[10622, 270], [408, 79]]`).
 
-Commands, in order: `validate-dataset`, `preprocess --reingest --sample-size 500000`, `train --epochs 8 --batch-size 256 --learning-rate 0.001 --hidden-size 16 --dropout 0.2 --patience 3` (the committed model used exactly these; the CLI default `--hidden-size` is 32), `uvicorn backend.app.main:app`.
+Commands, in order: `validate-dataset`, `preprocess --reingest --sample-size 500000`, `train --epochs 8 --batch-size 256 --learning-rate 0.001 --hidden-size 16 --dropout 0.2 --patience 3` (the committed model used exactly these; since B8 they are also the defaults in `configs/config.yaml → model:`, so plain `train` reproduces it and any flag overrides one value), `uvicorn backend.app.main:app`.
 
 ---
 
@@ -115,7 +115,7 @@ Live tamper demo (only on a throwaway copy of `aegisflow.db`, with the server po
 | # | Question | Short honest answer | Backing in code / reports |
 |---|---|---|---|
 | 1 | **Why does "Predicted Stage" always say UNCERTAIN?** | The model is a binary attack/benign detector. No stage model exists, so the field is hard-coded to the `uncertain_label`. We chose not to invent stages. | `backend/app/replay.py:198` (`"predicted_stage": self.uncertain`); explanation text `STAGE_NOTE` in `backend/app/info.py:20`, shown on the dashboard banner; asserted in `backend/tests/test_replay.py:24`. Why not trained: train positives have only Initial Access (241) and Impact (141); the test has C2 (409), Impact (44), Recon (34), so stage skill could not even be measured. `reports/phase3_training_report.md` "Split class composition". |
-| 2 | **Why can risk never exceed 75?** | Risk = 100 × Σ weight × component. The `stage_severity` component (weight 0.25) is fixed at 0 because there's no stage prediction. Remaining weights sum to 0.40 + 0.15 + 0.10 + 0.10 = 0.75. | Weights `configs/config.yaml:50-56`; zero set at `replay.py:115`; formula `:118`; asserted `0 ≤ risk ≤ 75` in `test_replay.py:25`; UI says "max reachable 75" (`index.html:217`). |
+| 2 | **Why can risk never exceed 75?** | Risk = 100 × Σ weight × component. The `stage_severity` component (weight 0.25) is fixed at 0 because there's no stage prediction. Remaining weights sum to 0.40 + 0.15 + 0.10 + 0.10 = 0.75. | Weights `configs/config.yaml:50-56`; stage term from `ReplayEngine._stage_term` (the predicted stage is the `UNCERTAIN` label, which is not in the severity table, so 0); formula in `_risk`; asserted `0 ≤ risk ≤ 75` in `test_replay.py:25`; UI shows `max_reachable_risk` from `GET /risk/config` (75). |
 | 3 | **How do you know the LSTM didn't just memorise the attacker's IP?** | It can't memorise the IP (no ID features), but we showed it behaves like an IP recogniser: it flags 29/29 benign sequences from that host, and a host-only rule matches it. We report that as a limitation. | `MODEL_FEATURES` (`modeling.py:24`); `scripts/phase3_baselines.py:per_host`; `scripts/lodo_pilot.py` (`ref_host_identity`, `:113`); `reports/lodo_pilot_report.md`; §2.2 above. |
 | 4 | **Your F1 is 0.19 and ROC-AUC 0.55. Is it useful?** | Not as a general detector, and we say so. On this split it's indistinguishable from logistic regression (F1 0.183) and below a label-using rule (F1 0.55). The contribution is the leak-free pipeline, the audit trail, and an honest evaluation. | `artifacts/models/cic_ids2017/metrics.json`; `reports/phase3_training_report.md`; dashboard "Model evaluation" table (`info.evaluation`). |
 | 5 | **Is this really forecasting? How far ahead?** | The target is "attack present in the host's next observed window after the inputs". Median lead on test is 30 s (90th percentile 630 s, max 18,090 s). 418 of 487 test positives are *continuations* of an attack already visible in the inputs; only 69 are onsets. Onset ROC-AUC for the LSTM is 0.324 (below chance). | `build_host_sequences` (`sequences.py:221` onset flag); `reports/data_quality_report.md` "Onset vs Continuation"; `reports/phase3_onset_baseline_audit.md` §3-4; `metrics.json → forecast_lead_time_seconds`. |
@@ -127,7 +127,7 @@ Live tamper demo (only on a throwaway copy of `aegisflow.db`, with the server po
 | 11 | **Why a 500k sample, not all 2.83M rows?** | Speed. The LODO pilot argues more rows wouldn't help: the full set adds rows, not days, campaigns or attacker hosts. | `spread_sample_plan`; `reports/lodo_pilot_report.md` "Implication for the full 2.83M run"; `info.dataset_status` sample text (`info.py:37`). |
 | 12 | **How was the alert threshold (0.33) chosen? What's the false-alarm cost?** | Maximum F1 on the validation split, among a candidate set that includes every validation score. At that threshold the replay raises 349 alerts, 79 matching an attack label (precision 22.6 %), test FPR 2.5 %. Because validation is thin, the threshold is itself fragile. | `select_threshold` (`modeling.py:130`); `metadata.json → threshold 0.3308`; `test_replay.py:23`; dashboard "match an attack label". |
 | 13 | **Why is "confidence" UNCERTAIN on an alert that fired?** | Two different thresholds. Alert fires at LSTM p ≥ 0.3308 (validation-selected). The confidence label says LIKELY_ATTACK only if p ≥ 0.5 (`confidence.stage_prediction_threshold`). Alerts with p in [0.33, 0.5) show UNCERTAIN confidence. Separate from the always-UNCERTAIN *stage*. | `replay.py:197`; `index.html:222`. |
-| 14 | **Config says GRU, hidden 64. What model is this?** | An LSTM (hidden 16, one layer) trained with CLI flags. The `model:` block in `config.yaml` is not read by training. | `LSTMForecaster` (`modeling.py:138`); `cli.py:87-95` (flags); `metadata.json → training_config`. |
+| 14 | **What model is this? (Older config said GRU, hidden 64.)** | An LSTM (hidden 16, one layer). Hyperparameters come from `config.yaml → model:` (which now matches the committed model), overridable by CLI flags; `model.type` other than `lstm` raises `ConfigError`. | `LSTMForecaster` (`modeling.py:138`); `train_hyperparameters` in `aegisflow/cli.py`; `metadata.json → training_config`. |
 | 15 | **Does it generalise to other days/datasets?** | Not shown. Leave-one-day-out collapses once host is controlled; only one dataset adapter exists. | `reports/lodo_pilot_report.md` verdict; `configs/datasets.yaml` (others `status: planned`). |
 
 ---
@@ -156,22 +156,21 @@ Rule of thumb: windowing/split keys require re-running `preprocess` (or `rebuild
 | Key (current) | Read in | If you change it |
 |---|---|---|
 | `risk_scoring.weights.attack_probability` (0.40) | `ReplayEngine.__init__`, `replay.py:48`; used `:118` | Weight on the LSTM probability. Weights are not validated to sum to 1. If they don't, scores can exceed the stated scale. |
-| `…weights.stage_severity` (0.25) | same | **No effect today**: the component is hard-coded 0. Raising it doesn't change scores. |
+| `…weights.stage_severity` (0.25) | same | Multiplies the severity of the *predicted* stage. The predicted stage is always `UNCERTAIN` (not in the severity table), so the component is 0 and raising this weight changes nothing today. |
+| `risk_scoring.stage_severity` table | `ReplayEngine._stage_term` | Severity (0-100) per stage name; only matters once a stage model predicts a real stage. |
 | `…weights.prediction_confidence` (0.15) | same | Weight on `(p − t)/(1 − t)`. This is monotone in p, so it largely double-counts attack_probability. |
 | `…weights.abnormality_score` (0.10) | same | Weight on the share of the 28 inputs of the last window beyond 3 robust-scaled units. Label-free. |
 | `…weights.recent_attack_history` (0.10) | same | Weight on min(1, this host's alerts in the previous 10 simulated minutes / 5). |
-| `risk_scoring.thresholds.low` / `medium` (33 / 66) | `replay.py:49`, `level` `:121` | Low/medium/high banding on the server side. The dashboard has its **own hard-coded** 33/66 (`index.html:127`), so the two can disagree. `thresholds.high` (100) is never read. |
+| `risk_scoring.thresholds.low` / `medium` (33 / 66) | `replay.py:49`, `level` `:121` | Low/medium/high banding on the server side. The dashboard now reads the same bands from `GET /risk/config`, so they cannot disagree. `thresholds.high` (100) is not read. |
 | `confidence.stage_prediction_threshold` (0.5) | `replay.py:50`, `:197` | Cutoff on the *attack probability* for LIKELY_ATTACK vs UNCERTAIN confidence. It does not change which alerts fire and has nothing to do with stages despite its name. |
 | `confidence.uncertain_label` ("UNCERTAIN") | `replay.py:51` | Text used for both `confidence_label` and `predicted_stage`. |
-| `replay.default_speed` (10) / `allowed_speeds` ([1,10,100,1000]) | `replay.py:52-53`; `start` validates `:134` | Which speeds the API accepts. The dashboard builds its dropdown from this but **pre-selects 1000×** regardless of `default_speed` (`index.html:139`). |
+| `replay.default_speed` (1000) / `allowed_speeds` ([1,10,100,1000]) | `ReplayEngine.__init__`; `start` validates | Which speeds the API accepts and the default when `POST /replay/start` omits `speed`. The dashboard dropdown is built from these and pre-selects `default_speed`. |
 | `database.url` | `main.py:default_db_path` (`:50`) | SQLite file for the ledger; env var `AEGISFLOW_DB` overrides. Pointing at a new file starts a fresh chain. |
 
 ### 4.3 In config but NOT read by any runtime code (don't claim they do anything)
 
 | Key | Reality |
 |---|---|
-| `model.*` (`type: gru`, `hidden_size: 64`, `epochs: 20`, …) | Training uses CLI flags (`cli.py:87-95`). Only `tests/test_config.py` touches `model.batch_size`. |
-| `risk_scoring.stage_severity` table | Never read. The replay hard-codes the stage component to 0. |
 | `api.host`, `api.port` | Never read. uvicorn is started from the command line. |
 | `sample_size` | Never read. The CLI flag `--sample-size` is used. |
 | `active_dataset` | Only `AegisFlowConfig.active_dataset_entry`, which only tests call. Commands take `--dataset`. |
@@ -195,8 +194,7 @@ Rule of thumb: windowing/split keys require re-running `preprocess` (or `rebuild
 | `LOG_FEATURES` | `modeling.py:66` | Which 12 features get signed log1p. |
 | LSTM architecture: 1 layer, last hidden state, dropout on hidden, `Linear(hidden,1)` | `modeling.py:138-149` | About 3k parameters at hidden 16. |
 | Candidate thresholds `[0.01, 0.05, 0.1, 0.2, 0.3, 0.5]` + every val score | `modeling.py:133` | Threshold search space. |
-| Training defaults (CLI): epochs 20, batch 128, lr 0.001, hidden **32**, dropout 0.2, patience 4 | `cli.py:89-94` | The committed model used epochs 8, batch 256, hidden **16**, patience 3. |
-| Risk weights and 33/66 and `r/75` | `index.html:212`, `:127`, `:263` | Duplicates of config values inside the dashboard JS. |
+| Training defaults | `configs/config.yaml → model:` via `train_hyperparameters` (`cli.py`) | Epochs 8, batch 256, lr 0.001, hidden 16, dropout 0.2, patience 3 (the committed model). The code-level defaults of `train_experiment` (hidden 32, epochs 20, ...) only apply to programmatic callers. |
 
 ---
 
@@ -206,8 +204,8 @@ Do not overclaim these live.
 
 | Where | What it suggests | What it actually is | Safe phrasing |
 |---|---|---|---|
-| `configs/config.yaml → model.type: gru \| lstm \| transformer`; `docs/architecture.md` §5 (three heads, attention, SHAP, Transformer, XGBoost, temporal GNN) | A configurable multi-model, multi-head forecaster | One small LSTM with one binary output, plus logistic regression and a majority baseline. Hyperparameters come from CLI flags. No attention, SHAP, XGBoost, Transformer or stage head exists. `requirements.txt` still installs `xgboost`, `shap`, `sqlalchemy`, `pyshark`, `scapy` that no code imports. | "A binary LSTM baseline with a logistic-regression comparison." |
-| `risk_scoring` block; `ReplayEngine._risk` | A multi-factor risk engine | A linear blend: 0.40·p + 0.15·(p−t)/(1−t) + 0.10·abnormality + 0.10·history. Stage term is 0. Two of the terms are functions of p. It isn't a calibrated probability. | "A transparent, label-free risk score built mostly from the LSTM probability." |
+| `configs/config.yaml → model:` (the `type` field suggests alternatives); `docs/architecture.md` §5 (three heads, attention, SHAP, Transformer, XGBoost, temporal GNN) | A configurable multi-model, multi-head forecaster | One small LSTM with one binary output, plus logistic regression and a majority baseline. `model.type` must be `lstm`; other values are rejected. No attention, SHAP, XGBoost, Transformer or stage head exists (the planned libraries are only listed in a commented block of `requirements.txt`). | "A binary LSTM baseline with a logistic-regression comparison." |
+| `risk_scoring` block; `ReplayEngine._risk` | A multi-factor risk engine | A linear blend: 0.40·p + 0.15·(p−t)/(1−t) + 0.10·abnormality + 0.10·history. Stage term is 0 (predicted stage is always UNCERTAIN). Two of the terms are functions of p. It isn't a calibrated probability. | "A transparent, label-free risk score built mostly from the LSTM probability." |
 | `confidence.stage_prediction_threshold` | A stage-prediction confidence cut | A cutoff on the *attack probability* (0.5). | "Confidence label on the attack probability." |
 | `predicted_stage` | A kill-chain forecast | The literal string `UNCERTAIN`. | "Stage forecasting is not implemented; we show UNCERTAIN." |
 | `attack_stage` / `stages.yaml`, Exfiltration in `stages_order` and the severity table | A reliable kill-chain mapping | Proxy from dataset labels. No CIC-IDS2017 label maps to Exfiltration, so the stage never occurs. Heartbleed/Infiltration → Lateral Movement is flagged "weak" in the YAML. | "Inferred proxy stages, not ground truth." |

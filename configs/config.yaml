@@ -31,24 +31,22 @@ split:
   val_fraction: 0.2
   test_fraction: 0.2
 
-# NOTE: this whole `model:` block is NOT read by `python -m aegisflow train`.
-# Training hyperparameters come from CLI flags (see aegisflow/cli.py). The committed
-# demo model is an LSTM (hidden 16, 1 layer) trained with:
-#   --epochs 8 --batch-size 256 --learning-rate 0.001 --hidden-size 16 --dropout 0.2 --patience 3
-# Only tests/test_config.py touches this block (override mechanics).
+# Defaults for `python -m aegisflow train`. CLI flags (--epochs, --hidden-size, ...) override
+# these, and so does `--set model.hidden_size=8`. The values below are exactly the
+# hyperparameters of the committed demo model, so `train` with no flags reproduces it.
 model:
-  type: "gru"          # gru | lstm | transformer
-  hidden_size: 64
-  num_layers: 1
+  type: "lstm"         # only "lstm" is implemented; `train` raises ConfigError for anything else
+  hidden_size: 16
   dropout: 0.2
   learning_rate: 0.001
-  batch_size: 128
-  epochs: 20
-  num_workers: 0
-  early_stopping_patience: 4
-  device: "auto"        # auto | cpu | cuda
+  batch_size: 256
+  epochs: 8
+  early_stopping_patience: 3
 
 confidence:
+  # Despite the name, this is a cutoff on the ATTACK probability: alerts with p >= this are
+  # labelled LIKELY_ATTACK, lower ones carry confidence_label = uncertain_label. It does not
+  # change which alerts fire (that is the validation-selected LSTM threshold in metrics.json).
   stage_prediction_threshold: 0.5
   uncertain_label: "UNCERTAIN"
 
@@ -59,8 +57,9 @@ risk_scoring:
     prediction_confidence: 0.15
     abnormality_score: 0.1
     recent_attack_history: 0.1
-  # NOT read at runtime: the replay engine hard-codes the stage_severity component to 0
-  # (there is no stage model), so this table has no effect. thresholds.high is also unused.
+  # Severity (0-100) of the PREDICTED stage, used for the stage_severity risk component. The
+  # model has no stage head and always predicts confidence.uncertain_label, which is not in this
+  # table, so the component is 0 today. `thresholds.high` is not read (high = anything >= medium).
   stage_severity:
     Benign: 0
     Reconnaissance: 30
@@ -75,7 +74,7 @@ risk_scoring:
     high: 100
 
 replay:
-  default_speed: 10
+  default_speed: 1000   # also the speed pre-selected in the dashboard dropdown
   allowed_speeds: [1, 10, 100, 1000]
 
 # NOT read at runtime: uvicorn host/port are given on the command line.

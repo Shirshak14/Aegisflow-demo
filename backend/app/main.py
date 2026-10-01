@@ -88,6 +88,10 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     def model_status() -> dict[str, Any]:
         return info.model_status()
 
+    @app.get("/risk/config")
+    def risk_config() -> dict[str, Any]:
+        return engine.risk_config()
+
     @app.get("/evaluation")
     def evaluation() -> dict[str, Any]:
         return info.evaluation()

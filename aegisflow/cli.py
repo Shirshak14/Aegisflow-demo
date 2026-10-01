@@ -25,10 +25,36 @@ import argparse
 import sys
 
 from .config import load_config
-from .errors import AegisFlowError, NotImplementedPhaseError
+from .errors import AegisFlowError, ConfigError, NotImplementedPhaseError
 from .logging_setup import configure_logging, get_logger
 
 log = get_logger("CLI")
+
+# train CLI flag (argparse dest) -> (config.model key, type)
+_TRAIN_PARAMS = {
+    "epochs": ("epochs", int),
+    "batch_size": ("batch_size", int),
+    "learning_rate": ("learning_rate", float),
+    "hidden_size": ("hidden_size", int),
+    "dropout": ("dropout", float),
+    "patience": ("early_stopping_patience", int),
+}
+
+
+def train_hyperparameters(cfg, args) -> dict:
+    """Resolve training hyperparameters: an explicit CLI flag wins, else ``config.model.*``."""
+    model_cfg = cfg.config.model
+    model_type = str(model_cfg.type).lower()
+    if model_type != "lstm":
+        raise ConfigError(
+            f"model.type is '{model_cfg.type}' but only 'lstm' is implemented. "
+            "Set model.type to 'lstm' in configs/config.yaml (or --set model.type=lstm)."
+        )
+    out = {}
+    for flag, (key, cast) in _TRAIN_PARAMS.items():
+        value = getattr(args, flag, None)
+        out[flag] = cast(value if value is not None else model_cfg[key])
+    return out
 
 
 def _common_args(p: argparse.ArgumentParser) -> None:
@@ -90,12 +116,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_train = sub.add_parser("train", help="Train Phase 3 CIC-IDS2017 forecasting baselines.")
     p_train.add_argument("--dataset", default="cic_ids2017")
-    p_train.add_argument("--epochs", type=int, default=20)
-    p_train.add_argument("--batch-size", type=int, default=128)
-    p_train.add_argument("--learning-rate", type=float, default=0.001)
-    p_train.add_argument("--hidden-size", type=int, default=32)
-    p_train.add_argument("--dropout", type=float, default=0.2)
-    p_train.add_argument("--patience", type=int, default=4)
+    # Defaults come from config.yaml `model:`; pass a flag to override it for one run.
+    p_train.add_argument("--epochs", type=int, default=None)
+    p_train.add_argument("--batch-size", type=int, default=None)
+    p_train.add_argument("--learning-rate", type=float, default=None)
+    p_train.add_argument("--hidden-size", type=int, default=None)
+    p_train.add_argument("--dropout", type=float, default=None)
+    p_train.add_argument("--patience", type=int, default=None)
     _common_args(p_train)
 
     p_predict = sub.add_parser("predict", help="Run Phase 3 LSTM inference on a sequences Parquet file.")
@@ -160,9 +187,9 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         from .ml.modeling import ForecastDataset, train_experiment
         path = cfg.path(cfg.config.paths.data_processed, args.dataset, "sequences.parquet")
         out = cfg.path("artifacts", "models", args.dataset)
-        result = train_experiment(ForecastDataset.from_parquet(path), out, seed=int(cfg.config.random_seed),
-            epochs=args.epochs, batch_size=args.batch_size, learning_rate=args.learning_rate,
-            hidden_size=args.hidden_size, dropout=args.dropout, patience=args.patience)
+        hp = train_hyperparameters(cfg, args)
+        log.info("training hyperparameters", **hp)
+        result = train_experiment(ForecastDataset.from_parquet(path), out, seed=int(cfg.config.random_seed), **hp)
         print(f"Phase 3 training complete: {out}")
         for name, metrics in result["models"].items(): print(f"  {name}: {metrics}")
         print(f"  Metrics: {out / 'metrics.json'}")
