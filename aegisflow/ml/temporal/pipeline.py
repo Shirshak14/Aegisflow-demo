@@ -27,7 +27,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
@@ -38,7 +37,7 @@ from ..features.flow_features import compute_flow_features
 from ..ingestion.pipeline import run_ingestion
 from .reporting import QualityMetrics, generate_data_quality_report
 from .sequences import build_host_sequences
-from .split import SplitMetadata, compute_temporal_splits
+from .split import compute_temporal_splits
 from .windowing import aggregate_host_windows
 
 log = get_logger("PREPROCESS_PIPELINE")

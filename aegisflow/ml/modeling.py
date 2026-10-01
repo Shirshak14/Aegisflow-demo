@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import random
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -137,7 +137,6 @@ def select_threshold(y: np.ndarray, p: np.ndarray) -> tuple[float, str]:
 
 class LSTMForecaster:
     def __init__(self, feature_count: int, hidden_size: int = 32, dropout: float = 0.2):
-        import torch
         from torch import nn
         class Net(nn.Module):
             def __init__(self):
@@ -210,7 +209,7 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20,
                          "checkpoint_selection":"minimum validation BCEWithLogitsLoss"}, "history":history}
     for name, idx in zip(("train","val","test"),(train_i,val_i,test_i)):
         results["splits"][name]={"sequences":len(idx),"positive_targets":int(data.attack[idx].sum()),"benign_targets":int((data.attack[idx]==0).sum())}
-    results["stage_proxy"]={"status":"Not scored: four attack-positive test targets cannot support meaningful stage forecasting.",
+    results["stage_proxy"]={"status":"Not scored: too few attack-positive test targets per stage to support meaningful stage forecasting.",
                             "test_distribution":pd.Series(data.stages[test_i]).value_counts().to_dict()}
     target_start=pd.to_datetime(data.frame.iloc[test_i].target_window_start)
     seq_end=pd.to_datetime(data.frame.iloc[test_i].seq_end_time)

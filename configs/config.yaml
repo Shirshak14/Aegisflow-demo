@@ -31,6 +31,11 @@ split:
   val_fraction: 0.2
   test_fraction: 0.2
 
+# NOTE: this whole `model:` block is NOT read by `python -m aegisflow train`.
+# Training hyperparameters come from CLI flags (see aegisflow/cli.py). The committed
+# demo model is an LSTM (hidden 16, 1 layer) trained with:
+#   --epochs 8 --batch-size 256 --learning-rate 0.001 --hidden-size 16 --dropout 0.2 --patience 3
+# Only tests/test_config.py touches this block (override mechanics).
 model:
   type: "gru"          # gru | lstm | transformer
   hidden_size: 64
@@ -54,6 +59,8 @@ risk_scoring:
     prediction_confidence: 0.15
     abnormality_score: 0.1
     recent_attack_history: 0.1
+  # NOT read at runtime: the replay engine hard-codes the stage_severity component to 0
+  # (there is no stage model), so this table has no effect. thresholds.high is also unused.
   stage_severity:
     Benign: 0
     Reconnaissance: 30
@@ -71,6 +78,7 @@ replay:
   default_speed: 10
   allowed_speeds: [1, 10, 100, 1000]
 
+# NOT read at runtime: uvicorn host/port are given on the command line.
 api:
   host: "0.0.0.0"
   port: 8000
@@ -78,5 +86,6 @@ api:
 database:
   url: "sqlite:///data/processed/aegisflow.db"
 
+# NOT read at runtime: the --sample-size CLI flag is what is used.
 sample_size: null   # set via --sample-size for fast dev iterations; null = full dataset
 random_seed: 42

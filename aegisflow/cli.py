@@ -3,17 +3,21 @@ AegisFlow command-line interface.
 
     python -m aegisflow <command> [options]
 
-Phases 1 and 2 commands are fully implemented:
+Implemented commands:
 - ingest: Load, clean, and map raw dataset into data/interim/<name>.parquet
 - validate-dataset: Check dataset presence and readable formats
 - feature-registry: Print machine-readable canonical feature catalog
 - eda: Exploratory analysis on ingested datasets
 - list-datasets: Display available dataset adapters
-- preprocess: Phase 2 end-to-end canonical feature engineering, host windowing, and sequence creation
+- preprocess: End-to-end canonical feature engineering, host windowing, sequences and chronological split
 - rebuild-temporal: regenerate host windows/sequences/reports from existing engineered flows
-- window: Phase 2 host-level temporal window aggregation
+- window: host-level temporal window aggregation
+- train: train the majority / logistic-regression / LSTM baselines
+- predict: run the trained LSTM on a sequences Parquet file
 
-Phase 3 commands: train and predict. Evaluate/replay/serve remain planned.
+The replay engine, audit ledger and dashboard are served by the FastAPI app, not by this CLI:
+    uvicorn backend.app.main:app --port 8000
+The `evaluate`, `replay` and `serve` subcommands below are placeholders that only report "not implemented".
 """
 from __future__ import annotations
 
