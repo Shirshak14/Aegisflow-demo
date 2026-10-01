@@ -108,6 +108,7 @@
   <!-- Evaluation -->
   <section class="card span12"><h2>Model evaluation (real held-out numbers)</h2>
     <div class="note" id="honestNote" style="margin-bottom:10px">loading&hellip;</div>
+    <div class="note info" id="evalConsistency" style="margin-bottom:10px;display:none"></div>
     <div class="row tabs" style="margin-bottom:8px">
       <span class="small muted">Target:</span><button id="tabAny" class="on">any attack in next window</button><button id="tabOnset">attack onset only</button>
       <span class="small muted" style="margin-left:12px">Split:</span><button id="tabTest" class="on">test</button><button id="tabVal">validation</button>
@@ -141,6 +142,16 @@ async function loadStatic() {
   $("modelLine").innerHTML = `Model <span class="mono">${esc(model.version)}</span><br>alert when LSTM p ≥ ${fmt(model.lstm_threshold, 4)} (validation-selected)`;
   $("speed").innerHTML = RISK.allowed_speeds.map(s => `<option value="${s}" ${s === RISK.default_speed ? "selected" : ""}>${s}×</option>`).join("");
   $("honestNote").innerHTML = `<b>Honest finding:</b> ${esc(ev.honest_note)} Predicted stage is always <b>UNCERTAIN</b>: ${esc(model.stage_note)}`;
+  // The evaluation tables are static report files; flag it if they were not computed on the live model/data.
+  const c = ev.consistency, box = $("evalConsistency");
+  box.style.display = "block";
+  if (c.consistent) {
+    box.className = "note info";
+    box.innerHTML = "✓ These evaluation tables were computed on the same data and model as the live replay (same split sizes and alert threshold).";
+  } else {
+    box.className = "note"; box.style.borderColor = "var(--bad)";
+    box.innerHTML = `<b>⚠ These evaluation tables do NOT match the live replay.</b> They come from a different model or dataset than the one being replayed, so do not compare them with the replay's numbers. ${c.mismatches.map(esc).join("; ")}.`;
+  }
   renderEval();
 }
 

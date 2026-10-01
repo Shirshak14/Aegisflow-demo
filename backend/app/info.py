@@ -29,15 +29,29 @@ def _mtime(path: Path) -> str | None:
     return datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds") if path.exists() else None
 
 
+@lru_cache(maxsize=2)
+def _sequence_host_counts(path: str, mtime_ns: int) -> tuple[int, int]:
+    import pandas as pd
+    f = pd.read_parquet(path, columns=["host_id", "split"])
+    return int(f["host_id"].nunique()), int(f.loc[f["split"] == "test", "host_id"].nunique())
+
+
 def dataset_status() -> dict[str, Any]:
     split = _read(DATA_DIR / "split_metadata.json")
     q = _read(REPORTS / "data_quality_report.json")
+    seq_path = DATA_DIR / "sequences.parquet"
+    hosts_with_sequences, hosts_in_test = _sequence_host_counts(str(seq_path), seq_path.stat().st_mtime_ns)
     return {
         "dataset": "CIC-IDS2017 (GeneratedLabelledFlows)",
-        "sample": "500k-row seeded spread-out sample (same fraction of every day-file); not the full 2.83M rows",
+        # All counts below are read from the data that was actually ingested and processed.
+        "provenance": (f"{q['raw_rows_loaded']:,} raw CSV rows loaded -> {q['cleaned_rows_kept']:,} cleaned flows -> "
+                       f"{q['total_host_windows']:,} host windows -> {q['total_sequences']:,} sequences "
+                       f"({hosts_with_sequences:,} hosts have sequences, {hosts_in_test:,} in the test split). "
+                       "How many raw rows were loaded is set by how `preprocess` was run (--sample-size)."),
         "raw_rows_sampled": q["raw_rows_loaded"], "cleaned_flows": q["cleaned_rows_kept"],
         "time_range": [q["temporal_range_start"], q["temporal_range_end"]],
         "hosts": q["unique_hosts_count"], "host_windows": q["total_host_windows"],
+        "hosts_with_sequences": hosts_with_sequences, "hosts_in_test_split": hosts_in_test,
         "sequences": q["total_sequences"], "positive_sequences": q["target_attack_sequences"],
         "split": {k: split[k] for k in ("val_cutoff_time", "test_cutoff_time", "train_sequences", "val_sequences",
                                         "test_sequences", "boundary_excluded_sequences")},
@@ -94,6 +108,36 @@ def _pick(m: dict[str, Any]) -> dict[str, Any]:
     return {k: m.get(k) for k in keys}
 
 
+def evaluation_consistency(baselines: dict[str, Any], lodo: dict[str, Any]) -> dict[str, Any]:
+    """Compare what the committed evaluation reports were computed on with the artifacts the live replay uses.
+
+    The evaluation tables are static report files; the live replay scores whatever model/data is on disk.
+    If they ever come from different artifact sets (e.g. after re-running preprocess/train), say so.
+    Fingerprint: per-split sequence counts, total sequences, and the LSTM alert threshold.
+    """
+    split = _read(DATA_DIR / "split_metadata.json")
+    metrics = _read(MODEL_DIR / "metrics.json")
+    live = {"train_sequences": split["train_sequences"], "val_sequences": split["val_sequences"],
+            "test_sequences": split["test_sequences"], "total_sequences": split["total_sequences"],
+            "lstm_threshold": metrics["threshold"]}
+    reports: dict[str, Any] = {}
+    mismatches: list[str] = []
+    try:
+        counts = baselines["variants"]["any"]["split_counts"]
+        reports.update({f"{s}_sequences": counts[s]["total"] for s in ("train", "val", "test")})
+        reports["lstm_threshold"] = baselines["variants"]["any"]["models"]["lstm_existing_checkpoint"]["threshold"]
+        fold = next(f for f in lodo["folds"].values() if "counts" in f)
+        reports["total_sequences"] = sum(fold["counts"][s]["total"] for s in ("train", "val", "test", "purged"))
+    except (KeyError, StopIteration, TypeError) as exc:
+        mismatches.append(f"could not read the evaluation reports' fingerprint ({exc!r})")
+    for key, live_value in live.items():
+        if key in reports:
+            same = abs(reports[key] - live_value) <= 1e-6 if key == "lstm_threshold" else reports[key] == live_value
+            if not same:
+                mismatches.append(f"{key}: evaluation reports {reports[key]} vs live model/data {live_value}")
+    return {"consistent": not mismatches, "mismatches": mismatches, "reports": reports, "live": live}
+
+
 def evaluation() -> dict[str, Any]:
     """Real numbers from the Phase 3 reports; nothing recomputed or rounded for effect."""
     b = _read(REPORTS / "phase3_baselines_onset.json")
@@ -106,7 +150,8 @@ def evaluation() -> dict[str, Any]:
         table[variant] = [{"model": names[m], "val": _pick(models[m]["val"]), "test": _pick(models[m]["test"])}
                           for m in names if m in models]
     host = b["variants"]["any"]["models"]["lstm_existing_checkpoint"]["host_check"]["test"]["shortcut_host_vs_rest"]
-    lodo = _read(REPORTS / "lodo_pilot_results.json")["folds"]
+    lodo_report = _read(REPORTS / "lodo_pilot_results.json")
+    lodo = lodo_report["folds"]
     dos = {}
     for fold, label in (("Wed_2017-07-05", "Fri DDoS -> Wed DoS"), ("Fri_2017-07-07", "Wed DoS -> Fri DDoS")):
         c = lodo[fold]["classes"]["Denial of Service"]["models"]
@@ -120,4 +165,5 @@ def evaluation() -> dict[str, Any]:
         "host_check_test_lstm": host,
         "lodo_dos_cross_day": dos,
         "honest_note": HOST_NOTE,
+        "consistency": evaluation_consistency(b, lodo_report),
     }

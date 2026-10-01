@@ -289,7 +289,9 @@ python -m aegisflow validate-dataset --dataset cic_ids2017
 
 Run the preprocessing pipeline:
 
-python -m aegisflow preprocess --dataset cic_ids2017
+python -m aegisflow preprocess --dataset cic_ids2017 --reingest --sample-size 500000
+
+This exact flag combination (`--reingest --sample-size 500000`) is required to reproduce the committed model and dashboard numbers (85,077 sequences, 11,379 test sequences, 9,971 source hosts). Without these flags the command processes the full ~3.1M-row dataset instead, which gives different counts and metrics.
 
 The pipeline generates the required processed network-flow and temporal data used by the machine-learning pipeline.
 
