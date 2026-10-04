@@ -37,7 +37,7 @@ from aegisflow.ml.modeling import ForecastDataset, LSTMForecaster
 from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES
 
 from .audit import Ledger
-from .info import DATA_DIR, MODEL_DIR, model_version
+from .info import DATA_DIR, MODEL_DIR, ROOT, model_version
 
 HISTORY_WINDOW = pd.Timedelta(minutes=10)
 
@@ -67,8 +67,12 @@ class ReplayEngine:
         self.stage_severity = {str(k): float(v) for k, v in cfg.risk_scoring.stage_severity.items()}
         self.conf_threshold = float(cfg.confidence.stage_prediction_threshold)
         self.uncertain = str(cfg.confidence.uncertain_label)
-        # No stage model exists, so the predicted stage is always the "uncertain" label.
+        # Default: no stage model, so the predicted stage is always the "uncertain" label. Opt-in:
+        # replay.stage_model_dir names a `train-multitask` model whose stage head labels each alert
+        # (stage kept only when its probability >= confidence.stage_prediction_threshold).
         self.predicted_stage = self.uncertain
+        stage_dir = cfg.replay.get("stage_model_dir")
+        self.stage_model_dir = (ROOT / stage_dir) if stage_dir else None
         self.allowed_speeds = [int(s) for s in cfg.replay.allowed_speeds]
         self.default_speed = int(cfg.replay.default_speed)
         self._lock = threading.RLock()
@@ -117,6 +121,10 @@ class ReplayEngine:
         lr_p = lr.predict_proba(x.reshape(len(x), -1))[:, 1].astype(float)
         std = list(STANDARD_NUMERIC_WINDOW_FEATURES)
         raw_last = np.stack([np.stack(v)[-1] for v in frame.sequence_features])
+        if self.stage_model_dir is not None:
+            from aegisflow.ml.multitask import MultiTaskPredictor
+            sp = MultiTaskPredictor(self.stage_model_dir).predict(data.X)
+            pred_stage = np.where(sp["stage_probability"] >= self.conf_threshold, sp["stage"], self.uncertain)
         self.lstm_threshold = float(metrics["threshold"])
         self.lr_threshold = float(metrics["models"]["logistic_regression"]["threshold"])
         self.events = pd.DataFrame({
@@ -131,7 +139,12 @@ class ReplayEngine:
             "truth_class": frame.target_dominant_class.astype(str), "truth_stage": frame.target_dominant_stage.astype(str),
         })
         self._raw_X = data.X
+        if self.stage_model_dir is not None:
+            self.events["pred_stage"] = pred_stage.astype(str)
         self.model_version = model_version()
+
+    def _row_stage(self, row) -> str:
+        return str(getattr(row, "pred_stage", self.predicted_stage))
 
     # ------------------------------------------------------------------ explanations (opt-in API only)
     def explain(self, sequence_id: str, *, model: str = "lstm", method: str = "shap", top: int = 5) -> dict[str, Any] | None:
@@ -157,24 +170,26 @@ class ReplayEngine:
 
     def _risk(self, row, recent_alerts: int) -> tuple[float, dict[str, float]]:
         p, t = float(row.lstm_p), self.lstm_threshold
-        comp = {"attack_probability": p, "stage_severity": self._stage_term(),
+        comp = {"attack_probability": p, "stage_severity": self._stage_term(self._row_stage(row)),
                 "prediction_confidence": max(0.0, (p - t) / (1 - t)),
                 "abnormality_score": float(row.abnormality),
                 "recent_attack_history": min(1.0, recent_alerts / 5)}
         risk = 100 * sum(self.weights[k] * v for k, v in comp.items())
         return round(risk, 2), {k: round(v, 4) for k, v in comp.items()}
 
-    def _stage_term(self) -> float:
+    def _stage_term(self, stage: str | None = None) -> float:
         """Severity (0-1) of the predicted stage. The uncertain label is not in the table, so 0."""
-        return self.stage_severity.get(self.predicted_stage, 0.0) / 100.0
+        return self.stage_severity.get(stage or self.predicted_stage, 0.0) / 100.0
 
     def level(self, risk: float) -> str:
         return "low" if risk < self.levels["low"] else "medium" if risk < self.levels["medium"] else "high"
 
     def risk_config(self) -> dict[str, Any]:
         """Risk/confidence settings the dashboard needs, so it never hard-codes copies of them."""
+        top_stage = (max(self.stage_severity.values(), default=0.0) / 100.0 if self.stage_model_dir is not None
+                     else self._stage_term())
         max_reachable = 100 * (sum(w for k, w in self.weights.items() if k != "stage_severity")
-                               + self.weights["stage_severity"] * self._stage_term())
+                               + self.weights["stage_severity"] * top_stage)
         return {"weights": dict(self.weights),
                 "thresholds": {"low": float(self.levels["low"]), "medium": float(self.levels["medium"])},
                 "max_reachable_risk": round(max_reachable, 2),
@@ -255,7 +270,7 @@ class ReplayEngine:
                 "lr_flag": int(row.lr_p >= self.lr_threshold), "reference_rule_flag": int(row.rule),
                 "risk_score": risk, "risk_components": comp, "confidence": conf,
                 "confidence_label": self.uncertain if conf < self.conf_threshold else "LIKELY_ATTACK",
-                "predicted_stage": self.predicted_stage,
+                "predicted_stage": self._row_stage(row),
                 "truth_attack": int(row.truth_attack), "truth_class": row.truth_class, "truth_stage": row.truth_stage,
                 "model_version": self.model_version,
             })
