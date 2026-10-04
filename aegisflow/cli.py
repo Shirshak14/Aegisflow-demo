@@ -44,17 +44,24 @@ _TRAIN_PARAMS = {
 def train_hyperparameters(cfg, args) -> dict:
     """Resolve training hyperparameters: an explicit CLI flag wins, else ``config.model.*``."""
     model_cfg = cfg.config.model
-    model_type = str(model_cfg.type).lower()
-    if model_type != "lstm":
-        raise ConfigError(
-            f"model.type is '{model_cfg.type}' but only 'lstm' is implemented. "
-            "Set model.type to 'lstm' in configs/config.yaml (or --set model.type=lstm)."
-        )
+    resolve_model_type(cfg, args)  # validate early
     out = {}
     for flag, (key, cast) in _TRAIN_PARAMS.items():
         value = getattr(args, flag, None)
         out[flag] = cast(value if value is not None else model_cfg[key])
     return out
+
+
+def resolve_model_type(cfg, args) -> str:
+    """``--model`` wins, else ``config.model.type``; must be one of modeling.MODEL_TYPES."""
+    from .ml.modeling import MODEL_TYPES
+    model_type = str(getattr(args, "model", None) or cfg.config.model.type).lower()
+    if model_type not in MODEL_TYPES:
+        raise ConfigError(
+            f"model type '{model_type}' is not implemented; choose one of {', '.join(MODEL_TYPES)} "
+            "(--model, or model.type in configs/config.yaml)."
+        )
+    return model_type
 
 
 def _common_args(p: argparse.ArgumentParser) -> None:
@@ -123,9 +130,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_train.add_argument("--hidden-size", type=int, default=None)
     p_train.add_argument("--dropout", type=float, default=None)
     p_train.add_argument("--patience", type=int, default=None)
+    p_train.add_argument("--model", choices=["lstm", "attention_lstm", "transformer"], default=None,
+                         help="Architecture (default: config model.type = lstm). Non-LSTM models are written to "
+                              "artifacts/models/<dataset>_<model> so the demo model is never overwritten.")
+    p_train.add_argument("--output-dir", default=None, help="Override the model output directory.")
     _common_args(p_train)
 
-    p_predict = sub.add_parser("predict", help="Run Phase 3 LSTM inference on a sequences Parquet file.")
+    p_predict = sub.add_parser("predict", help="Run Phase 3 model inference on a sequences Parquet file "
+                               "(attention models also print per-window attention weights).")
     p_predict.add_argument("--input", required=True)
     p_predict.add_argument("--model-dir", default="artifacts/models/cic_ids2017")
     p_predict.add_argument("--threshold", type=float, default=None)
@@ -198,10 +210,13 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
     if args.command == "train":
         from .ml.modeling import ForecastDataset, train_experiment
         path = cfg.path(cfg.config.paths.data_processed, args.dataset, "sequences.parquet")
-        out = cfg.path("artifacts", "models", args.dataset)
         hp = train_hyperparameters(cfg, args)
-        log.info("training hyperparameters", **hp)
-        result = train_experiment(ForecastDataset.from_parquet(path), out, seed=int(cfg.config.random_seed), **hp)
+        model_type = resolve_model_type(cfg, args)
+        default_dir = args.dataset if model_type == "lstm" else f"{args.dataset}_{model_type}"
+        out = cfg.path(args.output_dir) if args.output_dir else cfg.path("artifacts", "models", default_dir)
+        log.info("training hyperparameters", model_type=model_type, **hp)
+        result = train_experiment(ForecastDataset.from_parquet(path), out, seed=int(cfg.config.random_seed),
+                                  model_type=model_type, **hp)
         print(f"Phase 3 training complete: {out}")
         for name, metrics in result["models"].items(): print(f"  {name}: {metrics}")
         print(f"  Metrics: {out / 'metrics.json'}")
