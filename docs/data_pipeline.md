@@ -123,3 +123,14 @@ python -m aegisflow score-pcap  --input capture.pcap [--model-dir artifacts/mode
 - `--labels` takes `source_ip,start,end,label` rows. Labels must exist in a `stages.yaml` section (default `cic_ids2017`); everything else is `BENIGN`. Without it, flows are `UNLABELED`.
 
 Limit: the model was trained on CICFlowMeter output. Flows from this extractor follow the same definitions but are not byte-identical (no bulk/subflow/active-idle statistics), so scores on PCAP input are not validated against labelled traffic.
+
+## Streaming (`aegisflow/ml/streaming.py`)
+
+`StreamScorer` scores traffic as it arrives instead of after the fact. Push canonical flows in time order, in chunks of any size. Each 60 s / 30 s window is aggregated with the batch code once the watermark passes its end. Every host with 10 windows then has its newest sequence scored straight away.
+
+- Entry points: `POST /stream/flows` (any collector or probe can push JSON), and `python -m aegisflow stream --input capture.pcap|flows.parquet`, which replays a file as a stream.
+- Fed the same in-order flows, it returns the same sequences and probabilities as the batch `score-pcap` path (tested with chunk sizes 1 to 1000).
+- Flows older than the earliest open window are counted as late and dropped. `stream.allowed_lateness_seconds` widens that.
+- Memory holds only the flows of open windows and the last 10 windows per host.
+
+Live interface capture is not included (it needs root and an incremental flow exporter). Point a NetFlow/IPFIX exporter or a flow meter at `/stream/flows` instead.

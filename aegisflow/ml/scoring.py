@@ -75,34 +75,55 @@ def _host_extras(flows: pd.DataFrame, meta: pd.DataFrame) -> list[dict[str, Any]
     return out
 
 
-def score_flows(flows: pd.DataFrame, model_dir: str | Path, cfg: AegisFlowConfig, *,
-                threshold: float | None = None) -> pd.DataFrame:
-    """Return one row per scored sequence: host, time span, attack probability, alert flag, packet extras."""
-    import torch
-    model_dir = Path(model_dir)
-    meta_json = json.loads((model_dir / "metadata.json").read_text(encoding="utf-8"))
-    names = list(meta_json["feature_names"])
-    L = int(meta_json["input_shape"][0])
+class LSTMScorer:
+    """The saved preprocessor + LSTM from ``train``, ready to score raw (n, L, F) window sequences."""
+
+    def __init__(self, model_dir: str | Path, threshold: float | None = None):
+        import torch
+        model_dir = Path(model_dir)
+        self.meta = json.loads((model_dir / "metadata.json").read_text(encoding="utf-8"))
+        self.feature_names = list(self.meta["feature_names"])
+        self.sequence_length = int(self.meta["input_shape"][0])
+        tc = self.meta["training_config"]
+        if tc.get("model_type", "lstm") != "lstm":
+            raise ValueError("scoring supports the LSTM forecaster (model_type 'lstm')")
+        self.prep = joblib.load(model_dir / "preprocessor.joblib")
+        self.net = LSTMForecaster(len(self.feature_names), tc["hidden_size"], tc["dropout"]).net
+        self.net.load_state_dict(torch.load(model_dir / "best.pt", map_location="cpu", weights_only=True))
+        self.net.eval()
+        self.threshold = float(self.meta["threshold"] if threshold is None else threshold)
+
+    def probabilities(self, X: np.ndarray) -> np.ndarray:
+        import torch
+        if len(X) == 0:
+            return np.empty(0)
+        with torch.no_grad():
+            return torch.sigmoid(self.net(torch.tensor(self.prep.transform(X)))).numpy().astype(float)
+
+
+def prepare_flows(flows: pd.DataFrame) -> pd.DataFrame:
+    """Clean canonical flows and add flow features; unlabeled traffic gets NA label columns."""
     flows = flows.copy()
     for col in ("normalized_attack_class", "attack_stage"):
         if col not in flows.columns:
             flows[col] = pd.Series(pd.NA, index=flows.index, dtype="string")  # unlabeled traffic
     cleaned, _ = clean_canonical_frame(flows)
-    windows = aggregate_host_windows(compute_flow_features(cleaned), cfg=cfg)
-    X, meta = build_inference_sequences(windows, L, names)
+    return compute_flow_features(cleaned)
+
+
+def score_flows(flows: pd.DataFrame, model_dir: str | Path, cfg: AegisFlowConfig, *,
+                threshold: float | None = None) -> pd.DataFrame:
+    """Return one row per scored sequence: host, time span, attack probability, alert flag, packet extras."""
+    scorer = LSTMScorer(model_dir, threshold)
+    cleaned = prepare_flows(flows)
+    windows = aggregate_host_windows(cleaned, cfg=cfg)
+    X, meta = build_inference_sequences(windows, scorer.sequence_length, scorer.feature_names)
     cols = ["sequence_id", "host_id", "seq_start_time", "seq_end_time", "attack_probability", "predicted_attack",
             "threshold"]
     if len(X) == 0:
         return pd.DataFrame(columns=cols)
-    prep = joblib.load(model_dir / "preprocessor.joblib")
-    tc = meta_json["training_config"]
-    if tc.get("model_type", "lstm") != "lstm":
-        raise ValueError("score_flows supports the LSTM forecaster (model_type 'lstm')")
-    net = LSTMForecaster(len(names), tc["hidden_size"], tc["dropout"]).net
-    net.load_state_dict(torch.load(model_dir / "best.pt", map_location="cpu", weights_only=True)); net.eval()
-    with torch.no_grad():
-        p = torch.sigmoid(net(torch.tensor(prep.transform(X)))).numpy().astype(float)
-    t = float(meta_json["threshold"] if threshold is None else threshold)
+    p = scorer.probabilities(X)
+    t = scorer.threshold
     out = meta.assign(attack_probability=p, predicted_attack=p >= t, threshold=t)
     extras = pd.DataFrame(_host_extras(cleaned, meta), index=out.index)
     return pd.concat([out, extras], axis=1)

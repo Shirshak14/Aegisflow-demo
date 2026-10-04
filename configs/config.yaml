@@ -77,6 +77,11 @@ replay:
   default_speed: 1000   # also the speed pre-selected in the dashboard dropdown
   allowed_speeds: [1, 10, 100, 1000]
 
+# Streaming telemetry API (POST /stream/flows). Opt-in: nothing happens until flows are pushed.
+stream:
+  model_dir: "artifacts/models/cic_ids2017"
+  allowed_lateness_seconds: 0   # flows may arrive this many seconds out of order
+
 # NOT read at runtime: uvicorn host/port are given on the command line.
 api:
   host: "0.0.0.0"

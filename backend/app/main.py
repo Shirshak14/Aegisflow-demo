@@ -24,6 +24,10 @@ class ReplayStart(BaseModel):
     reset: bool = True
 
 
+class StreamFlows(BaseModel):
+    flows: list[dict[str, Any]]
+
+
 class AlertIn(BaseModel):
     session_id: str | None = None
     sequence_id: str
@@ -147,6 +151,55 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         if rec is None:
             raise HTTPException(404, f"alert {alert_id} not found")
         return rec
+
+    # ---- streaming telemetry (opt-in; not used by the dashboard); see aegisflow/ml/streaming.py
+    stream_lock = threading.Lock()
+
+    def stream_scorer():
+        with stream_lock:
+            if getattr(app.state, "stream", None) is None:
+                from aegisflow.ml.streaming import StreamScorer
+                cfg = load_config()
+                st = cfg.config.get("stream") or {}
+                model_dir = ROOT / str(st.get("model_dir") or "artifacts/models/cic_ids2017")
+                app.state.stream = StreamScorer(model_dir, cfg, allowed_lateness=float(st.get("allowed_lateness_seconds") or 0))
+            return app.state.stream
+
+    @app.post("/stream/flows")
+    def stream_flows(body: StreamFlows) -> dict[str, Any]:
+        """Push canonical flow records (JSON objects with the aegisflow.schema columns), oldest first.
+        Returns the host sequences scored because a window closed. Nothing is written to the ledger."""
+        import pandas as pd
+        from aegisflow.schema import REQUIRED_COLUMNS, coerce_canonical_frame
+        df = pd.DataFrame(body.flows)
+        if df.empty:
+            return {"scored": [], "status": stream_scorer().status()}
+        if "dataset_label" not in df:
+            df["dataset_label"] = "UNLABELED"
+        missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+        if missing:
+            raise HTTPException(422, f"flow records missing required fields: {missing}")
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+        scored = stream_scorer().push(coerce_canonical_frame(df))
+        return {"scored": scored, "status": stream_scorer().status()}
+
+    @app.post("/stream/flush")
+    def stream_flush() -> dict[str, Any]:
+        return {"scored": stream_scorer().flush(), "status": stream_scorer().status()}
+
+    @app.get("/stream/status")
+    def stream_status() -> dict[str, Any]:
+        return stream_scorer().status()
+
+    @app.get("/stream/results")
+    def stream_results(limit: int = 100, alerts_only: bool = False) -> list[dict[str, Any]]:
+        rows = [r for r in stream_scorer().results if r["predicted_attack"] or not alerts_only]
+        return rows[::-1][:max(1, min(limit, 1000))]
+
+    @app.post("/stream/reset")
+    def stream_reset() -> dict[str, Any]:
+        stream_scorer().reset()
+        return stream_scorer().status()
 
     @app.get("/audit/verify")
     def verify() -> dict[str, Any]:

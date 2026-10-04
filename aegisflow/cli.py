@@ -149,6 +149,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_sp.add_argument("--output", default=None, help="optional CSV of all scored sequences")
     _common_args(p_sp)
 
+    p_st = sub.add_parser("stream", help="Score a capture or flow file as a stream: windows are scored as they close.")
+    p_st.add_argument("--input", required=True, help=".pcap/.pcapng, or canonical flows .parquet/.csv")
+    p_st.add_argument("--model-dir", default="artifacts/models/cic_ids2017")
+    p_st.add_argument("--chunk-seconds", type=float, default=30.0, help="push flows in chunks of this much traffic time")
+    p_st.add_argument("--lateness", type=float, default=0.0, help="allowed out-of-order seconds")
+    p_st.add_argument("--alerts-only", action="store_true")
+    _common_args(p_st)
+
     # Planned later phases
     for name, phase in [
         ("evaluate", "Phase 3/4 (evaluation report against held-out test split)"),
@@ -241,6 +249,30 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
             scored.to_csv(cfg.path(args.output), index=False)
         for row in scored.sort_values("attack_probability", ascending=False).head(10).to_dict("records"):
             print(__import__("json").dumps(row, default=str))
+        return 0
+    if args.command == "stream":
+        import json
+
+        import pandas as pd
+
+        from .ml.streaming import StreamScorer
+        src = cfg.path(args.input)
+        if src.suffix.lower() in {".pcap", ".pcapng", ".cap"}:
+            from .ml.ingestion.pcap import pcap_to_flows
+            flows = pcap_to_flows(src)
+        else:
+            flows = pd.read_parquet(src) if src.suffix.lower() == ".parquet" else pd.read_csv(src, parse_dates=["timestamp"])
+        flows = flows.sort_values("timestamp", kind="stable")
+        st = StreamScorer(cfg.path(args.model_dir), cfg, allowed_lateness=args.lateness)
+        chunk = ((flows.timestamp - flows.timestamp.min()).dt.total_seconds() // args.chunk_seconds).astype(int)
+        for _, part in flows.groupby(chunk, sort=True):
+            for r in st.push(part):
+                if r["predicted_attack"] or not args.alerts_only:
+                    print(json.dumps(r))
+        for r in st.flush():
+            if r["predicted_attack"] or not args.alerts_only:
+                print(json.dumps(r))
+        print(json.dumps({"status": st.status()}))
         return 0
     if args.command in {"train", "evaluate", "replay", "serve"}:
         raise NotImplementedPhaseError(
