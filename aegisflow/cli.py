@@ -131,6 +131,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_predict.add_argument("--threshold", type=float, default=None)
     _common_args(p_predict)
 
+    p_explain = sub.add_parser("explain", help="Explain predictions per feature and time step (SHAP / Integrated Gradients).")
+    p_explain.add_argument("--dataset", default="cic_ids2017")
+    p_explain.add_argument("--input", default=None, help="sequences Parquet (default: data/processed/<dataset>/sequences.parquet)")
+    p_explain.add_argument("--model-dir", default=None, help="default: artifacts/models/<dataset>")
+    p_explain.add_argument("--model", choices=["lstm", "logistic_regression"], default="lstm")
+    p_explain.add_argument("--method", choices=["shap", "integrated_gradients"], default="shap",
+                           help="LSTM attribution method; logistic regression always uses exact linear SHAP")
+    p_explain.add_argument("--sequence-id", action="append", default=[], help="repeatable; default: first --limit test sequences")
+    p_explain.add_argument("--limit", type=int, default=5)
+    p_explain.add_argument("--top", type=int, default=5, help="top features to print per sequence")
+    _common_args(p_explain)
+
     # Planned later phases
     for name, phase in [
         ("evaluate", "Phase 3/4 (evaluation report against held-out test split)"),
@@ -198,6 +210,15 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         from .ml.modeling import predict_sequences
         rows = predict_sequences(cfg.path(args.input), cfg.path(args.model_dir), args.threshold)
         for row in rows: print(__import__("json").dumps(row))
+        return 0
+    if args.command == "explain":
+        import json
+        from .ml.explain import explain_parquet
+        path = cfg.path(args.input) if args.input else cfg.path(cfg.config.paths.data_processed, args.dataset, "sequences.parquet")
+        model_dir = cfg.path(args.model_dir) if args.model_dir else cfg.path("artifacts", "models", args.dataset)
+        for e in explain_parquet(path, model_dir, args.sequence_id or None, model=args.model, method=args.method,
+                                 limit=args.limit, seed=int(cfg.config.random_seed)):
+            print(json.dumps(e.to_dict(k=args.top)))
         return 0
     if args.command in {"train", "evaluate", "replay", "serve"}:
         raise NotImplementedPhaseError(

@@ -125,6 +125,19 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
             raise HTTPException(404, f"host {host_id} not seen in the current replay")
         return h | {"alerts_list": ledger.list(limit=200, host_id=host_id)}
 
+    @app.get("/explain/{sequence_id}")
+    def explain(sequence_id: str, model: str = "lstm", method: str = "shap", top: int = 5) -> dict[str, Any]:
+        """Per-feature / per-time-step attribution of one test-split prediction (not used by the dashboard)."""
+        if model not in {"lstm", "logistic_regression"} or method not in {"shap", "integrated_gradients"}:
+            raise HTTPException(422, "model must be lstm|logistic_regression, method shap|integrated_gradients")
+        try:
+            out = engine.explain(sequence_id, model=model, method=method, top=max(1, min(top, 28)))
+        except ImportError:
+            raise HTTPException(501, "SHAP is not installed (pip install shap); use method=integrated_gradients")
+        if out is None:
+            raise HTTPException(404, f"sequence {sequence_id} is not in the replayed test split")
+        return out
+
     @app.get("/mitre/{stage}")
     def mitre(stage: str) -> dict[str, Any]:
         m = info.mitre(stage)
