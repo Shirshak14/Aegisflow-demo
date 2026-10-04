@@ -39,5 +39,5 @@ def test_types_are_cast():
 
 
 def test_unimplemented_model_type_is_rejected():
-    with pytest.raises(ConfigError, match="only 'lstm'"):
+    with pytest.raises(ConfigError, match="not implemented"):
         train_hyperparameters(load_config(overrides=["model.type=gru"]), _args())

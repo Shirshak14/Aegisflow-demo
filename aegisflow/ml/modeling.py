@@ -148,8 +148,116 @@ class LSTMForecaster:
         self.net = Net()
 
 
+def _attention_pool_class():
+    """Additive (Bahdanau-style) attention over time steps: one weight per input window, summing to 1."""
+    from torch import nn
+
+    class AttentionPool(nn.Module):
+        def __init__(self, dim: int):
+            super().__init__()
+            self.score = nn.Sequential(nn.Linear(dim, dim), nn.Tanh(), nn.Linear(dim, 1, bias=False))
+
+        def forward(self, h):                      # h: (n, L, dim)
+            w = self.score(h).squeeze(-1).softmax(dim=-1)   # (n, L)
+            return (w.unsqueeze(-1) * h).sum(dim=1), w
+    return AttentionPool
+
+
+class AttentionLSTMForecaster:
+    """LSTM over all windows + attention pooling. ``net.attention(x)`` returns per-window weights (n, L)."""
+    def __init__(self, feature_count: int, hidden_size: int = 32, dropout: float = 0.2):
+        from torch import nn
+        AttentionPool = _attention_pool_class()
+
+        class Net(nn.Module):
+            def __init__(self):
+                super().__init__(); self.lstm = nn.LSTM(feature_count, hidden_size, batch_first=True)
+                self.pool = AttentionPool(hidden_size)
+                self.dropout = nn.Dropout(dropout); self.head = nn.Linear(hidden_size, 1)
+
+            def _pooled(self, x):
+                out, _ = self.lstm(x)
+                return self.pool(out)
+
+            def forward(self, x):
+                ctx, _ = self._pooled(x)
+                return self.head(self.dropout(ctx)).squeeze(-1)
+
+            def attention(self, x):
+                return self._pooled(x)[1]
+        self.net = Net()
+
+
+class TransformerForecaster:
+    """Temporal Transformer encoder over the window sequence, then attention pooling over time.
+
+    Input windows are projected to ``hidden_size`` (d_model), a learned positional embedding marks
+    each window's place in the sequence, and ``num_layers`` pre-norm encoder layers with ``num_heads``
+    heads mix information across windows. ``net.attention(x)`` returns the pooling weights (n, L).
+    """
+    def __init__(self, feature_count: int, hidden_size: int = 32, dropout: float = 0.2, *,
+                 num_heads: int = 4, num_layers: int = 2, max_len: int = 64):
+        import torch
+        from torch import nn
+        if hidden_size % num_heads:
+            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by num_heads ({num_heads})")
+        AttentionPool = _attention_pool_class()
+
+        class Net(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.proj = nn.Linear(feature_count, hidden_size)
+                self.pos = nn.Parameter(torch.zeros(1, max_len, hidden_size))
+                nn.init.normal_(self.pos, std=0.02)
+                layer = nn.TransformerEncoderLayer(hidden_size, num_heads, dim_feedforward=2 * hidden_size,
+                                                   dropout=dropout, batch_first=True, norm_first=True)
+                self.encoder = nn.TransformerEncoder(layer, num_layers, enable_nested_tensor=False)
+                self.pool = AttentionPool(hidden_size)
+                self.dropout = nn.Dropout(dropout); self.head = nn.Linear(hidden_size, 1)
+
+            def _pooled(self, x):
+                if x.shape[1] > max_len:
+                    raise ValueError(f"sequence length {x.shape[1]} exceeds max_len {max_len}")
+                h = self.encoder(self.proj(x) + self.pos[:, :x.shape[1]])
+                return self.pool(h)
+
+            def forward(self, x):
+                ctx, _ = self._pooled(x)
+                return self.head(self.dropout(ctx)).squeeze(-1)
+
+            def attention(self, x):
+                return self._pooled(x)[1]
+        self.net = Net()
+
+
+MODEL_TYPES = ("lstm", "attention_lstm", "transformer")
+
+
+def build_model(model_type: str, feature_count: int, hidden_size: int = 32, dropout: float = 0.2):
+    """Return the torch module for ``model_type`` (one of MODEL_TYPES)."""
+    if model_type == "lstm":
+        return LSTMForecaster(feature_count, hidden_size, dropout).net
+    if model_type == "attention_lstm":
+        return AttentionLSTMForecaster(feature_count, hidden_size, dropout).net
+    if model_type == "transformer":
+        return TransformerForecaster(feature_count, hidden_size, dropout).net
+    raise ValueError(f"unknown model type {model_type!r}; choose from {MODEL_TYPES}")
+
+
+def load_model(model_dir: Path, map_location: str = "cpu"):
+    """Load ``best.pt`` from ``model_dir`` with the architecture recorded in metadata.json (default lstm)."""
+    import torch
+    meta = json.loads((Path(model_dir) / "metadata.json").read_text(encoding="utf-8"))
+    tc = meta["training_config"]
+    net = build_model(tc.get("model_type", "lstm"), len(meta["feature_names"]), tc["hidden_size"], tc["dropout"])
+    net.load_state_dict(torch.load(Path(model_dir) / "best.pt", map_location=map_location, weights_only=True))
+    net.eval()
+    return net, meta
+
+
 def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20, batch_size=128,
-                     learning_rate=0.001, hidden_size=32, dropout=0.2, patience=4) -> dict[str, Any]:
+                     learning_rate=0.001, hidden_size=32, dropout=0.2, patience=4,
+                     model_type: str = "lstm") -> dict[str, Any]:
     import torch
     from torch.utils.data import DataLoader, TensorDataset
     random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
@@ -172,7 +280,7 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20,
     # For common model comparison, validation threshold is chosen for LSTM as well.
     counts = positive_class_weight(data.attack[train_i])
     pos_weight = counts[0]
-    model = LSTMForecaster(data.X.shape[-1], hidden_size, dropout).net
+    model = build_model(model_type, data.X.shape[-1], hidden_size, dropout)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu"); model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight], dtype=torch.float32, device=device))
@@ -202,11 +310,13 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20,
              "train_class_counts":counts[1], "threshold_selection":lstm_reason,
              "threshold":lstm_threshold, "models":{"majority":metrics_at(data.attack[test_i],prior_probs,0.5),
              "logistic_regression":metrics_at(data.attack[test_i],cp,threshold),
-             "lstm":metrics_at(data.attack[test_i],lp,lstm_threshold)},
+             model_type:metrics_at(data.attack[test_i],lp,lstm_threshold)},
              "training":{"seed":seed,"epochs_requested":epochs,"epochs_run":len(history),"batch_size":batch_size,
                          "learning_rate":learning_rate,"hidden_size":hidden_size,"dropout":dropout,"patience":patience,
                          "device":str(device),"best_checkpoint_epoch":best_epoch,
                          "checkpoint_selection":"minimum validation BCEWithLogitsLoss"}, "history":history}
+    if model_type != "lstm":  # the default LSTM's metadata stays byte-for-byte what it was
+        results["training"]["model_type"] = model_type
     for name, idx in zip(("train","val","test"),(train_i,val_i,test_i)):
         results["splits"][name]={"sequences":len(idx),"positive_targets":int(data.attack[idx].sum()),"benign_targets":int((data.attack[idx]==0).sum())}
     results["stage_proxy"]={"status":"Not scored: too few attack-positive test targets per stage to support meaningful stage forecasting.",
@@ -230,11 +340,16 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20,
 
 def predict_sequences(path: Path, model_dir: Path, threshold: float | None = None) -> list[dict[str, Any]]:
     import torch
-    data=ForecastDataset.from_parquet(path); meta=json.loads((model_dir/"metadata.json").read_text(encoding="utf-8"))
+    data=ForecastDataset.from_parquet(path); model,meta=load_model(model_dir)
     prep=joblib.load(model_dir/"preprocessor.joblib"); x=prep.transform(data.X)
-    model=LSTMForecaster(len(meta["feature_names"]),meta["training_config"]["hidden_size"],meta["training_config"]["dropout"]).net
-    model.load_state_dict(torch.load(model_dir/"best.pt",map_location="cpu",weights_only=True)); model.eval()
-    with torch.no_grad(): probs=torch.sigmoid(model(torch.tensor(x))).numpy()
+    model_type=meta["training_config"].get("model_type","lstm")
+    with torch.no_grad():
+        xt=torch.tensor(x); probs=torch.sigmoid(model(xt)).numpy()
+        attn=model.attention(xt).numpy() if hasattr(model,"attention") else None
     t=float(meta["threshold"] if threshold is None else threshold)
-    return [{"sequence_id":str(data.frame.iloc[i].get("sequence_id","")),"attack_probability":float(probs[i]),
-             "predicted_attack":bool(probs[i]>=t),"threshold":t,"model":"cic_ids2017-lstm-phase3"} for i in range(len(probs))]
+    name="cic_ids2017-lstm-phase3" if model_type=="lstm" else f"cic_ids2017-{model_type}"
+    rows=[{"sequence_id":str(data.frame.iloc[i].get("sequence_id","")),"attack_probability":float(probs[i]),
+           "predicted_attack":bool(probs[i]>=t),"threshold":t,"model":name} for i in range(len(probs))]
+    if attn is not None:  # per-input-window attention weights, oldest window first
+        for row,w in zip(rows,attn): row["attention"]=[round(float(v),6) for v in w]
+    return rows

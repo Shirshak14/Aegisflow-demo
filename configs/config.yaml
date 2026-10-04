@@ -35,7 +35,7 @@ split:
 # these, and so does `--set model.hidden_size=8`. The values below are exactly the
 # hyperparameters of the committed demo model, so `train` with no flags reproduces it.
 model:
-  type: "lstm"         # only "lstm" is implemented; `train` raises ConfigError for anything else
+  type: "lstm"         # lstm (demo model) | attention_lstm | transformer; `train --model` overrides
   hidden_size: 16
   dropout: 0.2
   learning_rate: 0.001
