@@ -213,6 +213,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_st.add_argument("--lateness", type=float, default=0.0, help="allowed out-of-order seconds")
     p_st.add_argument("--alerts-only", action="store_true")
     _common_args(p_st)
+    p_gnn = sub.add_parser("train-gnn", help="Train the temporal GNN (host-communication graph per window + GRU).")
+    p_gnn.add_argument("--dataset", default="cic_ids2017")
+    for flag, typ in (("--epochs", int), ("--batch-size", int), ("--learning-rate", float), ("--hidden-size", int),
+                      ("--dropout", float), ("--patience", int)):
+        p_gnn.add_argument(flag, type=typ, default=None)
+    p_gnn.add_argument("--output-dir", default=None, help="default: artifacts/models/<dataset>_tgnn")
+    _common_args(p_gnn)
 
     # Planned later phases
     for name, phase in [
@@ -390,6 +397,21 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
             if r["predicted_attack"] or not args.alerts_only:
                 print(json.dumps(r))
         print(json.dumps({"status": st.status()}))
+        return 0
+    if args.command == "train-gnn":
+        import pandas as pd
+
+        from .ml.graph import build_graph_sequences, train_tgnn
+        hp = train_hyperparameters(cfg, args)
+        d = cfg.path(cfg.config.paths.data_processed, args.dataset)
+        data = build_graph_sequences(pd.read_parquet(d / "sequences.parquet"), pd.read_parquet(d / "host_windows.parquet"),
+                                     pd.read_parquet(d / "flows.parquet", columns=["timestamp", "source_ip", "destination_ip"]),
+                                     float(cfg.config.windowing.window_size_seconds))
+        out = cfg.path(args.output_dir) if args.output_dir else cfg.path("artifacts", "models", f"{args.dataset}_tgnn")
+        res = train_tgnn(data, out, seed=int(cfg.config.random_seed), dataset=args.dataset, **hp)
+        print(f"Temporal GNN training complete: {out}")
+        print(f"  graph : {res['graph']}")
+        for name, m in res["models"].items(): print(f"  {name}: {m}")
         return 0
     if args.command in {"train", "evaluate", "replay", "serve"}:
         raise NotImplementedPhaseError(
