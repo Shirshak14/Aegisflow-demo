@@ -18,6 +18,17 @@ Tensor `[batch, 10, 28]`: 28 numeric traffic features per window (counts, byte/p
 | Logistic regression | Flattened normalised history, `class_weight="balanced"`. |
 | LSTM (demo model) | 1-layer LSTM (hidden 16), dropout 0.2 on the last hidden state, linear output; `BCEWithLogitsLoss` with `pos_weight` 132.75; Adam 1e-3, batch 256; early stopping on validation loss. About 3k parameters. Best checkpoint was epoch 1 of 4. |
 
+### Temporal GNN (`aegisflow/ml/graph.py`, opt-in)
+
+For each window, flows define a host-communication graph: an edge joins two hosts that exchanged a flow in that window. For each step of a host's 10-window sequence, the model combines three inputs:
+- the host's own 28 features
+- the mean features of its neighbours in that window
+- log(1 + neighbour count)
+
+It combines them with a GraphSAGE-style mean-aggregation layer, then runs a GRU over time and a linear attack head. Target, split, class weighting, early stopping and threshold selection are the same as the LSTM's.
+
+`python -m aegisflow train-gnn` reads `sequences.parquet`, `host_windows.parquet` and `flows.parquet` and writes to `artifacts/models/cic_ids2017_tgnn/`. A synthetic test checks that the graph carries information per-host models cannot see: there, the label depends only on which peer a host talked to, and the GNN reaches ROC-AUC ~0.88 vs ~0.48 for the LSTM. That is a property of the test data, not a CIC-IDS2017 result. On CIC-IDS2017 the graph is dominated by the attacker host 172.16.0.1, so expect the same shortcut. No CIC-IDS2017 metrics are reported here.
+
 Hyperparameters are the defaults in `configs/config.yaml` under `model:` (epochs 8, batch 256, lr 0.001, hidden 16, dropout 0.2, patience 3 = the committed model). CLI flags or `--set model.hidden_size=8` override them; `model.type` must be `lstm`.
 `python -m aegisflow train --dataset cic_ids2017`
 
