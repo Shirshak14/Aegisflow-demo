@@ -22,6 +22,10 @@ Until `preprocess` and `train` have been run, endpoints that need data or the mo
 | POST | `/alerts` | Append an alert to the hash chain (used by the replay engine; no authentication) |
 | GET | `/alerts` | List alerts, newest first (`limit` max 1000, `offset`, `host_id`) |
 | GET | `/alerts/{id}` | One alert with `prev_hash` and `hash` |
+| POST | `/alerts/{id}/actions` | Analyst decision on an alert. Body `{"action", "analyst", "note"?, "response"?, "stage"?}`; actions `acknowledge`, `approve_response` (needs `response`), `dismiss`, `reopen`, `override_stage` (needs `stage` from `stages.yaml`), `comment` (needs `note`). 422 for a missing field or a transition the current status forbids, 404 for an unknown alert. Approving a response only records it; AegisFlow never executes it |
+| GET | `/alerts/{id}/actions` | Alert's review status (`open`, `acknowledged`, `response_approved`, `dismissed`, `reopened`), model stage vs analyst-effective stage, approved response, full action history |
+| GET | `/triage/summary` | Number of alerts in each review status |
+| GET | `/audit/verify-actions` | Recompute the analyst-action hash chain. Each action's hash also covers the hash of its alert, so changing the alert after a decision is detected |
 | GET | `/audit/verify` | Recompute the chain: `VERIFIED` (with `head_hash`) or `CORRUPTED` with the first bad record |
 
-Notes: the replay plays the held-out test split through pre-scored LSTM outputs on a simulated clock. Risk score is 0-100 but capped at 75 in practice (stage term is 0). `predicted_stage` is always `UNCERTAIN`. See `docs/codebase_walkthrough.md` for details and limits of the ledger.
+Notes: the replay plays the held-out test split through pre-scored LSTM outputs on a simulated clock. Risk score is 0-100 but capped at 75 in practice (stage term is 0). `predicted_stage` is always `UNCERTAIN`. The analyst endpoints are not used by the dashboard. They have no authentication, so `analyst` names are self-declared. `POST /replay/start` with `reset: true` clears the actions together with the alerts. See `docs/codebase_walkthrough.md` for details and limits of the ledger.
