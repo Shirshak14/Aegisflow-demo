@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from aegisflow.config import load_config
 
 from . import info
+from .analyst import ActionError, AnalystLog
 from .audit import Ledger
 from .replay import ReplayEngine
 
@@ -22,6 +23,14 @@ ROOT = Path(__file__).resolve().parents[2]
 class ReplayStart(BaseModel):
     speed: int | None = None
     reset: bool = True
+
+
+class ActionIn(BaseModel):
+    action: str
+    analyst: str
+    note: str | None = None
+    response: str | None = None
+    stage: str | None = None
 
 
 class AlertIn(BaseModel):
@@ -59,7 +68,8 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     app = FastAPI(title="AegisFlow demo API", version="0.1.0")
     ledger = Ledger(db_path or default_db_path())
     engine = ReplayEngine(ledger)
-    app.state.ledger, app.state.engine = ledger, engine
+    analyst = AnalystLog(ledger, list(load_config().stages.stages_order))
+    app.state.ledger, app.state.engine, app.state.analyst = ledger, engine, analyst
 
     @app.exception_handler(FileNotFoundError)
     def missing_artifact(_: Request, exc: FileNotFoundError) -> JSONResponse:
@@ -151,6 +161,33 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     @app.get("/audit/verify")
     def verify() -> dict[str, Any]:
         return ledger.verify()
+
+    # ---- analyst review (not used by the dashboard); see backend/app/analyst.py
+    @app.post("/alerts/{alert_id}/actions", status_code=201)
+    def add_action(alert_id: int, body: ActionIn) -> dict[str, Any]:
+        """Record an analyst decision on an alert. Approving a response records it; nothing is executed."""
+        try:
+            return analyst.record(alert_id, body.action, body.analyst, note=body.note, response=body.response,
+                                  stage=body.stage)
+        except LookupError as exc:
+            raise HTTPException(404, str(exc))
+        except ActionError as exc:
+            raise HTTPException(422, str(exc))
+
+    @app.get("/alerts/{alert_id}/actions")
+    def alert_actions(alert_id: int) -> dict[str, Any]:
+        h = analyst.history(alert_id)
+        if h is None:
+            raise HTTPException(404, f"alert {alert_id} not found")
+        return h
+
+    @app.get("/triage/summary")
+    def triage_summary() -> dict[str, int]:
+        return analyst.summary()
+
+    @app.get("/audit/verify-actions")
+    def verify_actions() -> dict[str, Any]:
+        return analyst.verify()
 
     return app
 

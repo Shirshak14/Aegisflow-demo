@@ -115,6 +115,10 @@ class Ledger:
         with self._lock, self._connect() as con:
             con.execute("DELETE FROM alerts")
             con.execute("DELETE FROM sqlite_sequence WHERE name = 'alerts'")
+            # analyst actions (backend/app/analyst.py) refer to alerts by id; clear them with the alerts
+            if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='alert_actions'").fetchone():
+                con.execute("DELETE FROM alert_actions")
+                con.execute("DELETE FROM sqlite_sequence WHERE name = 'alert_actions'")
 
     def verify(self) -> dict[str, Any]:
         expected_prev, checked = GENESIS, 0
