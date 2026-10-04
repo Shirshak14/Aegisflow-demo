@@ -131,6 +131,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_predict.add_argument("--threshold", type=float, default=None)
     _common_args(p_predict)
 
+    p_mt = sub.add_parser("train-multitask", help="Train the multi-task model: next-window attack, attack stage, "
+                                                  "and K-step future network state.")
+    p_mt.add_argument("--dataset", default="cic_ids2017")
+    p_mt.add_argument("--horizons", type=int, default=3, help="K future windows to forecast (needs host_windows.parquet if > 1)")
+    p_mt.add_argument("--epochs", type=int, default=None)
+    p_mt.add_argument("--batch-size", type=int, default=None)
+    p_mt.add_argument("--learning-rate", type=float, default=None)
+    p_mt.add_argument("--hidden-size", type=int, default=None)
+    p_mt.add_argument("--dropout", type=float, default=None)
+    p_mt.add_argument("--patience", type=int, default=None)
+    p_mt.add_argument("--output-dir", default=None, help="default: artifacts/models/<dataset>_multitask")
+    _common_args(p_mt)
+
+    p_fc = sub.add_parser("forecast", help="Predict attack, stage (+ MITRE tactic) and K-step future state per sequence.")
+    p_fc.add_argument("--dataset", default="cic_ids2017")
+    p_fc.add_argument("--input", default=None, help="sequences Parquet (default: data/processed/<dataset>/sequences.parquet)")
+    p_fc.add_argument("--model-dir", default=None, help="default: artifacts/models/<dataset>_multitask")
+    p_fc.add_argument("--sequence-id", action="append", default=[])
+    p_fc.add_argument("--limit", type=int, default=5, help="first N test sequences when no --sequence-id")
+    _common_args(p_fc)
+
     # Planned later phases
     for name, phase in [
         ("evaluate", "Phase 3/4 (evaluation report against held-out test split)"),
@@ -198,6 +219,42 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         from .ml.modeling import predict_sequences
         rows = predict_sequences(cfg.path(args.input), cfg.path(args.model_dir), args.threshold)
         for row in rows: print(__import__("json").dumps(row))
+        return 0
+    if args.command == "train-multitask":
+        from .ml.multitask import MultiTaskData, train_multitask
+        hp = train_hyperparameters(cfg, args)
+        data = MultiTaskData.from_dir(cfg.path(cfg.config.paths.data_processed, args.dataset), args.horizons,
+                                      list(cfg.stages.stages_order))
+        out = cfg.path(args.output_dir) if args.output_dir else cfg.path("artifacts", "models", f"{args.dataset}_multitask")
+        res = train_multitask(data, out, seed=int(cfg.config.random_seed), dataset=args.dataset, **hp)
+        st = res["stage"]
+        print(f"Multi-task training complete: {out}")
+        print(f"  attack : {res['attack']}")
+        print(f"  stage  : accuracy {st['accuracy']}, on attack targets {st['attack_stage_accuracy']} "
+              f"(majority baseline {st['majority_baseline']['accuracy']}, {st['majority_baseline']['attack_stage_accuracy']})")
+        for h in res["future_state"]["per_horizon"]:
+            print(f"  state  : {h}")
+        print(f"  Metrics: {out / 'metrics.json'}")
+        return 0
+    if args.command == "forecast":
+        import json
+
+        import numpy as np
+        import yaml
+
+        from .ml.modeling import ForecastDataset
+        from .ml.multitask import MultiTaskPredictor
+        path = cfg.path(args.input) if args.input else cfg.path(cfg.config.paths.data_processed, args.dataset, "sequences.parquet")
+        model_dir = cfg.path(args.model_dir) if args.model_dir else cfg.path("artifacts", "models", f"{args.dataset}_multitask")
+        data = ForecastDataset.from_parquet(path)
+        sid = data.frame["sequence_id"].astype(str)
+        idx = (np.flatnonzero(sid.isin(args.sequence_id).to_numpy()) if args.sequence_id
+               else data.indices("test")[:args.limit])
+        mitre = yaml.safe_load(cfg.path("configs", "mitre_mapping.yaml").read_text(encoding="utf-8"))
+        rows = MultiTaskPredictor(model_dir).rows(
+            data.X[idx], sid.iloc[idx].tolist(), stage_threshold=float(cfg.config.confidence.stage_prediction_threshold),
+            uncertain_label=str(cfg.config.confidence.uncertain_label), mitre_lookup=mitre.get)
+        for row in rows: print(json.dumps(row))
         return 0
     if args.command in {"train", "evaluate", "replay", "serve"}:
         raise NotImplementedPhaseError(

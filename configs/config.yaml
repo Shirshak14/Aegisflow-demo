@@ -44,9 +44,11 @@ model:
   early_stopping_patience: 3
 
 confidence:
-  # Despite the name, this is a cutoff on the ATTACK probability: alerts with p >= this are
+  # In the default replay this is a cutoff on the ATTACK probability: alerts with p >= this are
   # labelled LIKELY_ATTACK, lower ones carry confidence_label = uncertain_label. It does not
   # change which alerts fire (that is the validation-selected LSTM threshold in metrics.json).
+  # With a multi-task model (`forecast`, or replay.stage_model_dir) it is ALSO the minimum stage
+  # probability for a predicted stage; below it the stage is uncertain_label.
   stage_prediction_threshold: 0.5
   uncertain_label: "UNCERTAIN"
 
@@ -58,8 +60,8 @@ risk_scoring:
     abnormality_score: 0.1
     recent_attack_history: 0.1
   # Severity (0-100) of the PREDICTED stage, used for the stage_severity risk component. The
-  # model has no stage head and always predicts confidence.uncertain_label, which is not in this
-  # table, so the component is 0 today. `thresholds.high` is not read (high = anything >= medium).
+  # demo LSTM has no stage head and always predicts confidence.uncertain_label, which is not in this
+  # table, so the component is 0 unless replay.stage_model_dir is set. `thresholds.high` is not read (high = anything >= medium).
   stage_severity:
     Benign: 0
     Reconnaissance: 30
@@ -76,6 +78,11 @@ risk_scoring:
 replay:
   default_speed: 1000   # also the speed pre-selected in the dashboard dropdown
   allowed_speeds: [1, 10, 100, 1000]
+  # Opt-in: directory (relative to the repo root) of a `python -m aegisflow train-multitask` model.
+  # When set, each alert's predicted_stage comes from its stage head (kept only if the stage
+  # probability >= confidence.stage_prediction_threshold, else uncertain_label), so the
+  # stage_severity risk term and the MITRE lookup apply to live alerts. null = demo behaviour.
+  stage_model_dir: null
 
 # NOT read at runtime: uvicorn host/port are given on the command line.
 api:

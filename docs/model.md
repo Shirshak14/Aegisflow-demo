@@ -21,7 +21,28 @@ Tensor `[batch, 10, 28]`: 28 numeric traffic features per window (counts, byte/p
 Hyperparameters are the defaults in `configs/config.yaml` under `model:` (epochs 8, batch 256, lr 0.001, hidden 16, dropout 0.2, patience 3 = the committed model). CLI flags or `--set model.hidden_size=8` override them; `model.type` must be `lstm`.
 `python -m aegisflow train --dataset cic_ids2017`
 
-There is no stage-prediction head, attention, or explainability module. Predicted stage is always `UNCERTAIN`.
+The demo LSTM has no stage head, so in the default replay the predicted stage is always `UNCERTAIN`.
+
+## Multi-task model: stage prediction and K-step future state (`aegisflow/ml/multitask.py`)
+
+An opt-in second model with one LSTM encoder and three heads:
+
+| Head | Target | Loss | Reported in `metrics.json` |
+|---|---|---|---|
+| attack | attack in the horizon-1 target window (same as the LSTM) | BCE with `pos_weight` | precision / recall / F1 / ROC-AUC / PR-AUC / FPR at a validation-selected threshold |
+| stage | dominant stage of the horizon-1 target window, over `stages.yaml: stages_order` | cross-entropy, inverse-frequency class weights | accuracy, macro-F1, **accuracy on attack-positive targets**, confusion matrix, all next to a majority-class baseline; stages with no training examples are listed |
+| future state | the 28 traffic features of each of the next K windows (`--horizons`, default 3) | masked MSE in preprocessed units | MAE / RMSE per horizon next to a persistence baseline (last input window repeated) |
+
+Horizon k means the k-th same-host window that starts after the input ends, the same rule `build_host_sequences` uses; targets for k > 1 come from `host_windows.parquet`, and a horizon with no window is masked.
+
+```
+python -m aegisflow train-multitask --dataset cic_ids2017 --horizons 3   # -> artifacts/models/cic_ids2017_multitask/
+python -m aegisflow forecast --limit 5                                   # attack p, stage + MITRE tactic, future windows in raw units
+```
+
+`forecast` keeps a stage only if its probability is at least `confidence.stage_prediction_threshold`, otherwise it prints `confidence.uncertain_label`. Setting `replay.stage_model_dir: artifacts/models/cic_ids2017_multitask` in `config.yaml` makes the replay label each alert with that stage, so the stage-severity risk term and the MITRE lookup apply to live alerts. Default `null` keeps the demo exactly as it was.
+
+Limits: stages are the label-to-stage proxy in `stages.yaml`, not ground truth. CIC-IDS2017 has no Exfiltration traffic and very few attack windows per stage in the test split, so stage numbers will be noisy. No metrics are quoted here until the model is trained on the full processed dataset.
 
 ## Split
 
