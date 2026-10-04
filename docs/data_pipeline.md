@@ -107,8 +107,6 @@ any infinite numeric value, or exact duplicate flows (same timestamp +
 
 ## PCAP input (`aegisflow/ml/ingestion/pcap.py`, `aegisflow/ml/scoring.py`)
 
-NetFlow is not supported yet.
-
 Raw packet captures (.pcap or .pcapng) are turned into the same canonical flow table the CIC-IDS2017 adapter produces, then go through the same cleaning, flow features and host windowing.
 
 ```
@@ -123,3 +121,23 @@ python -m aegisflow score-pcap  --input capture.pcap [--model-dir artifacts/mode
 - `--labels` takes `source_ip,start,end,label` rows. Labels must exist in a `stages.yaml` section (default `cic_ids2017`); everything else is `BENIGN`. Without it, flows are `UNLABELED`.
 
 Limit: the model was trained on CICFlowMeter output. Flows from this extractor follow the same definitions but are not byte-identical (no bulk/subflow/active-idle statistics), so scores on PCAP input are not validated against labelled traffic.
+
+## NetFlow v5 / v9 / IPFIX input (`aegisflow/ml/ingestion/netflow.py`)
+
+```
+python -m aegisflow ingest-netflow --input exports.pcap --output flows.parquet   # capture of export traffic
+python -m aegisflow ingest-netflow --input flows.csv    --output flows.parquet   # `nfdump -r <nfcapd file> -o csv`
+python -m aegisflow score-netflow  --input exports.pcap [--model-dir ...] [--output scored.csv]
+```
+
+- A capture of the UDP datagrams an exporter sends to its collector is decoded directly. v5 is fixed-format; v9 and IPFIX templates (and IPFIX `systemInitTimeMilliseconds` options) are tracked per exporter and observation domain. Data that arrives before its template is counted, not guessed.
+- `nfdump -o csv` output covers whatever nfcapd collected. Timestamps are nfdump's local time, and the duration comes from its millisecond `td` column.
+- Tested against real softflowd v5/v9/IPFIX exports and nfdump 1.7 CSV of the same traffic (`tests/fixtures/netflow/`). All four give identical flows, and packet counts match the source capture.
+
+What NetFlow cannot supply, and how it differs from the CIC-IDS2017 training data:
+- Records are unidirectional, so each direction is its own flow.
+- Bytes are layer-3 (headers included); CICFlowMeter counts payload bytes.
+- TCP flags are an OR over the flow, so `syn_count` etc. are 0/1 presence, a lower bound on the count.
+- Packet-length spread, inter-arrival times, TCP window, TTL and retransmissions are absent and stay NA.
+
+Model scores on NetFlow input are therefore not comparable to CSV-trained performance and have not been validated on labelled NetFlow.
