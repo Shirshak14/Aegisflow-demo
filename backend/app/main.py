@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
 from aegisflow.config import load_config
@@ -147,6 +147,15 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         if rec is None:
             raise HTTPException(404, f"alert {alert_id} not found")
         return rec
+
+    @app.get("/export/alerts", response_class=PlainTextResponse)
+    def export_alerts(format: str = "cef", since_id: int = 0, limit: int = 1000) -> str:
+        """Alerts with id > since_id as CEF, RFC 5424 syslog or JSON lines (one event per line), for a SIEM."""
+        from .siem import FORMATS, alerts_since, render
+        if format not in FORMATS:
+            raise HTTPException(422, f"format must be one of {FORMATS}")
+        lines = render(alerts_since(ledger, since_id, max(1, min(limit, 10000))), format)
+        return "\n".join(lines) + ("\n" if lines else "")
 
     @app.get("/audit/verify")
     def verify() -> dict[str, Any]:
