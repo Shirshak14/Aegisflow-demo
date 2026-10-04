@@ -131,6 +131,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_predict.add_argument("--threshold", type=float, default=None)
     _common_args(p_predict)
 
+    p_ip = sub.add_parser("ingest-pcap", help="Convert a .pcap/.pcapng into canonical bidirectional flows (Parquet or CSV).")
+    p_ip.add_argument("--input", required=True)
+    p_ip.add_argument("--output", required=True, help="*.parquet or *.csv")
+    p_ip.add_argument("--reader", choices=["scapy", "pyshark"], default="scapy")
+    p_ip.add_argument("--idle-timeout", type=float, default=120.0, help="seconds")
+    p_ip.add_argument("--active-timeout", type=float, default=3600.0, help="seconds")
+    p_ip.add_argument("--labels", default=None, help="optional CSV: source_ip,start,end,label (labels from stages.yaml)")
+    p_ip.add_argument("--label-map", default="cic_ids2017", help="stages.yaml section the --labels use")
+    _common_args(p_ip)
+
+    p_sp = sub.add_parser("score-pcap", help="Score a .pcap/.pcapng with a trained model: attack probability per host sequence.")
+    p_sp.add_argument("--input", required=True)
+    p_sp.add_argument("--model-dir", default="artifacts/models/cic_ids2017")
+    p_sp.add_argument("--reader", choices=["scapy", "pyshark"], default="scapy")
+    p_sp.add_argument("--threshold", type=float, default=None)
+    p_sp.add_argument("--output", default=None, help="optional CSV of all scored sequences")
+    _common_args(p_sp)
+
     # Planned later phases
     for name, phase in [
         ("evaluate", "Phase 3/4 (evaluation report against held-out test split)"),
@@ -198,6 +216,31 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         from .ml.modeling import predict_sequences
         rows = predict_sequences(cfg.path(args.input), cfg.path(args.model_dir), args.threshold)
         for row in rows: print(__import__("json").dumps(row))
+        return 0
+    if args.command == "ingest-pcap":
+        from .ml.ingestion.pcap import apply_label_file, pcap_to_flows
+        flows = pcap_to_flows(cfg.path(args.input), reader=args.reader, idle_timeout=args.idle_timeout,
+                              active_timeout=args.active_timeout)
+        if args.labels:
+            flows = apply_label_file(flows, cfg.path(args.labels), dict(cfg.stages[args.label_map]))
+        out = cfg.path(args.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        flows.to_csv(out, index=False) if out.suffix.lower() == ".csv" else flows.to_parquet(out, index=False)
+        print(f"{len(flows):,} flows from {flows.source_ip.nunique()} source hosts -> {out}")
+        print(f"  TTL present: {int(flows.ttl_mean.notna().sum()):,} flows; "
+              f"TCP retransmissions: {int(flows.retransmission_count.fillna(0).sum()):,}")
+        return 0
+    if args.command == "score-pcap":
+        from .ml.ingestion.pcap import pcap_to_flows
+        from .ml.scoring import score_flows
+        flows = pcap_to_flows(cfg.path(args.input), reader=args.reader)
+        scored = score_flows(flows, cfg.path(args.model_dir), cfg, threshold=args.threshold)
+        print(f"{len(flows):,} flows -> {len(scored):,} scored host sequences, "
+              f"{int(scored.predicted_attack.sum()) if len(scored) else 0} above threshold")
+        if args.output:
+            scored.to_csv(cfg.path(args.output), index=False)
+        for row in scored.sort_values("attack_probability", ascending=False).head(10).to_dict("records"):
+            print(__import__("json").dumps(row, default=str))
         return 0
     if args.command in {"train", "evaluate", "replay", "serve"}:
         raise NotImplementedPhaseError(
