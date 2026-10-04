@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AegisFlow Demo</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #171e26; --panel2: #1e2731; --line: #2b3642; --text: #e6edf3; --muted: #8b98a5;
+    --accent: #4aa3ff; --ok: #3fb950; --warn: #d29922; --bad: #f85149; --mid: #e3a008;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+           padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  main { padding: 16px 20px 40px; display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  .span3 { grid-column: span 3; } .span4 { grid-column: span 4; } .span5 { grid-column: span 5; }
+  .span6 { grid-column: span 6; } .span7 { grid-column: span 7; } .span8 { grid-column: span 8; } .span12 { grid-column: span 12; }
+  @media (max-width: 1100px) { .span3, .span4, .span5, .span6, .span7, .span8 { grid-column: span 12; } }
+  .big { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--line); }
+  .chip.running { color: var(--ok); border-color: var(--ok); } .chip.finished { color: var(--accent); border-color: var(--accent); }
+  .chip.stopped, .chip.idle { color: var(--muted); } .chip.error { color: var(--bad); border-color: var(--bad); }
+  .lvl-low { color: var(--ok); } .lvl-medium { color: var(--mid); } .lvl-high { color: var(--bad); }
+  .bar { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  button, select { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+                   border-radius: 6px; padding: 7px 14px; cursor: pointer; }
+  button:hover { border-color: var(--accent); } button.primary { background: #1f6feb; border-color: #1f6feb; }
+  button.danger { border-color: var(--bad); color: var(--bad); } button:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .scroll { overflow: auto; max-height: 420px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--panel); }
+  tbody tr { cursor: pointer; } tbody tr:hover { background: var(--panel2); } tr.sel { background: #1f2d3d; }
+  td.num, th.num { text-align: right; }
+  .kv { display: grid; grid-template-columns: 190px 1fr; gap: 4px 12px; }
+  .kv div:nth-child(odd) { color: var(--muted); }
+  .note { border-left: 3px solid var(--warn); background: #2a2413; padding: 8px 10px; border-radius: 4px; font-size: 13px; }
+  .note.info { border-color: var(--accent); background: #13222f; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  code, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .verify { font-size: 20px; font-weight: 700; }
+  svg text { fill: var(--muted); font-size: 10px; }
+  .tabs button { padding: 4px 10px; font-size: 12px; } .tabs button.on { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>AegisFlow &mdash; network attack forecasting demo</h1>
+    <div class="sub">Replays the held-out CIC-IDS2017 test period through the saved Phase 3 model. All scores are real model outputs.</div>
+  </div>
+  <div class="row"><span id="stateChip" class="chip idle">idle</span><span class="muted small">sim clock</span><span id="simClock" class="mono">&ndash;</span></div>
+</header>
+
+<main>
+  <!-- Overview -->
+  <section class="card span3"><h2>Hosts monitored</h2><div class="big" id="hostsSeen">0</div>
+    <div class="small muted" id="datasetLine">loading dataset&hellip;</div></section>
+  <section class="card span3"><h2>Alerts this replay</h2><div class="big" id="alertCount">0</div>
+    <div class="small muted" id="alertTp">&nbsp;</div></section>
+  <section class="card span3"><h2>Replay</h2><div class="big" id="progressPct">0%</div>
+    <div class="bar"><div id="progressBar"></div></div><div class="small muted" id="progressLine">&nbsp;</div></section>
+  <section class="card span3"><h2>Replay controls</h2>
+    <div class="row">
+      <label class="small muted" for="speed">Speed</label>
+      <select id="speed"></select>
+      <button class="primary" id="startBtn">Start</button>
+      <button class="danger" id="stopBtn">Stop</button>
+    </div>
+    <div class="small muted" id="modelLine" style="margin-top:8px">&nbsp;</div>
+  </section>
+
+  <!-- Hosts + alerts -->
+  <section class="card span6"><h2>Host risk</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Host</th><th class="num">Seqs</th><th class="num">Alerts</th><th class="num">Latest risk</th><th class="num">Max risk</th><th class="num">LSTM p</th></tr></thead>
+      <tbody id="hostRows"><tr><td colspan="6" class="muted">Start the replay to see hosts.</td></tr></tbody>
+    </table></div>
+  </section>
+  <section class="card span6"><h2>Alerts (newest first)</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>#</th><th>Host</th><th>Target window</th><th class="num">Risk</th><th class="num">LSTM p</th><th>Confidence</th><th>Dataset label</th></tr></thead>
+      <tbody id="alertRows"><tr><td colspan="7" class="muted">No alerts yet.</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <!-- Detail -->
+  <section class="card span7" id="detailCard"><h2 id="detailTitle">Detail</h2>
+    <div id="detail" class="muted">Click an alert or a host.</div></section>
+
+  <!-- Audit -->
+  <section class="card span5"><h2>Audit ledger (SHA-256 hash chain)</h2>
+    <div class="row"><button class="primary" id="verifyBtn">Verify chain</button><span id="verifyResult" class="verify muted">not checked</span></div>
+    <div class="small muted" id="verifyDetail" style="margin:6px 0 10px">&nbsp;</div>
+    <div class="scroll" style="max-height:220px"><table>
+      <thead><tr><th>#</th><th>Host</th><th>prev_hash</th><th>hash</th></tr></thead>
+      <tbody id="ledgerRows"></tbody></table></div>
+  </section>
+
+  <!-- Evaluation -->
+  <section class="card span12"><h2>Model evaluation (real held-out numbers)</h2>
+    <div class="note" id="honestNote" style="margin-bottom:10px">loading&hellip;</div>
+    <div class="note info" id="evalConsistency" style="margin-bottom:10px;display:none"></div>
+    <div class="row tabs" style="margin-bottom:8px">
+      <span class="small muted">Target:</span><button id="tabAny" class="on">any attack in next window</button><button id="tabOnset">attack onset only</button>
+      <span class="small muted" style="margin-left:12px">Split:</span><button id="tabTest" class="on">test</button><button id="tabVal">validation</button>
+    </div>
+    <div class="scroll"><table>
+      <thead><tr><th>Model</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">ROC-AUC</th><th class="num">PR-AUC</th><th class="num">FPR</th><th>Confusion [[TN,FP],[FN,TP]]</th></tr></thead>
+      <tbody id="evalRows"></tbody></table></div>
+    <div class="small muted" id="evalExtra" style="margin-top:10px"></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = (x, d = 3) => x === null || x === undefined ? "–" : Number(x).toFixed(d);
+const t = iso => iso ? iso.replace("T", " ").slice(0, 19) : "–";
+// Risk weights, level bands, confidence cutoff and speeds come from the backend (GET /risk/config),
+// which reads configs/config.yaml. Nothing below hard-codes a copy of them.
+let RISK = null;
+const level = r => !RISK ? "low" : r < RISK.thresholds.low ? "low" : r < RISK.thresholds.medium ? "medium" : "high";
+async function api(path, opts) { const r = await fetch(path, opts); if (!r.ok) throw new Error((await r.json()).detail || r.status); return r.json(); }
+
+let selected = null, evalState = { variant: "any", split: "test" }, evalData = null, modelInfo = null;
+
+// ---------- static info ----------
+async function loadStatic() {
+  RISK = await api("/risk/config");
+  const [ds, model, ev] = await Promise.all([api("/dataset/status"), api("/model/status"), api("/evaluation")]);
+  modelInfo = model; evalData = ev;
+  $("datasetLine").textContent = `of ${ds.hosts.toLocaleString()} in dataset · test split ${ds.split.test_sequences.toLocaleString()} sequences`;
+  $("modelLine").innerHTML = `Model <span class="mono">${esc(model.version)}</span><br>alert when LSTM p ≥ ${fmt(model.lstm_threshold, 4)} (validation-selected)`;
+  $("speed").innerHTML = RISK.allowed_speeds.map(s => `<option value="${s}" ${s === RISK.default_speed ? "selected" : ""}>${s}×</option>`).join("");
+  $("honestNote").innerHTML = `<b>Honest finding:</b> ${esc(ev.honest_note)} Predicted stage is always <b>UNCERTAIN</b>: ${esc(model.stage_note)}`;
+  // The evaluation tables are static report files; flag it if they were not computed on the live model/data.
+  const c = ev.consistency, box = $("evalConsistency");
+  box.style.display = "block";
+  if (c.consistent) {
+    box.className = "note info";
+    box.innerHTML = "✓ These evaluation tables were computed on the same data and model as the live replay (same split sizes and alert threshold).";
+  } else {
+    box.className = "note"; box.style.borderColor = "var(--bad)";
+    box.innerHTML = `<b>⚠ These evaluation tables do NOT match the live replay.</b> They come from a different model or dataset than the one being replayed, so do not compare them with the replay's numbers. ${c.mismatches.map(esc).join("; ")}.`;
+  }
+  renderEval();
+}
+
+function renderEval() {
+  if (!evalData) return;
+  const rows = evalData.table[evalState.variant];
+  $("evalRows").innerHTML = rows.map(r => { const m = r[evalState.split]; return `<tr>
+    <td>${esc(r.model)}</td><td class="num">${fmt(m.precision)}</td><td class="num">${fmt(m.recall)}</td><td class="num">${fmt(m.f1)}</td>
+    <td class="num">${fmt(m.roc_auc)}</td><td class="num">${fmt(m.pr_auc)}</td><td class="num">${fmt(m.false_positive_rate, 4)}</td>
+    <td class="mono">${esc(JSON.stringify(m.confusion_matrix))}</td></tr>`; }).join("");
+  const h = evalData.host_check_test_lstm, a = h["172.16.0.1"], o = h.other_hosts;
+  const d = evalData.lodo_dos_cross_day;
+  $("evalExtra").innerHTML =
+    `<b>Host check (LSTM, test):</b> on attacker host 172.16.0.1 it flags ${a.neg_flagged}/${a.neg} benign and ${a.pos_detected}/${a.pos} attack sequences; ` +
+    `on all other hosts it detects ${o.pos_detected}/${o.pos} attacks. ` +
+    `<b>Leave-one-day-out DoS:</b> ` + Object.entries(d).map(([k, v]) =>
+      `${esc(k)}: LSTM ${v.lstm.detected}/${v.lstm.positives}, host-identity rule ${v.ref_host_identity.detected}/${v.ref_host_identity.positives}`).join("; ") +
+    `. The reference rule reads dataset labels and is not deployable; it is shown for comparison. Sources: ${evalData.source.map(esc).join(", ")}.`;
+}
+for (const [id, key, val] of [["tabAny","variant","any"],["tabOnset","variant","onset"],["tabTest","split","test"],["tabVal","split","val"]]) {
+  $(id).onclick = () => { evalState[key] = val;
+    for (const [i2, k2, v2] of [["tabAny","variant","any"],["tabOnset","variant","onset"],["tabTest","split","test"],["tabVal","split","val"]])
+      $(i2).classList.toggle("on", evalState[k2] === v2);
+    renderEval(); };
+}
+
+// ---------- live polling ----------
+let lastAlertId = null;
+async function poll() {
+  try {
+    const [st, hosts, alerts] = await Promise.all([api("/replay/status"), api("/hosts"), api("/alerts?limit=50")]);
+    $("stateChip").textContent = st.state + (st.state === "running" ? ` · ${st.speed}×` : "");
+    $("stateChip").className = "chip " + st.state;
+    $("simClock").textContent = t(st.sim_time);
+    $("hostsSeen").textContent = st.hosts_seen.toLocaleString();
+    $("alertCount").textContent = st.alerts_emitted.toLocaleString();
+    const pct = Math.round(st.progress * 100);
+    $("progressPct").textContent = pct + "%"; $("progressBar").style.width = pct + "%";
+    $("progressLine").textContent = (st.model_ready ? `${st.processed.toLocaleString()} / ${st.total.toLocaleString()} test sequences`
+      : "loading model and scoring test split…") + (st.error ? ` · ERROR ${st.error}` : "");
+    if ($("startBtn").textContent === "Start") $("startBtn").disabled = st.state === "running"; $("stopBtn").disabled = st.state !== "running";
+    const tp = st.alerts_matching_attack_label;
+    $("alertTp").textContent = st.alerts_emitted ? `${tp} match an attack label (true positive), ${st.alerts_emitted - tp} benign (false positive)` : " ";
+
+    $("hostRows").innerHTML = hosts.length ? hosts.slice(0, 60).map(h => `<tr data-host="${esc(h.host_id)}" class="${selected === "h:" + h.host_id ? "sel" : ""}">
+      <td class="mono">${esc(h.host_id)}</td><td class="num">${h.sequences}</td><td class="num">${h.alerts}</td>
+      <td class="num lvl-${level(h.latest_risk)}">${fmt(h.latest_risk, 1)}</td><td class="num lvl-${level(h.max_risk)}">${fmt(h.max_risk, 1)}</td>
+      <td class="num">${fmt(h.latest_lstm_p)}</td></tr>`).join("") : `<tr><td colspan="6" class="muted">Start the replay to see hosts.</td></tr>`;
+    $("alertRows").innerHTML = alerts.length ? alerts.map(a => `<tr data-alert="${a.id}" class="${selected === "a:" + a.id ? "sel" : ""}">
+      <td>${a.id}</td><td class="mono">${esc(a.host_id)}</td><td class="mono">${t(a.target_window_start).slice(11)}</td>
+      <td class="num lvl-${level(a.risk_score)}">${fmt(a.risk_score, 1)}</td><td class="num">${fmt(a.lstm_probability)}</td>
+      <td>${esc(a.confidence_label)}</td><td>${esc(a.truth_class)}</td></tr>`).join("") : `<tr><td colspan="7" class="muted">No alerts yet.</td></tr>`;
+    $("ledgerRows").innerHTML = alerts.slice(0, 12).map(a => `<tr data-alert="${a.id}"><td>${a.id}</td><td class="mono">${esc(a.host_id)}</td>
+      <td class="mono">${esc(a.prev_hash.slice(0, 10))}…</td><td class="mono">${esc(a.hash.slice(0, 10))}…</td></tr>`).join("");
+    if (selected && selected.startsWith("h:") && st.state === "running") showHost(selected.slice(2), false);
+  } catch (e) { $("progressLine").textContent = "backend unreachable: " + e.message; }
+  setTimeout(poll, 1000);
+}
+
+document.addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-alert], tr[data-host]"); if (!tr) return;
+  if (tr.dataset.alert) showAlert(+tr.dataset.alert); else showHost(tr.dataset.host, true);
+});
+
+// ---------- detail views ----------
+async function showAlert(id) {
+  selected = "a:" + id;
+  const a = await api(`/alerts/${id}`);
+  const comp = JSON.parse(a.risk_components || "{}");
+  let mitre = null; try { mitre = await api(`/mitre/${encodeURIComponent(a.truth_stage)}`); } catch (_) {}
+  const outcome = a.truth_attack === 1 ? `<span class="ok">true positive</span>` : `<span class="bad">false positive</span>`;
+  const weights = RISK.weights;
+  $("detailTitle").textContent = `Alert #${a.id} · ${a.host_id}`;
+  $("detail").className = "";
+  $("detail").innerHTML = `
+    <div class="kv">
+      <div>Risk score</div><div><b class="lvl-${level(a.risk_score)}" style="font-size:20px">${fmt(a.risk_score, 1)}</b> / 100 <span class="muted small">(${level(a.risk_score)}; max reachable ${fmt(RISK.max_reachable_risk, 0)} &mdash; no stage model, so the stage term is 0)</span></div>
+      <div>Risk components</div><div class="small">${Object.entries(comp).map(([k, v]) => `${esc(k)} ${fmt(v, 3)} × ${weights[k]}`).join(" · ")}</div>
+      <div>Forecast made at</div><div class="mono">${t(a.predicted_at)} <span class="muted">(end of 10 input windows)</span></div>
+      <div>Target window</div><div class="mono">${t(a.target_window_start)} → ${t(a.target_window_end).slice(11)}</div>
+      <div>LSTM attack probability</div><div>${fmt(a.lstm_probability, 4)} <span class="muted small">threshold ${fmt(a.lstm_threshold, 4)}</span></div>
+      <div>Confidence</div><div><b>${esc(a.confidence_label)}</b> <span class="muted small">${a.confidence_label === RISK.uncertain_label ? `probability below ${RISK.confidence_threshold} &mdash; alert fired on the lower validation-selected threshold` : `probability ≥ ${RISK.confidence_threshold}`}</span></div>
+      <div>Predicted stage</div><div><b>UNCERTAIN</b> <span class="muted small">no stage model &mdash; binary attack detector only</span></div>
+      <div>Logistic regression</div><div>p = ${fmt(a.lr_probability, 4)} · ${a.lr_flag ? "also flags" : "does not flag"} <span class="muted small">(threshold ${fmt(a.lr_threshold, 5)})</span></div>
+      <div>Reference rule</div><div>${a.reference_rule_flag ? "last window already under attack" : "last window not under attack"} <span class="muted small">(uses dataset labels; comparison only)</span></div>
+    </div>
+    <div class="note info" style="margin:12px 0">
+      <b>Dataset label (ground truth, revealed for evaluation &mdash; not available to the model):</b>
+      ${esc(a.truth_class)} / ${esc(a.truth_stage)} &rarr; ${outcome}<br>
+      <b>MITRE ATT&amp;CK for that label:</b> ${mitre && mitre.tactic_id ? `${esc(mitre.tactic_id)} ${esc(mitre.tactic_name)} &mdash; ${mitre.techniques.map(x => `${esc(x.id)} ${esc(x.name)}`).join(", ")}` : "none (benign)"}
+      <span class="muted small">· static lookup from configs/mitre_mapping.yaml, not a model output</span>
+    </div>
+    <div class="kv small">
+      <div>Ledger hash</div><div class="mono">${esc(a.hash)}</div>
+      <div>Previous hash</div><div class="mono">${esc(a.prev_hash)}</div>
+      <div>Sequence / model</div><div class="mono">${esc(a.sequence_id)} · ${esc(a.model_version)}</div>
+    </div>`;
+}
+
+async function showHost(id, scroll) {
+  selected = "h:" + id;
+  const h = await api(`/hosts/${encodeURIComponent(id)}`);
+  $("detailTitle").textContent = `Host ${h.host_id}`;
+  $("detail").className = "";
+  $("detail").innerHTML = `
+    <div class="kv"><div>Sequences replayed</div><div>${h.sequences}</div><div>Alerts</div><div>${h.alerts}</div>
+      <div>Latest / max risk</div><div><span class="lvl-${level(h.latest_risk)}">${fmt(h.latest_risk, 1)}</span> / <span class="lvl-${level(h.max_risk)}">${fmt(h.max_risk, 1)}</span></div>
+      <div>Last seen</div><div class="mono">${t(h.last_seen)}</div></div>
+    <div style="margin-top:10px">${sparkline(h.timeline)}</div>
+    <div class="small muted">Risk over replay time; red dots are alerts.</div>
+    <div class="scroll" style="max-height:230px;margin-top:8px"><table>
+      <thead><tr><th>#</th><th>Target window</th><th class="num">Risk</th><th class="num">LSTM p</th><th>Confidence</th><th>Dataset label</th></tr></thead>
+      <tbody>${h.alerts_list.length ? h.alerts_list.map(a => `<tr data-alert="${a.id}"><td>${a.id}</td>
+        <td class="mono">${t(a.target_window_start).slice(11)}</td><td class="num lvl-${level(a.risk_score)}">${fmt(a.risk_score, 1)}</td>
+        <td class="num">${fmt(a.lstm_probability)}</td><td>${esc(a.confidence_label)}</td>
+        <td class="${a.truth_attack ? "ok" : "bad"}">${esc(a.truth_class)}</td></tr>`).join("") : `<tr><td colspan="6" class="muted">No alerts for this host.</td></tr>`}</tbody>
+    </table></div>`;
+}
+
+function sparkline(tl) {
+  if (!tl.length) return "";
+  const W = 640, H = 150, P = 24, n = tl.length;
+  const x = i => P + (n === 1 ? 0 : i * (W - 2 * P) / (n - 1)), y = r => H - P - r / RISK.max_reachable_risk * (H - 2 * P);
+  const path = tl.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.risk).toFixed(1)}`).join("");
+  const dots = tl.map((p, i) => p.alert_id ? `<circle cx="${x(i).toFixed(1)}" cy="${y(p.risk).toFixed(1)}" r="2.6" fill="#f85149"/>` : "").join("");
+  const grid = [0, RISK.thresholds.low, RISK.thresholds.medium].map(v => `<line x1="${P}" x2="${W - P}" y1="${y(v)}" y2="${y(v)}" stroke="#2b3642"/><text x="2" y="${y(v) + 3}">${v}</text>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="risk timeline">${grid}
+    <path d="${path}" fill="none" stroke="#4aa3ff" stroke-width="1.5"/>${dots}
+    <text x="${P}" y="${H - 6}">${t(tl[0].t).slice(11)}</text><text x="${W - P - 40}" y="${H - 6}">${t(tl[n - 1].t).slice(11)}</text></svg>`;
+}
+
+// ---------- controls ----------
+$("startBtn").onclick = async () => {
+  $("startBtn").disabled = true; $("startBtn").textContent = "Starting…";
+  try { await api("/replay/start", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ speed: +$("speed").value, reset: true }) });
+        selected = null; $("detail").textContent = "Click an alert or a host."; $("detail").className = "muted";
+        $("verifyResult").textContent = "not checked"; $("verifyResult").className = "verify muted"; $("verifyDetail").innerHTML = "&nbsp;";
+  } catch (e) { alertBox(e); }
+  $("startBtn").textContent = "Start";
+};
+$("stopBtn").onclick = async () => { try { await api("/replay/stop", { method: "POST" }); } catch (e) { alertBox(e); } };
+$("verifyBtn").onclick = async () => {
+  const v = await api("/audit/verify");
+  $("verifyResult").textContent = v.status; $("verifyResult").className = "verify " + (v.status === "VERIFIED" ? "ok" : "bad");
+  $("verifyDetail").innerHTML = v.status === "VERIFIED"
+    ? `${v.records_checked} records checked · head hash <span class="mono">${esc(v.head_hash.slice(0, 16))}…</span>`
+    : `Record <b>#${v.record_id}</b>: ${esc(v.reason)} (${v.records_checked} records before it verified)`;
+};
+function alertBox(e) { $("progressLine").textContent = "Error: " + e.message; }
+
+// Start polling only after the risk config is loaded, so levels/colours are right from the first row.
+loadStatic().catch(e => { $("honestNote").textContent = "Could not load status: " + e.message; }).finally(poll);
+</script>
+</body>
+</html>

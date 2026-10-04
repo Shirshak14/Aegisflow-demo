@@ -127,6 +127,14 @@ class AnalystLog:
                 "approved_response": approved[-1]["response"] if approved and status == "response_approved" else None,
                 "actions": actions}
 
+    def statuses(self) -> dict[int, str]:
+        """Current status of every alert that has at least one status-changing action (others are 'open')."""
+        with self._connect() as con:
+            rows = con.execute("""SELECT a.alert_id, a.status_after FROM alert_actions a
+                                  JOIN (SELECT alert_id, MAX(id) AS last FROM alert_actions GROUP BY alert_id) l
+                                  ON a.id = l.last""").fetchall()
+        return {int(r["alert_id"]): r["status_after"] for r in rows}
+
     def summary(self) -> dict[str, int]:
         """Number of alerts in each status (alerts with no action are 'open')."""
         with self._connect() as con:

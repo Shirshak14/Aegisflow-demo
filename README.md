@@ -88,10 +88,16 @@ The dashboard provides a centralized view of:
 - Host risk
 - Security events
 - Temporal activity
-- Attack stages
+- Per-alert explanations (SHAP / Integrated Gradients) and attention weights
+- Attack stages and K-step future state (when a multi-task model is configured)
 - MITRE mappings
+- Analyst review (acknowledge, approve response, dismiss, override stage), with its own hash chain
+- Live PCAP / NetFlow upload scored through the streaming pipeline
+- SIEM export (CEF, syslog, JSON lines)
 - Audit records
-- Model evaluation
+- Trained models and model evaluation
+
+The dashboard is React 18 (vendored, no build step, works offline). The original page is at `/classic`.
 
 
 ## System Architecture
@@ -218,7 +224,10 @@ Aegisflow-demo/
 |       +-- replay.py
 |       +-- audit.py
 |       +-- static/
-|           +-- index.html
+|           +-- index.html   (React dashboard shell)
+|           +-- app.js / app.css
+|           +-- classic.html (original dashboard, /classic)
+|           +-- vendor/      (React 18, htm)
 |
 +-- configs/
 |   +-- config.yaml

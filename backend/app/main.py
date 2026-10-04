@@ -6,18 +6,20 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from aegisflow.config import load_config
 
-from . import info
+from . import features, info
 from .analyst import ActionError, AnalystLog
 from .audit import Ledger
 from .replay import ReplayEngine
 
 ROOT = Path(__file__).resolve().parents[2]
+MAX_UPLOAD_BYTES = 200 * 2**20
 
 
 class ReplayStart(BaseModel):
@@ -86,9 +88,32 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     if warm_up:
         engine.warm_up()
 
+    static = Path(__file__).parent / "static"
+
     @app.get("/", include_in_schema=False)
     def dashboard() -> FileResponse:
-        return FileResponse(Path(__file__).parent / "static" / "index.html")
+        return FileResponse(static / "index.html")
+
+    @app.get("/classic", include_in_schema=False)
+    def classic_dashboard() -> FileResponse:
+        """The original single-file dashboard, kept as a fallback."""
+        return FileResponse(static / "classic.html")
+
+    # Dashboard assets, including the vendored React / htm builds (no CDN, so the demo works offline).
+    app.mount("/static", StaticFiles(directory=static), name="static")
+
+    @app.get("/features")
+    def features_status() -> dict[str, Any]:
+        """Which opt-in features this install can use (SHAP, stage model, PCAP readers, streaming model)."""
+        st = load_config().config.get("stream") or {}
+        return features.capabilities(stage_model_dir=engine.stage_model_dir,
+                                     stream_model_dir=ROOT / str(st.get("model_dir") or "artifacts/models/cic_ids2017")
+                                     ) | {"stages": analyst.stages}
+
+    @app.get("/models")
+    def models() -> list[dict[str, Any]]:
+        """Trained models under artifacts/models with the test metrics their trainer wrote (nothing recomputed)."""
+        return features.list_models(demo_dir=info.MODEL_DIR)
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -141,13 +166,38 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
 
     @app.get("/explain/{sequence_id}")
     def explain(sequence_id: str, model: str = "lstm", method: str = "shap", top: int = 5) -> dict[str, Any]:
-        """Per-feature / per-time-step attribution of one test-split prediction (not used by the dashboard)."""
+        """Per-feature / per-time-step attribution of one test-split prediction."""
         if model not in {"lstm", "logistic_regression"} or method not in {"shap", "integrated_gradients"}:
             raise HTTPException(422, "model must be lstm|logistic_regression, method shap|integrated_gradients")
         try:
             out = engine.explain(sequence_id, model=model, method=method, top=max(1, min(top, 28)))
         except ImportError:
             raise HTTPException(501, "SHAP is not installed (pip install shap); use method=integrated_gradients")
+        if out is None:
+            raise HTTPException(404, f"sequence {sequence_id} is not in the replayed test split")
+        return out
+
+    @app.get("/forecast/{sequence_id}")
+    def forecast(sequence_id: str) -> dict[str, Any]:
+        """Stage distribution, MITRE tactic and K-step future state from the opt-in multi-task model."""
+        try:
+            out = engine.forecast(sequence_id)
+        except LookupError as exc:
+            raise HTTPException(409, f"{exc}; train one with `python -m aegisflow train-multitask`")
+        if out is None:
+            raise HTTPException(404, f"sequence {sequence_id} is not in the replayed test split")
+        return out
+
+    @app.get("/attention/{sequence_id}")
+    def attention(sequence_id: str, model: str) -> dict[str, Any]:
+        """Per-window attention weights of a trained attention_lstm / transformer model (see GET /models)."""
+        model_dir = (features.MODELS_DIR / model).resolve()
+        if model_dir.parent != features.MODELS_DIR.resolve() or not (model_dir / "best.pt").exists():
+            raise HTTPException(404, f"no trained model named {model!r} in artifacts/models")
+        try:
+            out = engine.attention(sequence_id, model_dir)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
         if out is None:
             raise HTTPException(404, f"sequence {sequence_id} is not in the replayed test split")
         return out
@@ -175,7 +225,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
             raise HTTPException(404, f"alert {alert_id} not found")
         return rec
 
-    # ---- streaming telemetry (opt-in; not used by the dashboard); see aegisflow/ml/streaming.py
+    # ---- streaming telemetry (opt-in); see aegisflow/ml/streaming.py
     stream_lock = threading.Lock()
 
     def stream_scorer():
@@ -219,6 +269,45 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         rows = [r for r in stream_scorer().results if r["predicted_attack"] or not alerts_only]
         return rows[::-1][:max(1, min(limit, 1000))]
 
+    @app.post("/ingest/upload")
+    async def ingest_upload(file: UploadFile, kind: str = "auto", reset: bool = True) -> dict[str, Any]:
+        """Upload a packet capture (kind=pcap) or NetFlow v5/v9/IPFIX export capture / nfdump CSV
+        (kind=netflow), turn it into flows and play them through the streaming scorer.
+        Results land in GET /stream/results; nothing is written to the alert ledger."""
+        import tempfile
+
+        suffix = Path(file.filename or "upload").suffix.lower()
+        if kind == "auto":
+            kind = "netflow" if suffix == ".csv" else "pcap"
+        if kind not in {"pcap", "netflow"}:
+            raise HTTPException(422, "kind must be auto, pcap or netflow")
+        data = await file.read(MAX_UPLOAD_BYTES + 1)
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, f"file larger than {MAX_UPLOAD_BYTES // 2**20} MB; use the CLI for big captures")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / f"upload{suffix or '.bin'}"
+            path.write_bytes(data)
+            try:
+                if kind == "pcap":
+                    from aegisflow.ml.ingestion.pcap import pcap_to_flows
+                    flows = pcap_to_flows(path)
+                else:
+                    from aegisflow.ml.ingestion.netflow import netflow_to_flows
+                    flows = netflow_to_flows(path)
+            except ImportError as exc:
+                raise HTTPException(501, f"PCAP reader not installed: {exc}")
+            except Exception as exc:  # malformed capture: report it, never crash the server
+                raise HTTPException(422, f"could not read {file.filename} as {kind}: {exc}")
+        scorer = stream_scorer()
+        if reset:
+            scorer.reset()
+        scored = scorer.push(flows.sort_values("timestamp")) if len(flows) else []
+        scored += scorer.flush()
+        return {"file": file.filename, "kind": kind, "flows": int(len(flows)),
+                "source_hosts": int(flows["source_ip"].nunique()) if len(flows) else 0,
+                "sequences_scored": len(scored), "alerts": sum(int(r["predicted_attack"]) for r in scored),
+                "status": scorer.status()}
+
     @app.post("/stream/reset")
     def stream_reset() -> dict[str, Any]:
         stream_scorer().reset()
@@ -237,7 +326,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     def verify() -> dict[str, Any]:
         return ledger.verify()
 
-    # ---- analyst review (not used by the dashboard); see backend/app/analyst.py
+    # ---- analyst review; see backend/app/analyst.py
     @app.post("/alerts/{alert_id}/actions", status_code=201)
     def add_action(alert_id: int, body: ActionIn) -> dict[str, Any]:
         """Record an analyst decision on an alert. Approving a response records it; nothing is executed."""
@@ -255,6 +344,10 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         if h is None:
             raise HTTPException(404, f"alert {alert_id} not found")
         return h
+
+    @app.get("/triage/statuses")
+    def triage_statuses() -> dict[int, str]:
+        return analyst.statuses()
 
     @app.get("/triage/summary")
     def triage_summary() -> dict[str, int]:

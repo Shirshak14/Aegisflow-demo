@@ -83,6 +83,8 @@ class ReplayEngine:
         self._raw_X: np.ndarray | None = None
         self._explainer = None
         self._explainer_lock = threading.Lock()
+        self._stage_predictor = None
+        self._attention_models: dict[str, Any] = {}
         self._reset_state()
 
     # ------------------------------------------------------------------ scoring
@@ -167,6 +169,65 @@ class ReplayEngine:
                 self._explainer = ModelExplainer(MODEL_DIR, train.X, seed=int(load_config().config.random_seed))
         e = self._explainer.explain(self._raw_X[hits[:1]], [sequence_id], model=model, method=method)[0]
         return e.to_dict(k=top)
+
+    def _sequence_inputs(self, sequence_id: str) -> np.ndarray | None:
+        """Raw [1, 10, 28] inputs of one replayed test sequence, or None if it is not in the replay."""
+        self.prepare()
+        hits = np.flatnonzero(self.events.sequence_id.to_numpy() == sequence_id)
+        return None if len(hits) == 0 else self._raw_X[hits[:1]]
+
+    # ------------------------------------------------------------------ stage / future-state forecast (opt-in)
+    def forecast(self, sequence_id: str) -> dict[str, Any] | None:
+        """Multi-task model output for one sequence: stage distribution (+ MITRE), K-step future state.
+
+        Raises LookupError when no stage model is configured (replay.stage_model_dir); None if unknown sequence.
+        """
+        if self.stage_model_dir is None:
+            raise LookupError("no stage model configured (replay.stage_model_dir is null)")
+        x = self._sequence_inputs(sequence_id)
+        if x is None:
+            return None
+        import yaml
+
+        from aegisflow.ml.multitask import MultiTaskPredictor
+        with self._explainer_lock:
+            if self._stage_predictor is None:
+                self._stage_predictor = MultiTaskPredictor(self.stage_model_dir)
+        mitre = yaml.safe_load((ROOT / "configs" / "mitre_mapping.yaml").read_text(encoding="utf-8"))
+        row = self._stage_predictor.rows(x, [sequence_id], stage_threshold=self.conf_threshold,
+                                         uncertain_label=self.uncertain, mitre_lookup=mitre.get)[0]
+        return row | {"model_dir": str(self.stage_model_dir.relative_to(ROOT)), "horizons": self._stage_predictor.horizons}
+
+    # ------------------------------------------------------------------ attention of an optional model (opt-in)
+    def attention(self, sequence_id: str, model_dir) -> dict[str, Any] | None:
+        """Per-window attention weights of a trained attention_lstm / transformer model for one sequence.
+
+        Raises ValueError if ``model_dir`` is not an attention model; None if the sequence is unknown.
+        """
+        import torch
+
+        from aegisflow.ml.modeling import load_model
+        x = self._sequence_inputs(sequence_id)
+        if x is None:
+            return None
+        key = str(model_dir)
+        with self._explainer_lock:
+            if key not in self._attention_models:
+                net, meta = load_model(model_dir)
+                mtype = meta["training_config"].get("model_type", "lstm")
+                if not hasattr(net, "attention"):
+                    raise ValueError(f"{model_dir.name} is a {mtype} model; it has no attention weights")
+                metrics = json.loads((model_dir / "metrics.json").read_text(encoding="utf-8"))
+                self._attention_models[key] = (net.eval(), joblib.load(model_dir / "preprocessor.joblib"), mtype,
+                                               float(metrics["threshold"]))
+            net, prep, mtype, threshold = self._attention_models[key]
+        xt = torch.tensor(prep.transform(x))
+        with torch.no_grad():
+            p = float(torch.sigmoid(net(xt))[0])
+            w = net.attention(xt)[0].numpy().astype(float)
+        return {"sequence_id": sequence_id, "model": model_dir.name, "model_type": mtype,
+                "attack_probability": p, "threshold": threshold, "predicted_attack": p >= threshold,
+                "window_weights": [round(v, 4) for v in w]}
 
     def _risk(self, row, recent_alerts: int) -> tuple[float, dict[str, float]]:
         p, t = float(row.lstm_p), self.lstm_threshold

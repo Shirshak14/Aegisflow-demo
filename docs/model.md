@@ -55,7 +55,7 @@ Every prediction can be attributed to its 10 × 28 inputs (time step × feature)
 
 All three explain the **log-odds** of an attack in the target window. Output per sequence: top features with sign (towards attack / towards benign), the time step where each mattered most, the raw last-window value, and attribution per time step.
 
-`python -m aegisflow explain --dataset cic_ids2017 --limit 5` (or `--sequence-id <id>`, `--model logistic_regression`, `--method integrated_gradients`), and `GET /explain/{sequence_id}` in the API. The dashboard does not call it. Explanations are faithful to the model; they do not make the model more accurate, and given the host shortcut below, features that identify host `172.16.0.1`'s traffic are expected to dominate.
+`python -m aegisflow explain --dataset cic_ids2017 --limit 5` (or `--sequence-id <id>`, `--model logistic_regression`, `--method integrated_gradients`), and `GET /explain/{sequence_id}` in the API; the dashboard shows it in each alert's detail. Explanations are faithful to the model; they do not make the model more accurate, and given the host shortcut below, features that identify host `172.16.0.1`'s traffic are expected to dominate.
 The demo LSTM has no stage head, so in the default replay the predicted stage is always `UNCERTAIN`.
 
 ## Multi-task model: stage prediction and K-step future state (`aegisflow/ml/multitask.py`)
