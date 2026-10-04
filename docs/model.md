@@ -29,6 +29,8 @@ Tensor `[batch, 10, 28]`: 28 numeric traffic features per window (counts, byte/p
 `python -m aegisflow train --model transformer` writes to `artifacts/models/cic_ids2017_transformer/` (`--output-dir` to change), so the demo model in `artifacts/models/cic_ids2017/` is never overwritten. `metadata.json` records `training_config.model_type`; `predict --model-dir <dir>` loads the right architecture and adds an `attention` list per sequence. Same split, preprocessing, class weighting, early stopping and validation-selected threshold as the LSTM. No test metrics are reported here for these models: they have not been trained on the full processed dataset yet. Attention weights show where the model looked; for `attention_lstm` they weight LSTM states, each of which already summarises all earlier windows, so they are not a per-window attribution.
 
 Hyperparameters are the defaults in `configs/config.yaml` under `model:` (epochs 8, batch 256, lr 0.001, hidden 16, dropout 0.2, patience 3 = the committed model). CLI flags or `--set model.hidden_size=8` override them; `model.type` is `lstm` unless `--model` says otherwise.
+`python -m aegisflow train --dataset cic_ids2017`
+
 ### Temporal GNN (`aegisflow/ml/graph.py`, opt-in)
 
 For each window, flows define a host-communication graph: an edge joins two hosts that exchanged a flow in that window. For each step of a host's 10-window sequence, the model combines three inputs:
@@ -40,10 +42,6 @@ It combines them with a GraphSAGE-style mean-aggregation layer, then runs a GRU 
 
 `python -m aegisflow train-gnn` reads `sequences.parquet`, `host_windows.parquet` and `flows.parquet` and writes to `artifacts/models/cic_ids2017_tgnn/`. A synthetic test checks that the graph carries information per-host models cannot see: there, the label depends only on which peer a host talked to, and the GNN reaches ROC-AUC ~0.88 vs ~0.48 for the LSTM. That is a property of the test data, not a CIC-IDS2017 result. On CIC-IDS2017 the graph is dominated by the attacker host 172.16.0.1, so expect the same shortcut. No CIC-IDS2017 metrics are reported here.
 
-Hyperparameters are the defaults in `configs/config.yaml` under `model:` (epochs 8, batch 256, lr 0.001, hidden 16, dropout 0.2, patience 3 = the committed model). CLI flags or `--set model.hidden_size=8` override them; `model.type` must be `lstm`.
-`python -m aegisflow train --dataset cic_ids2017`
-
-There is no stage-prediction head or attention. Predicted stage is always `UNCERTAIN`.
 
 ## Explanations (`aegisflow/ml/explain.py`)
 
@@ -58,7 +56,6 @@ Every prediction can be attributed to its 10 × 28 inputs (time step × feature)
 All three explain the **log-odds** of an attack in the target window. Output per sequence: top features with sign (towards attack / towards benign), the time step where each mattered most, the raw last-window value, and attribution per time step.
 
 `python -m aegisflow explain --dataset cic_ids2017 --limit 5` (or `--sequence-id <id>`, `--model logistic_regression`, `--method integrated_gradients`), and `GET /explain/{sequence_id}` in the API. The dashboard does not call it. Explanations are faithful to the model; they do not make the model more accurate, and given the host shortcut below, features that identify host `172.16.0.1`'s traffic are expected to dominate.
-There is no stage-prediction head or explainability module. Predicted stage is always `UNCERTAIN`.
 The demo LSTM has no stage head, so in the default replay the predicted stage is always `UNCERTAIN`.
 
 ## Multi-task model: stage prediction and K-step future state (`aegisflow/ml/multitask.py`)
