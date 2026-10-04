@@ -21,7 +21,21 @@ Tensor `[batch, 10, 28]`: 28 numeric traffic features per window (counts, byte/p
 Hyperparameters are the defaults in `configs/config.yaml` under `model:` (epochs 8, batch 256, lr 0.001, hidden 16, dropout 0.2, patience 3 = the committed model). CLI flags or `--set model.hidden_size=8` override them; `model.type` must be `lstm`.
 `python -m aegisflow train --dataset cic_ids2017`
 
-There is no stage-prediction head, attention, or explainability module. Predicted stage is always `UNCERTAIN`.
+There is no stage-prediction head or attention. Predicted stage is always `UNCERTAIN`.
+
+## Explanations (`aegisflow/ml/explain.py`)
+
+Every prediction can be attributed to its 10 × 28 inputs (time step × feature):
+
+| Model | Method | Property |
+|---|---|---|
+| LSTM | `shap`: SHAP values via `shap.GradientExplainer` (expected gradients), background = 100 training sequences | attributions sum to output − mean background output, approximately (sampled) |
+| LSTM | `integrated_gradients`: Integrated Gradients from the median training sequence, 128 steps, pure PyTorch | attributions sum to output − baseline output (gap reported as `additivity_gap`) |
+| Logistic regression | exact linear SHAP, `w · (x − E[x])` | exact |
+
+All three explain the **log-odds** of an attack in the target window. Output per sequence: top features with sign (towards attack / towards benign), the time step where each mattered most, the raw last-window value, and attribution per time step.
+
+`python -m aegisflow explain --dataset cic_ids2017 --limit 5` (or `--sequence-id <id>`, `--model logistic_regression`, `--method integrated_gradients`), and `GET /explain/{sequence_id}` in the API. The dashboard does not call it. Explanations are faithful to the model; they do not make the model more accurate, and given the host shortcut below, features that identify host `172.16.0.1`'s traffic are expected to dominate.
 
 ## Split
 

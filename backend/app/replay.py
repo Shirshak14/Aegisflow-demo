@@ -76,6 +76,9 @@ class ReplayEngine:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self.events: pd.DataFrame | None = None
+        self._raw_X: np.ndarray | None = None
+        self._explainer = None
+        self._explainer_lock = threading.Lock()
         self._reset_state()
 
     # ------------------------------------------------------------------ scoring
@@ -127,7 +130,30 @@ class ReplayEngine:
             "truth_attack": frame.target_attack_present.astype(int).to_numpy(),
             "truth_class": frame.target_dominant_class.astype(str), "truth_stage": frame.target_dominant_stage.astype(str),
         })
+        self._raw_X = data.X
         self.model_version = model_version()
+
+    # ------------------------------------------------------------------ explanations (opt-in API only)
+    def explain(self, sequence_id: str, *, model: str = "lstm", method: str = "shap", top: int = 5) -> dict[str, Any] | None:
+        """Attribute one test-split prediction to its inputs; None if the sequence is not in the replay.
+
+        Background for SHAP / the IG baseline is a fixed sample of TRAINING sequences, loaded on first use.
+        Does not touch replay state, alerts, or the ledger.
+        """
+        from aegisflow.ml.explain import ModelExplainer
+        self.prepare()
+        hits = np.flatnonzero(self.events.sequence_id.to_numpy() == sequence_id)
+        if len(hits) == 0:
+            return None
+        with self._explainer_lock:
+            if self._explainer is None:
+                cols = ["sequence_features", "target_features", "target_attack_present",
+                        "target_dominant_class", "target_dominant_stage", "split"]
+                train = pd.read_parquet(DATA_DIR / "sequences.parquet", columns=cols)
+                train = ForecastDataset.from_frame(train[train["split"] == "train"])
+                self._explainer = ModelExplainer(MODEL_DIR, train.X, seed=int(load_config().config.random_seed))
+        e = self._explainer.explain(self._raw_X[hits[:1]], [sequence_id], model=model, method=method)[0]
+        return e.to_dict(k=top)
 
     def _risk(self, row, recent_alerts: int) -> tuple[float, dict[str, float]]:
         p, t = float(row.lstm_p), self.lstm_threshold

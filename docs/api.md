@@ -17,6 +17,7 @@ Until `preprocess` and `train` have been run, endpoints that need data or the mo
 | GET | `/replay/status` | State, progress, sim clock, alert counts |
 | GET | `/hosts` | Hosts seen in the current replay, sorted by alerts then risk |
 | GET | `/hosts/{host_id}` | One host: risk timeline and its alerts |
+| GET | `/explain/{sequence_id}` | Feature / time-step attribution of one test-split prediction. Query: `model=lstm\|logistic_regression`, `method=shap\|integrated_gradients`, `top` (1-28). 404 if the sequence is not in the test split, 501 if `shap` is not installed. Not used by the dashboard; never writes to the ledger |
 | GET | `/mitre/{stage}` | Static lookup from `configs/mitre_mapping.yaml` (no model involved) |
 | POST | `/alerts` | Append an alert to the hash chain (used by the replay engine; no authentication) |
 | GET | `/alerts` | List alerts, newest first (`limit` max 1000, `offset`, `host_id`) |
