@@ -105,12 +105,21 @@ missing timestamp, missing source/destination IP, negative flow duration,
 any infinite numeric value, or exact duplicate flows (same timestamp +
 5-tuple). Every drop is logged with a count; nothing is silently discarded.
 
-## PCAP / NetFlow support
+## PCAP input (`aegisflow/ml/ingestion/pcap.py`, `aegisflow/ml/scoring.py`)
 
-Only the CSV path is implemented in Phase 1. PCAP ingestion (via PyShark/
-TShark) and NetFlow parsing are planned for Phase 2+ once the CSV pipeline
-and windowing are proven; see `docs/architecture.md` phase table. When
-added, PCAP support requires TShark installed separately (`apt install
-tshark` on Linux/WSL, or the Wireshark installer on Windows with "Install
-TShark" checked) — the adapter will detect its absence and fail with
-install instructions rather than silently skip PCAP files.
+NetFlow is not supported yet.
+
+Raw packet captures (.pcap or .pcapng) are turned into the same canonical flow table the CIC-IDS2017 adapter produces, then go through the same cleaning, flow features and host windowing.
+
+```
+python -m aegisflow ingest-pcap --input capture.pcap --output flows.parquet [--reader pyshark] [--labels labels.csv]
+python -m aegisflow score-pcap  --input capture.pcap [--model-dir artifacts/models/cic_ids2017] [--output scored.csv]
+```
+
+- Readers: Scapy (default, pure Python) or PyShark, which needs TShark installed separately (`apt install tshark`, or the Wireshark installer on Windows with "Install TShark" checked). Both give identical flows (tested).
+- Flows are bidirectional 5-tuples. The initiator is `source_ip`. A flow ends on a 120 s idle gap, 3600 s active time, or TCP FIN in both directions / RST. Byte counts and packet-length statistics use payload bytes, `flow_duration` is in seconds and inter-arrival times are in microseconds, all as in CICFlowMeter.
+- Extra packet-level features that CICFlowMeter CSVs do not have, now filled from real packets: `ttl_mean`, `ttl_std` (TTL / IPv6 hop limit) and `retransmission_count` (repeated TCP segments). `score-pcap` reports them per scored host sequence. They are not model inputs, because the model was trained on CIC-IDS2017 CSVs that lack them.
+- `score-pcap` scores every run of 10 consecutive windows per host (no future target needed) with the trained LSTM and its validation-selected threshold.
+- `--labels` takes `source_ip,start,end,label` rows. Labels must exist in a `stages.yaml` section (default `cic_ids2017`); everything else is `BENIGN`. Without it, flows are `UNLABELED`.
+
+Limit: the model was trained on CICFlowMeter output. Flows from this extractor follow the same definitions but are not byte-identical (no bulk/subflow/active-idle statistics), so scores on PCAP input are not validated against labelled traffic.
