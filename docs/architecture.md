@@ -101,8 +101,8 @@ Phase-by-phase, per the priority order in the project brief:
    API so the dashboard can show "which past windows drove this prediction".
 4. **Transformer** (Phase 5, optional): selectable via `model.type=transformer`,
    only after GRU/LSTM works and has a baseline comparison.
-5. **Temporal GNN**: documented as future work (`docs/architecture.md` §7)
-   unless a real per-host communication graph is built — never faked.
+5. **Temporal GNN**: built as an opt-in model (`aegisflow/ml/graph.py`, `train-gnn`) on a real
+   per-window host-communication graph derived from flows.
 
 ## 6. Training / evaluation strategy
 
