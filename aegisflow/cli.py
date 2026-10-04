@@ -192,6 +192,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_sp.add_argument("--output", default=None, help="optional CSV of all scored sequences")
     _common_args(p_sp)
 
+    p_inf = sub.add_parser("ingest-netflow", help="Convert NetFlow v5/v9/IPFIX (capture of exports, or nfdump CSV) "
+                                                 "into canonical flows.")
+    p_inf.add_argument("--input", required=True, help=".pcap/.pcapng of export traffic, or `nfdump -o csv` output")
+    p_inf.add_argument("--format", choices=["auto", "capture", "nfdump-csv"], default="auto")
+    p_inf.add_argument("--output", required=True, help="*.parquet or *.csv")
+    _common_args(p_inf)
+
+    p_snf = sub.add_parser("score-netflow", help="Score NetFlow/IPFIX input with a trained model, per host sequence.")
+    p_snf.add_argument("--input", required=True)
+    p_snf.add_argument("--format", choices=["auto", "capture", "nfdump-csv"], default="auto")
+    p_snf.add_argument("--model-dir", default="artifacts/models/cic_ids2017")
+    p_snf.add_argument("--threshold", type=float, default=None)
+    p_snf.add_argument("--output", default=None, help="optional CSV of all scored sequences")
+    _common_args(p_snf)
+
     # Planned later phases
     for name, phase in [
         ("evaluate", "Phase 3/4 (evaluation report against held-out test split)"),
@@ -321,10 +336,22 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         print(f"  TTL present: {int(flows.ttl_mean.notna().sum()):,} flows; "
               f"TCP retransmissions: {int(flows.retransmission_count.fillna(0).sum()):,}")
         return 0
-    if args.command == "score-pcap":
-        from .ml.ingestion.pcap import pcap_to_flows
+    if args.command == "ingest-netflow":
+        from .ml.ingestion.netflow import netflow_to_flows
+        flows = netflow_to_flows(cfg.path(args.input), args.format)
+        out = cfg.path(args.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        flows.to_csv(out, index=False) if out.suffix.lower() == ".csv" else flows.to_parquet(out, index=False)
+        print(f"{len(flows):,} NetFlow records from {flows.source_ip.nunique()} source hosts -> {out}")
+        return 0
+    if args.command in {"score-pcap", "score-netflow"}:
         from .ml.scoring import score_flows
-        flows = pcap_to_flows(cfg.path(args.input), reader=args.reader)
+        if args.command == "score-pcap":
+            from .ml.ingestion.pcap import pcap_to_flows
+            flows = pcap_to_flows(cfg.path(args.input), reader=args.reader)
+        else:
+            from .ml.ingestion.netflow import netflow_to_flows
+            flows = netflow_to_flows(cfg.path(args.input), args.format)
         scored = score_flows(flows, cfg.path(args.model_dir), cfg, threshold=args.threshold)
         print(f"{len(flows):,} flows -> {len(scored):,} scored host sequences, "
               f"{int(scored.predicted_attack.sum()) if len(scored) else 0} above threshold")
