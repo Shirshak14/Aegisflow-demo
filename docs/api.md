@@ -31,6 +31,7 @@ Until `preprocess` and `train` have been run, endpoints that need data or the mo
 | GET | `/stream/status` | Watermark, flows seen / late / buffered, windows closed, sequences scored, alerts |
 | GET | `/stream/results` | Most recent scored sequences (`limit`, `alerts_only`) |
 | POST | `/stream/reset` | Clear stream state |
+| GET | `/export/alerts` | SIEM export, one event per line: `format=cef` (default), `syslog` (RFC 5424, facility local4, CEF message) or `jsonl` (ECS-style fields); `since_id` for incremental polling, `limit` up to 10000. Each event carries the alert's ledger id and chain hash. Read-only. CLI: `python -m aegisflow export-alerts --format cef [--since-id N] [--syslog-host H]` |
 | GET | `/audit/verify` | Recompute the chain: `VERIFIED` (with `head_hash`) or `CORRUPTED` with the first bad record |
 
 Notes: the replay plays the held-out test split through pre-scored LSTM outputs on a simulated clock. Risk score is 0-100 but capped at 75 in practice (stage term is 0). `predicted_stage` is always `UNCERTAIN`. The analyst endpoints are not used by the dashboard. They have no authentication, so `analyst` names are self-declared. `POST /replay/start` with `reset: true` clears the actions together with the alerts. See `docs/codebase_walkthrough.md` for details and limits of the ledger.

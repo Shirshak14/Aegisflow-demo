@@ -220,6 +220,15 @@ def build_parser() -> argparse.ArgumentParser:
         p_gnn.add_argument(flag, type=typ, default=None)
     p_gnn.add_argument("--output-dir", default=None, help="default: artifacts/models/<dataset>_tgnn")
     _common_args(p_gnn)
+    p_ex = sub.add_parser("export-alerts", help="Export ledger alerts as CEF, RFC 5424 syslog or JSON lines (SIEM).")
+    p_ex.add_argument("--db", default=None, help="ledger SQLite file (default: config database.url)")
+    p_ex.add_argument("--format", choices=["cef", "syslog", "jsonl"], default="cef")
+    p_ex.add_argument("--since-id", type=int, default=0)
+    p_ex.add_argument("--limit", type=int, default=10000)
+    p_ex.add_argument("--output", default=None, help="write to this file instead of stdout")
+    p_ex.add_argument("--syslog-host", default=None, help="also send each line via UDP syslog to this host")
+    p_ex.add_argument("--syslog-port", type=int, default=514)
+    _common_args(p_ex)
 
     # Planned later phases
     for name, phase in [
@@ -412,6 +421,23 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         print(f"Temporal GNN training complete: {out}")
         print(f"  graph : {res['graph']}")
         for name, m in res["models"].items(): print(f"  {name}: {m}")
+        return 0
+    if args.command == "export-alerts":
+        from backend.app.audit import Ledger
+        from backend.app.siem import alerts_since, render, send_syslog_udp
+        db = cfg.path(args.db) if args.db else cfg.path(str(cfg.config.database.url).replace("sqlite:///", ""))
+        if not db.exists():
+            raise AegisFlowError(f"ledger not found: {db}")
+        lines = render(alerts_since(Ledger(db), args.since_id, args.limit), args.format)
+        text = "\n".join(lines) + ("\n" if lines else "")
+        if args.output:
+            cfg.path(args.output).write_text(text, encoding="utf-8")
+        else:
+            sys.stdout.write(text)
+        if args.syslog_host:
+            sent = send_syslog_udp(render(alerts_since(Ledger(db), args.since_id, args.limit), "syslog"),
+                                   args.syslog_host, args.syslog_port)
+            print(f"sent {sent} syslog datagrams to {args.syslog_host}:{args.syslog_port}", file=sys.stderr)
         return 0
     if args.command in {"train", "evaluate", "replay", "serve"}:
         raise NotImplementedPhaseError(
