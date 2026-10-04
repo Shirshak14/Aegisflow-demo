@@ -26,6 +26,11 @@ Until `preprocess` and `train` have been run, endpoints that need data or the mo
 | GET | `/alerts/{id}/actions` | Alert's review status (`open`, `acknowledged`, `response_approved`, `dismissed`, `reopened`), model stage vs analyst-effective stage, approved response, full action history |
 | GET | `/triage/summary` | Number of alerts in each review status |
 | GET | `/audit/verify-actions` | Recompute the analyst-action hash chain. Each action's hash also covers the hash of its alert, so changing the alert after a decision is detected |
+| POST | `/stream/flows` | Streaming telemetry: body `{"flows": [canonical flow records, oldest first]}`. Windows are scored as soon as they close; returns the newly scored host sequences and stream status. 422 if a record lacks a required schema field. Never writes to the ledger |
+| POST | `/stream/flush` | End of stream: close and score every window that still holds flows |
+| GET | `/stream/status` | Watermark, flows seen / late / buffered, windows closed, sequences scored, alerts |
+| GET | `/stream/results` | Most recent scored sequences (`limit`, `alerts_only`) |
+| POST | `/stream/reset` | Clear stream state |
 | GET | `/audit/verify` | Recompute the chain: `VERIFIED` (with `head_hash`) or `CORRUPTED` with the first bad record |
 
 Notes: the replay plays the held-out test split through pre-scored LSTM outputs on a simulated clock. Risk score is 0-100 but capped at 75 in practice (stage term is 0). `predicted_stage` is always `UNCERTAIN`. The analyst endpoints are not used by the dashboard. They have no authentication, so `analyst` names are self-declared. `POST /replay/start` with `reset: true` clears the actions together with the alerts. See `docs/codebase_walkthrough.md` for details and limits of the ledger.

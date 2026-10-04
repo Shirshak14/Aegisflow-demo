@@ -141,3 +141,13 @@ What NetFlow cannot supply, and how it differs from the CIC-IDS2017 training dat
 - Packet-length spread, inter-arrival times, TCP window, TTL and retransmissions are absent and stay NA.
 
 Model scores on NetFlow input are therefore not comparable to CSV-trained performance and have not been validated on labelled NetFlow.
+## Streaming (`aegisflow/ml/streaming.py`)
+
+`StreamScorer` scores traffic as it arrives instead of after the fact. Push canonical flows in time order, in chunks of any size. Each 60 s / 30 s window is aggregated with the batch code once the watermark passes its end. Every host with 10 windows then has its newest sequence scored straight away.
+
+- Entry points: `POST /stream/flows` (any collector or probe can push JSON), and `python -m aegisflow stream --input capture.pcap|flows.parquet`, which replays a file as a stream.
+- Fed the same in-order flows, it returns the same sequences and probabilities as the batch `score-pcap` path (tested with chunk sizes 1 to 1000).
+- Flows older than the earliest open window are counted as late and dropped. `stream.allowed_lateness_seconds` widens that.
+- Memory holds only the flows of open windows and the last 10 windows per host.
+
+Live interface capture is not included (it needs root and an incremental flow exporter). Point a NetFlow/IPFIX exporter or a flow meter at `/stream/flows` instead.
