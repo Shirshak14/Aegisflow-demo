@@ -109,7 +109,7 @@ function AttentionSection({ seqId, models }) {
   const [name, setName] = useState(attn.length ? attn[0].name : null);
   const at = useLoad(() => name ? api(`/attention/${encodeURIComponent(seqId)}?model=${encodeURIComponent(name)}`) : Promise.resolve(null), [seqId, name]);
   return html`<div class="section"><h3>Attention over input windows</h3>
-    ${!attn.length ? html`<div class="small muted">No attention model is trained on this machine. Train one with
+    ${!attn.length ? html`<div class="small muted">No attention model is trained on this machine. Train one with${" "}
         <code>python -m aegisflow train --model transformer</code> (or <code>attention_lstm</code>) and it appears here.</div>`
     : html`<div>
       <div class="row tabs" style=${{ marginBottom: "8px" }}>${attn.map(m => html`<button key=${m.name} class=${m.name === name ? "on" : ""} onClick=${() => setName(m.name)}>${m.name}</button>`)}</div>
@@ -199,6 +199,74 @@ function AnalystSection({ alertId, stages, onChange }) {
   </div>`;
 }
 
+// ------------------------------------------------------------------ alert presentation helpers
+const COMPONENT_LABEL = { abnormality_score: "Abnormality", attack_probability: "Attack probability",
+  prediction_confidence: "Prediction confidence", recent_attack_history: "Recent attack history", stage_severity: "Stage severity" };
+const LEVEL_LABEL = { low: "Low", medium: "Medium", high: "High" };
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (_) { /* insecure origin: fall back */ }
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (_) { /* unsupported */ }
+  ta.remove();
+  return ok;
+}
+
+// A long hash or id, shortened in place; the full value is in the tooltip and on the copy button.
+function Hash({ value, head = 8, tail = 6 }) {
+  const [copied, setCopied] = useState(false);
+  if (value === null || value === undefined || value === "") return html`<span class="muted">–</span>`;
+  const s = String(value), short = s.length > head + tail + 1 ? `${s.slice(0, head)}…${s.slice(-tail)}` : s;
+  const copy = async e => {
+    e.stopPropagation();
+    if (await copyText(s)) { setCopied(true); setTimeout(() => setCopied(false), 1200); }
+  };
+  return html`<span class="hash" title=${s}><span class="mono">${short}</span>
+    <button type="button" class="copy" onClick=${copy} aria-label=${"Copy " + s}>${copied ? "copied" : "copy"}</button></span>`;
+}
+
+function Chip({ label, value, tone = "", title }) {
+  return html`<span class=${"tag " + tone} title=${title || ""}><span class="tag-k">${label}</span><span class="tag-v">${value}</span></span>`;
+}
+
+// 0-100 bar with the level bands from /risk/config, the score marker and the part the current setup cannot reach.
+function RiskGauge({ score, cfg }) {
+  const lvl = levelOf(score, cfg), lo = cfg.thresholds.low, md = cfg.thresholds.medium;
+  const top = cfg.max_reachable_risk, pos = Math.max(0, Math.min(100, score));
+  return html`<div class="gauge" role="img" aria-label=${`risk ${fmt(score, 1)} of 100, ${lvl}`}>
+    <div class="gauge-track">
+      <div class="band low" style=${{ width: lo + "%" }}></div>
+      <div class="band medium" style=${{ width: (md - lo) + "%" }}></div>
+      <div class="band high" style=${{ width: (100 - md) + "%" }}></div>
+      ${top < 100 && html`<div class="unreach" style=${{ left: top + "%", width: (100 - top) + "%" }} title=${`Above ${fmt(top, 0)} is not reachable with the current setup`}></div>`}
+      <div class=${"gauge-fill lvl-bg-" + lvl} style=${{ width: pos + "%" }}></div>
+      <div class="gauge-mark" style=${{ left: pos + "%" }}></div>
+    </div>
+    <div class="gauge-scale small muted">
+      <span style=${{ left: "0%" }}>0</span><span style=${{ left: lo + "%" }}>${fmt(lo, 0)}</span>
+      <span style=${{ left: md + "%" }}>${fmt(md, 0)}</span><span style=${{ left: "100%" }}>100</span>
+    </div>
+  </div>`;
+}
+
+// Each component's share of the score: value × weight × 100 points (the risk formula in replay.py).
+function RiskBreakdown({ comp, cfg }) {
+  const rows = Object.entries(comp).map(([k, v]) => ({ k, v: +v, w: +cfg.weights[k], pts: 100 * v * cfg.weights[k] }));
+  return html`<div>
+    <div class="stack" role="img" aria-label="risk score contributions">${rows.filter(r => r.pts > 0).map((r, i) =>
+      html`<div key=${r.k} class=${"seg c" + Object.keys(comp).indexOf(r.k)} style=${{ width: r.pts + "%" }} title=${`${COMPONENT_LABEL[r.k] || r.k}: ${fmt(r.pts, 1)} pts`}></div>`)}</div>
+    <table class="comp">
+      <thead><tr><th>Component</th><th class="num">Value</th><th class="num">Weight</th><th class="num">Points</th></tr></thead>
+      <tbody>${rows.map(r => html`<tr key=${r.k} class=${r.pts > 0 ? "" : "zero"}>
+        <td title=${r.k}><span class=${"dot c" + Object.keys(comp).indexOf(r.k)}></span>${COMPONENT_LABEL[r.k] || r.k}</td>
+        <td class="num">${fmt(r.v, 3)}</td><td class="num">× ${r.w}</td><td class="num"><b>${fmt(r.pts, 1)}</b></td></tr>`)}</tbody>
+    </table>
+  </div>`;
+}
+
 function AlertDetail({ id, cfg, feats, models, onChange }) {
   const al = useLoad(() => api(`/alerts/${id}`), [id]);
   const a = al.data;
@@ -206,33 +274,75 @@ function AlertDetail({ id, cfg, feats, models, onChange }) {
   if (al.loading) return html`<div class="muted">Loading alert…</div>`;
   if (al.error) return html`<div class="err">${al.error.message}</div>`;
   const comp = JSON.parse(a.risk_components || "{}"), lvl = levelOf(a.risk_score, cfg), m = mitre.data;
-  const stageModel = feats.stage_model.available;
-  return html`<div>
-    <div class="kv">
-      <div>Risk score</div><div><b class=${"lvl-" + lvl} style=${{ fontSize: "20px" }}>${fmt(a.risk_score, 1)}</b> / 100${" "}
-        <span class="muted small">(${lvl}; max reachable ${fmt(cfg.max_reachable_risk, 0)}${stageModel ? "" : " — no stage model, so the stage term is 0"})</span></div>
-      <div>Risk components</div><div class="small">${Object.entries(comp).map(([k, v]) => `${k} ${fmt(v, 3)} × ${cfg.weights[k]}`).join(" · ")}</div>
-      <div>Forecast made at</div><div class="mono">${t(a.predicted_at)} <span class="muted">(end of 10 input windows)</span></div>
-      <div>Target window</div><div class="mono">${t(a.target_window_start)} → ${hm(a.target_window_end)}</div>
-      <div>LSTM attack probability</div><div>${fmt(a.lstm_probability, 4)} <span class="muted small">threshold ${fmt(a.lstm_threshold, 4)}</span></div>
-      <div>Confidence</div><div><b>${a.confidence_label}</b></div>
-      <div>Predicted stage</div><div><b>${a.predicted_stage || "–"}</b> <span class="muted small">${stageModel ? "from the multi-task stage head" : "no stage model configured"}</span></div>
-      <div>Logistic regression</div><div>p = ${fmt(a.lr_probability, 4)} · ${a.lr_flag ? "also flags" : "does not flag"} <span class="muted small">(threshold ${fmt(a.lr_threshold, 5)})</span></div>
+  const stageModel = feats.stage_model.available, uncertain = cfg.uncertain_label;
+  const lstmMax = Math.max(a.lstm_probability, a.lstm_threshold, 1e-9);
+  const hasLr = a.lr_probability !== null && a.lr_probability !== undefined;
+  const hasRule = a.reference_rule_flag !== null && a.reference_rule_flag !== undefined;
+  return html`<div class="alert-detail">
+    <div class="hero">
+      <div class="hero-score">
+        <div class=${"score lvl-" + lvl}>${fmt(a.risk_score, 1)}<span class="of">/ 100</span></div>
+        <span class=${"sev sev-" + lvl}>${LEVEL_LABEL[lvl] || lvl} risk</span>
+      </div>
+      <div class="hero-gauge">
+        <${RiskGauge} score=${a.risk_score} cfg=${cfg}/>
+        <div class="small muted">Max reachable ${fmt(cfg.max_reachable_risk, 0)}${stageModel ? "" : ": no stage model, so the stage term is 0"}.</div>
+      </div>
     </div>
+
+    <div class="tags">
+      <${Chip} label="Confidence" value=${a.confidence_label} tone=${a.confidence_label === uncertain ? "warn" : "ok"}
+        title=${a.confidence_label === uncertain ? `Probability below ${cfg.confidence_threshold}: the alert fired on the lower validation-selected threshold` : `Probability ≥ ${cfg.confidence_threshold}`}/>
+      <${Chip} label="Stage" value=${a.predicted_stage || "–"} tone=${a.predicted_stage === uncertain ? "dim" : "acc"}
+        title=${stageModel ? "From the multi-task stage head" : "No stage model configured: binary attack detector only"}/>
+      ${hasLr && html`<${Chip} label="Logistic regression" value=${a.lr_flag ? "also flags" : "does not flag"} tone=${a.lr_flag ? "bad" : "dim"}
+        title=${`p = ${fmt(a.lr_probability, 4)}, threshold ${fmt(a.lr_threshold, 5)}`}/>`}
+      ${hasRule && html`<${Chip} label="Reference rule" value=${a.reference_rule_flag ? "under attack" : "not under attack"} tone="dim"
+        title="Last input window per dataset labels; comparison only"/>`}
+    </div>
+
+    <div class="facts">
+      <div class="fact"><div class="fact-k">LSTM attack probability</div>
+        <div class="fact-v">${fmt(a.lstm_probability, 4)} <span class="muted small">threshold ${fmt(a.lstm_threshold, 4)}</span></div>
+        <div class="pbar"><div style=${{ width: (a.lstm_probability / lstmMax * 100) + "%" }}></div>
+          <span class="thr" style=${{ left: (a.lstm_threshold / lstmMax * 100) + "%" }} title=${"threshold " + fmt(a.lstm_threshold, 4)}></span></div></div>
+      <div class="fact"><div class="fact-k">Forecast made at</div>
+        <div class="fact-v mono">${t(a.predicted_at)}</div><div class="small muted">end of 10 input windows</div></div>
+      <div class="fact"><div class="fact-k">Target window</div>
+        <div class="fact-v mono">${t(a.target_window_start)} → ${hm(a.target_window_end)}</div><div class="small muted">window being forecast</div></div>
+      ${hasLr && html`<div class="fact"><div class="fact-k">Logistic regression p</div>
+        <div class="fact-v">${fmt(a.lr_probability, 4)} <span class="muted small">threshold ${fmt(a.lr_threshold, 5)}</span></div></div>`}
+    </div>
+
+    <div class="section"><h3>How the score is built</h3><${RiskBreakdown} comp=${comp} cfg=${cfg}/></div>
+
     <${ExplanationSection} seqId=${a.sequence_id} feats=${feats}/>
     <${AttentionSection} seqId=${a.sequence_id} models=${models}/>
     <${StageSection} seqId=${a.sequence_id} feats=${feats}/>
     <${AnalystSection} alertId=${a.id} stages=${feats.stages} onChange=${onChange}/>
-    <div class="note info" style=${{ margin: "12px 0" }}>
-      <b>Dataset label (ground truth, revealed for evaluation, not available to the model):</b> ${a.truth_class} / ${a.truth_stage} →
-      ${a.truth_attack === 1 ? html` <span class="ok">true positive</span>` : html` <span class="bad">false positive</span>`}<br/>
-      <b>MITRE ATT&CK for that label:</b> ${m && m.tactic_id ? `${m.tactic_id} ${m.tactic_name} — ${m.techniques.map(x => `${x.id} ${x.name}`).join(", ")}` : "none (benign)"}
-      <span class="muted small"> · static lookup from configs/mitre_mapping.yaml</span>
+
+    <div class="evalbox">
+      <div class="evalbox-h"><span class="evalbox-tag">Evaluation only</span><span class="small muted">dataset ground truth, never shown to the model</span></div>
+      <div class="evalbox-body">
+        <div class=${"outcome " + (a.truth_attack === 1 ? "tp" : "fp")}>
+          <div class="outcome-v">${a.truth_attack === 1 ? "True positive" : "False positive"}</div>
+          <div class="small">${a.truth_attack === 1 ? "alert fired and the window is labelled attack" : "alert fired but the window is labelled benign"}</div>
+        </div>
+        <div class="kv small">
+          <div>Dataset label</div><div>${a.truth_class} <span class="muted">· stage</span> ${a.truth_stage}</div>
+          <div>MITRE ATT&CK</div><div>${m && m.tactic_id ? html`${m.tactic_id} ${m.tactic_name}<div class="muted">${m.techniques.map(x => `${x.id} ${x.name}`).join(", ")}</div>` : "none (benign)"}</div>
+          <div></div><div class="muted">MITRE is a static lookup from configs/mitre_mapping.yaml for the label, not a model output.</div>
+        </div>
+      </div>
     </div>
-    <div class="kv small">
-      <div>Ledger hash</div><div class="mono">${a.hash}</div>
-      <div>Previous hash</div><div class="mono">${a.prev_hash}</div>
-      <div>Sequence / model</div><div class="mono">${a.sequence_id} · ${a.model_version}</div>
+
+    <div class="section"><h3>Ledger record</h3>
+      <div class="kv small prov">
+        <div>Ledger hash</div><div><${Hash} value=${a.hash}/></div>
+        <div>Previous hash</div><div><${Hash} value=${a.prev_hash}/></div>
+        <div>Sequence</div><div><${Hash} value=${a.sequence_id} head=${24} tail=${8}/></div>
+        <div>Model</div><div><${Hash} value=${a.model_version} head=${28} tail=${12}/></div>
+      </div>
     </div>
   </div>`;
 }
@@ -258,20 +368,28 @@ function HostDetail({ id, cfg, tick, onAlert }) {
 
 // ------------------------------------------------------------------ cards
 function AuditCard({ alerts }) {
-  const [v, setV] = useState(null), [va, setVa] = useState(null);
-  const check = async () => { setV(await api("/audit/verify")); setVa(await api("/audit/verify-actions")); };
-  const line = (r, what) => !r ? html`<span class="verify muted">not checked</span>`
-    : html`<span><span class=${"verify " + (r.status === "VERIFIED" ? "ok" : "bad")}>${r.status}</span>
-      <span class="small muted"> ${r.status === "VERIFIED" ? `${r[what]} records` : `record #${r.record_id ?? r.action_id}: ${r.reason}`}</span></span>`;
-  return html`<section class="card span5"><h2>Audit ledger (SHA-256 hash chains)</h2>
-    <div class="row"><button class="primary" onClick=${check}>Verify chains</button></div>
-    <div class="kv small" style=${{ margin: "8px 0 10px", gridTemplateColumns: "120px 1fr" }}>
-      <div>Alerts chain</div><div>${line(v, "records_checked")}</div>
-      <div>Analyst actions</div><div>${line(va, "actions_checked")}</div></div>
-    <div class="scroll" style=${{ maxHeight: "220px" }}><table>
-      <thead><tr><th>#</th><th>Host</th><th>prev_hash</th><th>hash</th></tr></thead>
-      <tbody>${alerts.slice(0, 12).map(a => html`<tr key=${a.id} style=${{ cursor: "default" }}><td>${a.id}</td><td class="mono">${a.host_id}</td>
-        <td class="mono">${a.prev_hash.slice(0, 10)}…</td><td class="mono">${a.hash.slice(0, 10)}…</td></tr>`)}</tbody></table></div>
+  const [v, setV] = useState(null), [va, setVa] = useState(null), [busy, setBusy] = useState(false);
+  const check = async () => {
+    setBusy(true);
+    try { setV(await api("/audit/verify")); setVa(await api("/audit/verify-actions")); } finally { setBusy(false); }
+  };
+  const line = (r, what, name) => html`<div class=${"chain " + (!r ? "" : r.status === "VERIFIED" ? "ok" : "bad")}>
+    <div class="chain-k">${name}</div>
+    ${!r ? html`<div class="chain-v muted">not checked</div>`
+      : html`<div class="chain-v"><span class="chain-s">${r.status === "VERIFIED" ? "✓ " : "✗ "}${r.status}</span>
+        <span class="small muted">${r.status === "VERIFIED" ? `${r[what].toLocaleString()} records` : `record #${r.record_id ?? r.action_id}: ${r.reason}`}</span></div>`}
+  </div>`;
+  return html`<section class="card span5 audit"><h2>Audit ledger (SHA-256 hash chains)</h2>
+    <div class="row" style=${{ marginBottom: "10px" }}><button class="primary" disabled=${busy} onClick=${check}>${busy ? "Verifying…" : "Verify chains"}</button>
+      <span class="small muted">Recomputes every hash from the stored fields.</span></div>
+    <div class="chains">${line(v, "records_checked", "Alerts chain")}${line(va, "actions_checked", "Analyst actions")}</div>
+    ${v && v.head_hash && html`<div class="small muted" style=${{ margin: "6px 0 0" }}>Head hash <${Hash} value=${v.head_hash}/></div>`}
+    <div class="scroll" style=${{ maxHeight: "460px", marginTop: "10px" }}><table class="ledger">
+      <thead><tr><th>#</th><th>Host</th><th>Previous hash → hash</th></tr></thead>
+      <tbody>${alerts.length ? alerts.map(a => html`<tr key=${a.id} style=${{ cursor: "default" }}><td>${a.id}</td><td class="mono">${a.host_id}</td>
+        <td class="links"><${Hash} value=${a.prev_hash} head=${6} tail=${4}/><span class="arrow">→</span><${Hash} value=${a.hash} head=${6} tail=${4}/></td></tr>`)
+        : html`<tr><td colspan="3" class="muted">No records yet.</td></tr>`}</tbody></table></div>
+    <div class="small muted" style=${{ marginTop: "6px" }}>Each record stores the previous record's hash, so editing any row breaks every hash after it. Hover a hash for the full value.</div>
   </section>`;
 }
 
