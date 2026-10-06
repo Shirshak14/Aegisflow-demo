@@ -136,24 +136,35 @@ def select_threshold(y: np.ndarray, p: np.ndarray) -> tuple[float, str]:
 
 
 class LSTMForecaster:
-    def __init__(self, feature_count: int, hidden_size: int = 32, dropout: float = 0.2):
+    # hidden_size default matches configs/config.yaml `model.hidden_size` (the committed demo model).
+    def __init__(self, feature_count: int, hidden_size: int = 16, dropout: float = 0.2):
         from torch import nn
         class Net(nn.Module):
             def __init__(self):
-                super().__init__(); self.lstm = nn.LSTM(feature_count, hidden_size, batch_first=True)
-                self.dropout = nn.Dropout(dropout); self.head = nn.Linear(hidden_size, 1)
+                super().__init__()
+                self.lstm = nn.LSTM(feature_count, hidden_size, batch_first=True)
+                self.dropout = nn.Dropout(dropout)
+                self.head = nn.Linear(hidden_size, 1)
             def forward(self, x):
                 _, (h, _) = self.lstm(x)
                 return self.head(self.dropout(h[-1])).squeeze(-1)
         self.net = Net()
 
 
-def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20, batch_size=128,
-                     learning_rate=0.001, hidden_size=32, dropout=0.2, patience=4) -> dict[str, Any]:
+def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=8, batch_size=256,
+                     learning_rate=0.001, hidden_size=16, dropout=0.2, patience=3) -> dict[str, Any]:
+    """Train the baselines and write artifacts to ``output``.
+
+    Defaults equal configs/config.yaml `model:` (the committed demo model). Side effect: this seeds
+    the Python/NumPy/torch RNGs and turns on torch deterministic algorithms for the whole process.
+    """
     import torch
     from torch.utils.data import DataLoader, TensorDataset
-    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
-    if torch.cuda.is_available(): torch.cuda.manual_seed_all(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
     torch.use_deterministic_algorithms(True, warn_only=True)
     train_i, val_i, test_i = (data.indices(s) for s in ("train", "val", "test"))
     prep = SequencePreprocessor(data.feature_names).fit(data.X[train_i])
@@ -179,19 +190,28 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20,
     loader = DataLoader(TensorDataset(torch.tensor(Xt), torch.tensor(data.attack[train_i], dtype=torch.float32)),
                         batch_size=batch_size, shuffle=True, generator=torch.Generator().manual_seed(seed))
     vx = torch.tensor(Xv, device=device); vy = torch.tensor(data.attack[val_i], dtype=torch.float32, device=device)
-    best_loss=float("inf"); best_epoch=0; stale=0; history=[]
+    best_loss, best_epoch, stale, history = float("inf"), 0, 0, []
     for epoch in range(epochs):
-        model.train(); losses=[]
+        model.train()
+        losses = []
         for xb, yb in loader:
-            xb=xb.to(device); yb=yb.to(device); optimizer.zero_grad(); loss=loss_fn(model(xb),yb); loss.backward(); optimizer.step(); losses.append(float(loss.item()))
+            xb, yb = xb.to(device), yb.to(device)
+            optimizer.zero_grad()
+            loss = loss_fn(model(xb), yb)
+            loss.backward()
+            optimizer.step()
+            losses.append(float(loss.item()))
         model.eval()
-        with torch.no_grad(): val_loss=float(loss_fn(model(vx),vy).item()) if len(val_i) else float(np.mean(losses))
-        history.append({"epoch": epoch+1, "train_loss": float(np.mean(losses)), "val_loss": val_loss})
+        with torch.no_grad():
+            val_loss = float(loss_fn(model(vx), vy).item()) if len(val_i) else float(np.mean(losses))
+        history.append({"epoch": epoch + 1, "train_loss": float(np.mean(losses)), "val_loss": val_loss})
         if val_loss < best_loss:
-            best_loss=val_loss; best_epoch=epoch+1; stale=0; torch.save(model.state_dict(), output / "best.pt")
+            best_loss, best_epoch, stale = val_loss, epoch + 1, 0
+            torch.save(model.state_dict(), output / "best.pt")
         else:
-            stale+=1
-            if stale>=patience: break
+            stale += 1
+            if stale >= patience:
+                break
     torch.save(model.state_dict(), output / "last.pt")
     model.load_state_dict(torch.load(output / "best.pt", map_location=device, weights_only=True)); model.eval()
     with torch.no_grad():
