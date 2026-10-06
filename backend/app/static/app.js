@@ -44,16 +44,6 @@ function useLoad(fn, deps) {
 }
 
 // ------------------------------------------------------------------ small charts
-function SignedBars({ items, label, value, extra }) {
-  const max = Math.max(1e-9, ...items.map(i => Math.abs(value(i))));
-  return html`<div>${items.map((it, i) => {
-    const v = value(it), w = Math.abs(v) / max * 50;
-    return html`<div class="hbar" key=${i}><div class="mono" title=${label(it)}>${label(it)}</div>
-      <div class="track"><div class="mid"></div>
-        <div class=${"fill " + (v >= 0 ? "pos" : "neg")} style=${{ left: v >= 0 ? "50%" : (50 - w) + "%", width: w + "%" }}></div></div>
-      <div class="small" style=${{ textAlign: "right" }}>${extra ? extra(it) : fmt(v, 3)}</div></div>`;
-  })}</div>`;
-}
 function Bars({ items, label, value, cls = "acc", max }) {
   const m = max ?? Math.max(1e-9, ...items.map(value));
   return html`<div>${items.map((it, i) => html`<div class="hbar" key=${i}><div class="mono">${label(it)}</div>
@@ -62,9 +52,16 @@ function Bars({ items, label, value, cls = "acc", max }) {
 }
 function StepBars({ values, signed, title }) {
   const max = Math.max(1e-9, ...values.map(v => Math.abs(v)));
+  const label = i => i === values.length - 1 ? "last" : `-${values.length - 1 - i}`;
+  // Signed: bars grow up (towards attack) or down (towards benign) from a zero line; each side gets height in proportion to its largest bar.
+  const up = Math.max(0, ...values), down = Math.max(0, ...values.map(v => -v)), tot = Math.max(1e-9, up + down);
+  if (signed) return html`<div class="steps signed" role="img" aria-label=${title}>${values.map((v, i) => html`<div key=${i} title=${`window t-${values.length - 1 - i}: ${fmt(v, 4)}`}>
+      <div class="half up" style=${{ flex: Math.max(up / tot, .08) }}>${v > 0 && html`<span class="pos" style=${{ height: (v / Math.max(up, 1e-9) * 100) + "%" }}></span>`}</div>
+      <div class="half down" style=${{ flex: Math.max(down / tot, .08) }}>${v < 0 && html`<span class="neg" style=${{ height: (-v / Math.max(down, 1e-9) * 100) + "%" }}></span>`}</div>
+      <div class="lab">${label(i)}</div></div>`)}</div>`;
   return html`<div><div class="steps" role="img" aria-label=${title}>${values.map((v, i) => html`<div key=${i} title=${`window t-${values.length - 1 - i}: ${fmt(v, 4)}`}>
-      <span class=${signed ? (v >= 0 ? "pos" : "neg") : "acc"} style=${{ height: (Math.abs(v) / max * 100) + "%" }}></span>
-      <div>${i === values.length - 1 ? "last" : `-${values.length - 1 - i}`}</div></div>`)}</div></div>`;
+      <span class="acc" style=${{ height: (Math.abs(v) / max * 100) + "%" }}></span>
+      <div>${label(i)}</div></div>`)}</div></div>`;
 }
 function Sparkline({ tl, cfg }) {
   if (!tl || !tl.length || !cfg) return null;
@@ -83,23 +80,38 @@ function ExplanationSection({ seqId, feats }) {
   const [model, setModel] = useState("lstm");
   const [method, setMethod] = useState(feats.explanations.shap ? "shap" : "integrated_gradients");
   const ex = useLoad(() => api(`/explain/${encodeURIComponent(seqId)}?model=${model}&method=${method}&top=6`), [seqId, model, method]);
+  const d = ex.data, max = d ? Math.max(1e-9, ...d.top_features.map(f => Math.abs(f.attribution))) : 1;
+  const steps = d ? d.timestep_attribution : [];
   return html`<div class="section"><h3>Why this prediction (feature attribution)</h3>
-    <div class="row tabs" style=${{ marginBottom: "8px" }}>
-      <button class=${model === "lstm" ? "on" : ""} onClick=${() => setModel("lstm")}>LSTM</button>
-      <button class=${model === "logistic_regression" ? "on" : ""} onClick=${() => setModel("logistic_regression")}>Logistic regression</button>
-      ${model === "lstm" && html`<span class="small muted" style=${{ marginLeft: "8px" }}>Method:</span>
+    <div class="seg-row">
+      <div class="segctl" role="group" aria-label="model"><span class="segctl-k">Model</span>
+        <button class=${model === "lstm" ? "on" : ""} onClick=${() => setModel("lstm")}>LSTM</button>
+        <button class=${model === "logistic_regression" ? "on" : ""} onClick=${() => setModel("logistic_regression")}>Logistic regression</button></div>
+      ${model === "lstm" && html`<div class="segctl" role="group" aria-label="method"><span class="segctl-k">Method</span>
         <button class=${method === "shap" ? "on" : ""} disabled=${!feats.explanations.shap} title=${feats.explanations.hint || ""} onClick=${() => setMethod("shap")}>SHAP</button>
-        <button class=${method === "integrated_gradients" ? "on" : ""} onClick=${() => setMethod("integrated_gradients")}>Integrated Gradients</button>`}
+        <button class=${method === "integrated_gradients" ? "on" : ""} onClick=${() => setMethod("integrated_gradients")}>Integrated Gradients</button></div>`}
     </div>
     ${ex.loading ? html`<div class="small muted">Computing attributions…</div>`
       : ex.error ? html`<div class="err">${ex.error.message}</div>`
-      : html`<div>
-        <${SignedBars} items=${ex.data.top_features} label=${f => f.feature} value=${f => f.attribution}
-          extra=${f => html`<span title=${`most influential at window ${f.most_influential_step}; last-window value ${f.last_window_value}`}>${fmt(f.attribution, 3)}</span>`}/>
-        <div class="small muted" style=${{ margin: "6px 0 10px" }}><span class="bad">■</span> pushes towards attack · <span class="ok">■</span> towards benign.
-          Attributions explain the log-odds (${fmt(ex.data.output, 3)} vs reference ${fmt(ex.data.reference_output, 3)}; ${ex.data.method === "integrated_gradients" || ex.data.model !== "lstm" ? `additivity gap ${fmt(ex.data.additivity_gap, 5)}` : "SHAP expected gradients, sampled"}).</div>
-        <div class="small muted">Attribution per input window (oldest → last):</div>
-        <${StepBars} values=${ex.data.timestep_attribution} signed=${true} title="attribution per input window"/>
+      : html`<div class="attr">
+        <div class="attr-legend small"><span><i class="sw pos"></i>pushes towards attack</span><span><i class="sw neg"></i>pushes towards benign</span></div>
+        <div class="attr-list">${d.top_features.map((f, i) => {
+          const v = f.attribution, w = Math.abs(v) / max * 50;
+          return html`<div class="attr-row" key=${f.feature}
+              title=${`most influential at window ${f.most_influential_step}${f.last_window_value !== undefined ? `; last-window value ${f.last_window_value}` : ""}`}>
+            <span class="attr-rank">${i + 1}</span>
+            <span class="attr-name mono">${f.feature}</span>
+            <span class="attr-track"><span class="attr-mid"></span>
+              <span class=${"attr-fill " + (v >= 0 ? "pos" : "neg")} style=${{ left: v >= 0 ? "50%" : (50 - w) + "%", width: w + "%" }}></span></span>
+            <span class=${"attr-val " + (v >= 0 ? "bad" : "ok")}>${v >= 0 ? "+" : "−"}${fmt(Math.abs(v), 3)}</span>
+          </div>`; })}</div>
+        <div class="facts" style=${{ marginTop: "12px" }}>
+          <div class="fact"><div class="fact-k">Model output (log-odds)</div><div class="fact-v">${fmt(d.output, 3)}</div></div>
+          <div class="fact"><div class="fact-k">Reference output</div><div class="fact-v">${fmt(d.reference_output, 3)}</div>
+            <div class="small muted">${d.method === "integrated_gradients" || d.model !== "lstm" ? `additivity gap ${fmt(d.additivity_gap, 5)}` : "SHAP expected gradients, sampled"}</div></div>
+        </div>
+        <div class="small muted" style=${{ margin: "12px 0 4px" }}>Attribution per input window, oldest to last</div>
+        <${StepBars} values=${steps} signed=${true} title="attribution per input window"/>
       </div>`}
   </div>`;
 }

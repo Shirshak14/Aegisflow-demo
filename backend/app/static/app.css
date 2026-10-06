@@ -147,3 +147,31 @@
   }
   .card.audit { align-self: start; position: sticky; top: 16px; }
   @media (max-width: 1100px) { .card.audit { position: static; } }
+
+  /* Feature attribution panel */
+  .seg-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+  .segctl { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; font-size: 12px; }
+  .segctl-k { padding: 5px 10px; color: var(--muted); background: var(--panel2); border-right: 1px solid var(--line); display: flex; align-items: center; }
+  .segctl button { border: 0; border-radius: 0; padding: 5px 12px; font-size: 12px; background: transparent; }
+  .segctl button + button { border-left: 1px solid var(--line); }
+  .segctl button.on { background: rgba(74,163,255,.16); color: var(--accent); }
+  .attr-legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); margin-bottom: 6px; }
+  .attr-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .attr-list { display: flex; flex-direction: column; }
+  .attr-row { display: grid; grid-template-columns: 22px minmax(120px, 210px) 1fr 64px; gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); cursor: help; }
+  .attr-row:last-child { border-bottom: 0; }
+  .attr-rank { color: var(--muted); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+  .attr-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .attr-track { position: relative; height: 12px; background: var(--panel2); border-radius: 3px; }
+  .attr-mid { position: absolute; top: -3px; bottom: -3px; left: 50%; width: 1px; background: var(--muted); opacity: .6; }
+  .attr-fill { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+  .attr-val { text-align: right; font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .steps.signed { height: 96px; gap: 4px; padding: 0 2px; }
+  .steps.signed > div { justify-content: stretch; }
+  .steps.signed .half { flex: 1; width: 100%; display: flex; }
+  .steps.signed .half.up { align-items: flex-end; border-bottom: 1px solid var(--muted); }
+  .steps.signed .half.down { align-items: flex-start; }
+  .steps.signed .half > span { width: 100%; min-height: 1px; }
+  .steps.signed .half.up > span { border-radius: 2px 2px 0 0; } .steps.signed .half.down > span { border-radius: 0 0 2px 2px; }
+  .steps.signed .lab { font-size: 10px; color: var(--muted); margin-top: 3px; }
+  @media (max-width: 640px) { .attr-row { grid-template-columns: 18px minmax(90px, 1fr) 1fr 56px; gap: 6px; } }
