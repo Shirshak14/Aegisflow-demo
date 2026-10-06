@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -215,8 +215,9 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         return ledger.append(alert.model_dump())
 
     @app.get("/alerts")
-    def list_alerts(limit: int = 100, offset: int = 0, host_id: str | None = None) -> list[dict[str, Any]]:
-        return ledger.list(limit=min(limit, 1000), offset=offset, host_id=host_id)
+    def list_alerts(limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
+                    host_id: str | None = None) -> list[dict[str, Any]]:
+        return ledger.list(limit=limit, offset=offset, host_id=host_id)
 
     @app.get("/alerts/{alert_id}")
     def get_alert(alert_id: int) -> dict[str, Any]:

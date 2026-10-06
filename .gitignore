@@ -33,6 +33,8 @@ frontend/dist/
 # Phase 3+ outputs: trained models are regenerated with `python -m aegisflow train`
 artifacts/models/**
 artifacts/archive/**
+# local experiment runs (same kind of binary model files)
+artifacts/experiments/**
 # archived copies of processed data (derived from the licensed dataset)
 data/archive/**
 # per-run pytest basetemp directories
