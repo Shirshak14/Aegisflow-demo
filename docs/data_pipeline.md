@@ -105,12 +105,49 @@ missing timestamp, missing source/destination IP, negative flow duration,
 any infinite numeric value, or exact duplicate flows (same timestamp +
 5-tuple). Every drop is logged with a count; nothing is silently discarded.
 
-## PCAP / NetFlow support
+## PCAP input (`aegisflow/ml/ingestion/pcap.py`, `aegisflow/ml/scoring.py`)
 
-Only the CSV path is implemented in Phase 1. PCAP ingestion (via PyShark/
-TShark) and NetFlow parsing are planned for Phase 2+ once the CSV pipeline
-and windowing are proven; see `docs/architecture.md` phase table. When
-added, PCAP support requires TShark installed separately (`apt install
-tshark` on Linux/WSL, or the Wireshark installer on Windows with "Install
-TShark" checked) — the adapter will detect its absence and fail with
-install instructions rather than silently skip PCAP files.
+Raw packet captures (.pcap or .pcapng) are turned into the same canonical flow table the CIC-IDS2017 adapter produces, then go through the same cleaning, flow features and host windowing.
+
+```
+python -m aegisflow ingest-pcap --input capture.pcap --output flows.parquet [--reader pyshark] [--labels labels.csv]
+python -m aegisflow score-pcap  --input capture.pcap [--model-dir artifacts/models/cic_ids2017] [--output scored.csv]
+```
+
+- Readers: Scapy (default, pure Python) or PyShark, which needs TShark installed separately (`apt install tshark`, or the Wireshark installer on Windows with "Install TShark" checked). Both give identical flows (tested).
+- Flows are bidirectional 5-tuples. The initiator is `source_ip`. A flow ends on a 120 s idle gap, 3600 s active time, or TCP FIN in both directions / RST. Byte counts and packet-length statistics use payload bytes, `flow_duration` is in seconds and inter-arrival times are in microseconds, all as in CICFlowMeter.
+- Extra packet-level features that CICFlowMeter CSVs do not have, now filled from real packets: `ttl_mean`, `ttl_std` (TTL / IPv6 hop limit) and `retransmission_count` (repeated TCP segments). `score-pcap` reports them per scored host sequence. They are not model inputs, because the model was trained on CIC-IDS2017 CSVs that lack them.
+- `score-pcap` scores every run of 10 consecutive windows per host (no future target needed) with the trained LSTM and its validation-selected threshold.
+- `--labels` takes `source_ip,start,end,label` rows. Labels must exist in a `stages.yaml` section (default `cic_ids2017`); everything else is `BENIGN`. Without it, flows are `UNLABELED`.
+
+Limit: the model was trained on CICFlowMeter output. Flows from this extractor follow the same definitions but are not byte-identical (no bulk/subflow/active-idle statistics), so scores on PCAP input are not validated against labelled traffic.
+
+## NetFlow v5 / v9 / IPFIX input (`aegisflow/ml/ingestion/netflow.py`)
+
+```
+python -m aegisflow ingest-netflow --input exports.pcap --output flows.parquet   # capture of export traffic
+python -m aegisflow ingest-netflow --input flows.csv    --output flows.parquet   # `nfdump -r <nfcapd file> -o csv`
+python -m aegisflow score-netflow  --input exports.pcap [--model-dir ...] [--output scored.csv]
+```
+
+- A capture of the UDP datagrams an exporter sends to its collector is decoded directly. v5 is fixed-format; v9 and IPFIX templates (and IPFIX `systemInitTimeMilliseconds` options) are tracked per exporter and observation domain. Data that arrives before its template is counted, not guessed.
+- `nfdump -o csv` output covers whatever nfcapd collected. Timestamps are nfdump's local time, and the duration comes from its millisecond `td` column.
+- Tested against real softflowd v5/v9/IPFIX exports and nfdump 1.7 CSV of the same traffic (`tests/fixtures/netflow/`). All four give identical flows, and packet counts match the source capture.
+
+What NetFlow cannot supply, and how it differs from the CIC-IDS2017 training data:
+- Records are unidirectional, so each direction is its own flow.
+- Bytes are layer-3 (headers included); CICFlowMeter counts payload bytes.
+- TCP flags are an OR over the flow, so `syn_count` etc. are 0/1 presence, a lower bound on the count.
+- Packet-length spread, inter-arrival times, TCP window, TTL and retransmissions are absent and stay NA.
+
+Model scores on NetFlow input are therefore not comparable to CSV-trained performance and have not been validated on labelled NetFlow.
+## Streaming (`aegisflow/ml/streaming.py`)
+
+`StreamScorer` scores traffic as it arrives instead of after the fact. Push canonical flows in time order, in chunks of any size. Each 60 s / 30 s window is aggregated with the batch code once the watermark passes its end. Every host with 10 windows then has its newest sequence scored straight away.
+
+- Entry points: `POST /stream/flows` (any collector or probe can push JSON), and `python -m aegisflow stream --input capture.pcap|flows.parquet`, which replays a file as a stream.
+- Fed the same in-order flows, it returns the same sequences and probabilities as the batch `score-pcap` path (tested with chunk sizes 1 to 1000).
+- Flows older than the earliest open window are counted as late and dropped. `stream.allowed_lateness_seconds` widens that.
+- Memory holds only the flows of open windows and the last 10 windows per host.
+
+Live interface capture is not included (it needs root and an incremental flow exporter). Point a NetFlow/IPFIX exporter or a flow meter at `/stream/flows` instead.

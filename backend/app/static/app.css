@@ -1,0 +1,69 @@
+  :root {
+    --bg: #0f1419; --panel: #171e26; --panel2: #1e2731; --line: #2b3642; --text: #e6edf3; --muted: #8b98a5;
+    --accent: #4aa3ff; --ok: #3fb950; --warn: #d29922; --bad: #f85149; --mid: #e3a008;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+           padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  main { padding: 16px 20px 40px; display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  .span3 { grid-column: span 3; } .span4 { grid-column: span 4; } .span5 { grid-column: span 5; }
+  .span6 { grid-column: span 6; } .span7 { grid-column: span 7; } .span8 { grid-column: span 8; } .span12 { grid-column: span 12; }
+  @media (max-width: 1100px) { .span3, .span4, .span5, .span6, .span7, .span8 { grid-column: span 12; } }
+  .big { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); } .small { font-size: 12px; }
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--line); }
+  .chip.running { color: var(--ok); border-color: var(--ok); } .chip.finished { color: var(--accent); border-color: var(--accent); }
+  .chip.stopped, .chip.idle { color: var(--muted); } .chip.error { color: var(--bad); border-color: var(--bad); }
+  .lvl-low { color: var(--ok); } .lvl-medium { color: var(--mid); } .lvl-high { color: var(--bad); }
+  .bar { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  button, select { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line);
+                   border-radius: 6px; padding: 7px 14px; cursor: pointer; }
+  button:hover { border-color: var(--accent); } button.primary { background: #1f6feb; border-color: #1f6feb; }
+  button.danger { border-color: var(--bad); color: var(--bad); } button:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .scroll { overflow: auto; max-height: 420px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--panel); }
+  tbody tr { cursor: pointer; } tbody tr:hover { background: var(--panel2); } tr.sel { background: #1f2d3d; }
+  td.num, th.num { text-align: right; }
+  .kv { display: grid; grid-template-columns: 190px 1fr; gap: 4px 12px; }
+  .kv div:nth-child(odd) { color: var(--muted); }
+  .note { border-left: 3px solid var(--warn); background: #2a2413; padding: 8px 10px; border-radius: 4px; font-size: 13px; }
+  .note.info { border-color: var(--accent); background: #13222f; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  code, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .verify { font-size: 20px; font-weight: 700; }
+  svg text { fill: var(--muted); font-size: 10px; }
+  .tabs button { padding: 4px 10px; font-size: 12px; } .tabs button.on { border-color: var(--accent); color: var(--accent); }
+
+  /* React dashboard additions */
+  .section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .section h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+  .hbar { display: grid; grid-template-columns: 190px 1fr 70px; gap: 8px; align-items: center; font-size: 12px; margin: 3px 0; }
+  .hbar .track { position: relative; height: 10px; background: var(--panel2); border-radius: 3px; }
+  .hbar .fill { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+  .hbar .mid { position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px; background: var(--line); }
+  .pos { background: var(--bad); } .neg { background: var(--ok); } .acc { background: var(--accent); }
+  .steps { display: flex; gap: 3px; align-items: flex-end; height: 64px; }
+  .steps > div { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; font-size: 10px; color: var(--muted); }
+  .steps > div > span { width: 100%; border-radius: 2px 2px 0 0; min-height: 1px; }
+  .status { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); }
+  .status.acknowledged { color: var(--accent); border-color: var(--accent); }
+  .status.response_approved { color: var(--ok); border-color: var(--ok); }
+  .status.dismissed { color: var(--muted); text-decoration: line-through; }
+  .status.reopened { color: var(--mid); border-color: var(--mid); }
+  input[type=text], input[type=number], textarea { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  textarea { width: 100%; min-height: 48px; }
+  input[type=file] { color: var(--muted); font-size: 12px; max-width: 100%; }
+  pre.preview { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; margin: 8px 0 0; }
+  .badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); margin-left: 6px; vertical-align: middle; }
+  .badge.demo { color: var(--accent); border-color: var(--accent); }
+  .err { color: var(--bad); font-size: 12px; }
+  header a { color: var(--muted); font-size: 12px; }
