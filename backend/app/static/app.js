@@ -178,6 +178,7 @@ function AnalystSection({ alertId, stages, onChange }) {
   const can = { acknowledge: ["open", "reopened"], approve_response: ["open", "acknowledged", "reopened"],
                 dismiss: ["open", "acknowledged", "reopened"], reopen: ["response_approved", "dismissed"] };
   const allowed = a => !can[a] || can[a].includes(st);
+  const noWho = !who.trim(), whoHint = noWho ? "enter an analyst name first" : undefined;
   return html`<div class="section"><h3>Analyst review</h3>
     ${h && html`<div class="kv small" style=${{ marginBottom: "8px" }}>
       <div>Status</div><div><span class=${"status " + st}>${STATUS_LABEL[st] || st}</span></div>
@@ -189,18 +190,18 @@ function AnalystSection({ alertId, stages, onChange }) {
       <input type="text" placeholder="Note (optional; needed to comment)" value=${note} onInput=${e => setNote(e.target.value)} style=${{ flex: 1, minWidth: "160px" }}/>
     </div>
     <div class="row" style=${{ marginBottom: "6px" }}>
-      <button disabled=${busy || !allowed("acknowledge")} onClick=${() => act("acknowledge")}>Acknowledge</button>
-      <button disabled=${busy || !allowed("dismiss")} onClick=${() => act("dismiss")}>Dismiss</button>
-      <button disabled=${busy || !allowed("reopen")} onClick=${() => act("reopen")}>Reopen</button>
-      <button disabled=${busy || !note.trim()} onClick=${() => act("comment")}>Comment</button>
+      <button disabled=${busy || noWho || !allowed("acknowledge")} title=${whoHint} onClick=${() => act("acknowledge")}>Acknowledge</button>
+      <button disabled=${busy || noWho || !allowed("dismiss")} title=${whoHint} onClick=${() => act("dismiss")}>Dismiss</button>
+      <button disabled=${busy || noWho || !allowed("reopen")} title=${whoHint} onClick=${() => act("reopen")}>Reopen</button>
+      <button disabled=${busy || noWho || !note.trim()} title=${whoHint} onClick=${() => act("comment")}>Comment</button>
     </div>
     <div class="row" style=${{ marginBottom: "6px" }}>
       <input type="text" placeholder="Response to approve, e.g. block 172.16.0.1 at the edge" value=${response} onInput=${e => setResponse(e.target.value)} style=${{ flex: 1, minWidth: "200px" }}/>
-      <button class="primary" disabled=${busy || !allowed("approve_response") || !response.trim()} onClick=${() => act("approve_response")}>Approve response</button>
+      <button class="primary" title=${whoHint} disabled=${busy || noWho || !allowed("approve_response") || !response.trim()} onClick=${() => act("approve_response")}>Approve response</button>
     </div>
     <div class="row">
       <select value=${stage} onChange=${e => setStage(e.target.value)}>${stages.map(s => html`<option key=${s} value=${s}>${s}</option>`)}</select>
-      <button disabled=${busy} onClick=${() => act("override_stage")}>Override stage</button>
+      <button disabled=${busy || noWho} title=${whoHint} onClick=${() => act("override_stage")}>Override stage</button>
     </div>
     ${err && html`<div class="err" style=${{ marginTop: "6px" }}>${err}</div>`}
     ${h && h.actions.length > 0 && html`<div class="scroll" style=${{ maxHeight: "180px", marginTop: "8px" }}><table>
@@ -389,13 +390,14 @@ function AuditCard({ alerts }) {
     <div class="chain-k">${name}</div>
     ${!r ? html`<div class="chain-v muted">not checked</div>`
       : html`<div class="chain-v"><span class="chain-s">${r.status === "VERIFIED" ? "✓ " : "✗ "}${r.status}</span>
-        <span class="small muted">${r.status === "VERIFIED" ? `${r[what].toLocaleString()} records` : `record #${r.record_id ?? r.action_id}: ${r.reason}`}</span></div>`}
+        <span class="small muted">${r.status === "VERIFIED" ? `${r[what].toLocaleString()} records` : `${(r.record_id ?? r.action_id) != null ? `record #${r.record_id ?? r.action_id}: ` : ""}${r.reason}`}</span></div>`}
   </div>`;
   return html`<section class="card span5 audit"><h2>Audit ledger (SHA-256 hash chains)</h2>
     <div class="row" style=${{ marginBottom: "10px" }}><button class="primary" disabled=${busy} onClick=${check}>${busy ? "Verifying…" : "Verify chains"}</button>
       <span class="small muted">Recomputes every hash from the stored fields.</span></div>
     <div class="chains">${line(v, "records_checked", "Alerts chain")}${line(va, "actions_checked", "Analyst actions")}</div>
-    ${v && v.head_hash && html`<div class="small muted" style=${{ margin: "6px 0 0" }}>Head hash <${Hash} value=${v.head_hash}/></div>`}
+    ${v && v.head_hash && html`<div class="small muted" style=${{ margin: "6px 0 0" }}>Head hash <${Hash} value=${v.head_hash}/> · anchor: ${v.anchor}</div>`}
+    ${v && html`<div class="small muted" style=${{ margin: "4px 0 0" }}>The chain spans every replay session in the ledger; the table below lists the current session.</div>`}
     <div class="scroll" style=${{ maxHeight: "460px", marginTop: "10px" }}><table class="ledger">
       <thead><tr><th>#</th><th>Host</th><th>Previous hash → hash</th></tr></thead>
       <tbody>${alerts.length ? alerts.map(a => html`<tr key=${a.id} style=${{ cursor: "default" }}><td>${a.id}</td><td class="mono">${a.host_id}</td>
