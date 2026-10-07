@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.tests.conftest import AUTH
 from backend.app import features
 from backend.app.info import MODEL_DIR
 from backend.app.main import create_app
@@ -81,7 +82,7 @@ def test_forecast_needs_stage_model_and_attention_needs_known_model(client):
 
 def test_triage_statuses(client):
     for i in range(3):
-        client.post("/alerts", json=_alert(i))
+        client.post("/alerts", headers=AUTH, json=_alert(i))
     client.post("/alerts/1/actions", json={"action": "acknowledge", "analyst": "a"})
     client.post("/alerts/2/actions", json={"action": "dismiss", "analyst": "a"})
     client.post("/alerts/2/actions", json={"action": "comment", "analyst": "a", "note": "backup job"})

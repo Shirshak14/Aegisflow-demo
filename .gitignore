@@ -27,6 +27,8 @@ frontend/dist/
 *.db
 *.db-wal
 *.db-shm
+*.db.head
+*.db.head.tmp
 .pytest_cache/
 .ipynb_checkpoints/
 

@@ -14,6 +14,7 @@ Implemented commands:
 - window: host-level temporal window aggregation
 - train: train the majority / logistic-regression / LSTM baselines
 - predict: run the trained LSTM on a sequences Parquet file
+- doctor: list the files the demo needs that are missing, and the command that creates each
 
 The replay engine, audit ledger and dashboard are served by the FastAPI app, not by this CLI:
     uvicorn backend.app.main:app --port 8000
@@ -230,6 +231,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_ex.add_argument("--syslog-port", type=int, default=514)
     _common_args(p_ex)
 
+    p_doc = sub.add_parser("doctor", help="Check that the data, model and report files the demo needs exist; "
+                                          "exit 1 and print the fix command for each missing one.")
+    _common_args(p_doc)
+
     # Planned later phases
     for name, phase in [
         ("evaluate", "Phase 3/4 (evaluation report against held-out test split)"),
@@ -258,6 +263,11 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _dispatch(args: argparse.Namespace, cfg) -> int:
+    if args.command == "doctor":
+        from .doctor import demo_ready, format_report, run_checks
+        results = run_checks(cfg.root)
+        print(format_report(results))
+        return 0 if demo_ready(results) else 1
     if args.command == "list-datasets":
         return _cmd_list_datasets(cfg)
     if args.command == "validate-dataset":

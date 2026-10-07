@@ -273,8 +273,8 @@ class ReplayEngine:
             if self._thread and self._thread.is_alive():
                 raise RuntimeError("replay already running; stop it first")
             self.prepare()
-            if reset:
-                self.ledger.reset()
+            # `reset` only starts a fresh session (host state, cursor, new session_id). The ledger is kept, so
+            # earlier sessions stay verifiable; the API scopes alerts to the current session by default.
             self._reset_state()
             self.state, self.speed, self.session_id = "running", speed, uuid.uuid4().hex[:8]
             self.started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")

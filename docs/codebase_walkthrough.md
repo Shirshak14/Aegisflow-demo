@@ -100,10 +100,10 @@ Tests that prove it (`backend/tests/test_audit.py`): editing a field directly in
 
 What it does **not** prove (say this before a judge does; the module docstring already admits the first one):
 
-- Deleting the newest record(s) leaves a shorter, valid chain. Detecting that requires recording `head_hash` somewhere else (`verify` returns it).
-- Someone with write access to the DB who edits a row and recomputes *every later hash* produces a valid chain. There is no secret key (no HMAC), no signature, no external anchor.
-- `Ledger.reset()` (`:114`) deletes all rows, and `ReplayEngine.start(reset=True)` calls it on every Start click (`replay.py:140-141`). So it is append-only within a replay session, not across sessions.
-- `POST /alerts` (`backend/app/main.py:130`) has no authentication.
+- Deleting the newest record(s) leaves a shorter, valid chain. The head anchor file (`<db>.head`) now catches this, but it sits next to the DB: someone with full filesystem access and no signing key can rewrite both.
+- Someone with write access to the DB who edits a row and recomputes *every later hash* produces a valid chain. The anchor catches this too; set `AEGISFLOW_LEDGER_KEY` to HMAC-sign it so the edit also needs the key.
+- `Ledger.reset()` deletes all rows but nothing in the app calls it any more: Start opens a new session in the same chain, so earlier sessions stay and verify. `/alerts`, `/health` and `/triage/summary` default to the current session.
+- `POST /alerts` needs an `X-API-Key` header and is disabled unless `AEGISFLOW_API_KEY` is set. Analyst endpoints still have no authentication.
 - It is a single-node SHA-256 hash chain in SQLite. The README says so ("not a decentralized blockchain network"). Use the words "tamper-evident", never "tamper-proof" or "blockchain".
 
 Live tamper demo (only on a throwaway copy of `aegisflow.db`, with the server pointed at it via `AEGISFLOW_DB`): `UPDATE alerts SET risk_score = 0 WHERE id = 3;` then press **Verify chain** → `CORRUPTED`, record #3. Not run by me.
@@ -211,7 +211,7 @@ Do not overclaim these live.
 | `attack_stage` / `stages.yaml`, Exfiltration in `stages_order` and the severity table | A reliable kill-chain mapping | Proxy from dataset labels. No CIC-IDS2017 label maps to Exfiltration, so the stage never occurs. Heartbleed/Infiltration → Lateral Movement is flagged "weak" in the YAML. | "Inferred proxy stages, not ground truth." |
 | MITRE panel in alert detail | MITRE-mapped prediction | A YAML lookup keyed on the **dataset label's** stage. | "Static ATT&CK mapping of the label." |
 | "Network Traffic Replay" | Flows pushed through the pipeline in real time | Pre-scored held-out sequences released on a simulated clock. | "Replay of recorded held-out data." |
-| "Hash-chain / blockchain" (SIH theme) | Immutable ledger | Single-node SQLite chain; tail deletion undetected; wiped on each Start; unauthenticated `POST /alerts`; no keys. | "Tamper-evident hash chain." |
+| "Hash-chain / blockchain" (SIH theme) | Immutable ledger | Single-node SQLite chain; tail deletion and recomputation caught by the head anchor (signed only if a key is set); sessions kept; `POST /alerts` key-protected; analyst endpoints unauthenticated. | "Tamper-evident hash chain." |
 | "Forecasting / early warning" | Minutes-ahead prediction | Median 30 s lead; 86 % of test positives are continuations; a rule that reads labels beats the models. | "Next-window prediction; we measure onset separately." |
 | `SequencePreprocessor` + `RobustScaler` + seeds + `torch.use_deterministic_algorithms(True, warn_only=True)` | Fully reproducible training | Seeded and mostly deterministic on one machine. `warn_only=True` means non-deterministic ops only warn. | "Seeded; same machine reproduces." |
 | The LSTM "best" checkpoint | A trained model | Epoch 1 of 4: validation loss was 1.68 at epoch 1 and rose after (2.30, 2.10, 2.75). ~3k parameters, 382 training positives, all from one host. | "A small baseline that overfits quickly." |
@@ -265,5 +265,5 @@ Replay: 11,379 events, 349 alerts, 79 matching an attack label.
 
 - `python -m aegisflow rebuild-temporal` / `preprocess` without `--reingest`: overwrites `reports/data_quality_report.{md,json}` and the processed Parquet. The hard-coded benchmark branch won't fire for the current 446,137-row interim file, so the regenerated report will show `raw rows loaded = 446,137` and zero dropped. The dashboard's dataset line reads that JSON. `preprocess --sample-size` without `--reingest` also truncates to the first N rows.
 - `python -m aegisflow train ...` (overwrites `artifacts/models/cic_ids2017/`) and `scripts/audit_phase3.py` (overwrites `evaluation_audit.json`, `audit_predictions.csv`).
-- Clicking **Start** in the dashboard wipes the alert ledger (`reset=True`).
+- Clicking **Start** in the dashboard opens a new session; the ledger keeps earlier sessions (it no longer wipes).
 - `data/`, `artifacts/models/**` and `*.db` are in `.gitignore`: the demo works only on a machine that has the local files. A fresh clone returns HTTP 503 from `/dataset/status`, `/model/status`, `/replay/start` until preprocess + train are run.

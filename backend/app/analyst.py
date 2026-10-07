@@ -135,13 +135,16 @@ class AnalystLog:
                                   ON a.id = l.last""").fetchall()
         return {int(r["alert_id"]): r["status_after"] for r in rows}
 
-    def summary(self) -> dict[str, int]:
-        """Number of alerts in each status (alerts with no action are 'open')."""
+    def summary(self, session_id: str | None = None) -> dict[str, int]:
+        """Number of alerts in each status (alerts with no action are 'open'); one session, or all if None."""
+        flt, args = ("WHERE session_id = ?", [session_id]) if session_id else ("", [])
         with self._connect() as con:
-            total = int(con.execute("SELECT COUNT(*) FROM alerts").fetchone()[0])
-            rows = con.execute("""SELECT a.status_after AS s, COUNT(*) AS n FROM alert_actions a
+            total = int(con.execute(f"SELECT COUNT(*) FROM alerts {flt}", args).fetchone()[0])
+            rows = con.execute(f"""SELECT a.status_after AS s, COUNT(*) AS n FROM alert_actions a
                                   JOIN (SELECT alert_id, MAX(id) AS last FROM alert_actions GROUP BY alert_id) l
-                                  ON a.id = l.last GROUP BY a.status_after""").fetchall()
+                                  ON a.id = l.last
+                                  WHERE a.alert_id IN (SELECT id FROM alerts {flt})
+                                  GROUP BY a.status_after""", args).fetchall()
         out = {r["s"]: int(r["n"]) for r in rows}
         out["open"] = out.get("open", 0) + total - sum(out.values())
         return out

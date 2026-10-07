@@ -1,7 +1,11 @@
-.PHONY: setup validate ingest eda preprocess train serve test feature-registry
+.PHONY: check setup validate ingest eda preprocess train serve test feature-registry
 
 setup:
 	pip install -r requirements.txt
+
+# lists missing data/model/report files and the command that creates each
+check:
+	python -m aegisflow doctor
 
 validate:
 	python -m aegisflow validate-dataset --dataset cic_ids2017

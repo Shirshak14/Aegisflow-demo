@@ -332,7 +332,7 @@ http://127.0.0.1:8000
 
 The dashboard provides access to the project's monitoring and replay interface.
 
-Note: until the dataset has been preprocessed and the model trained, the dashboard loads but `/dataset/status`, `/model/status` and `/replay/start` return HTTP 503 explaining what is missing.
+Note: until the dataset has been preprocessed and the model trained, the dashboard loads but `/dataset/status`, `/model/status` and `/replay/start` return HTTP 503 explaining what is missing. Run `python -m aegisflow doctor` (or `make check`) to list every missing file and the command that creates it.
 
 
 # Replay
@@ -390,6 +390,10 @@ Hash 3
 If an earlier record is modified, the subsequent chain relationships can be detected during verification.
 
 The ledger is a tamper-evident hash chain, not a decentralized blockchain network.
+
+Head anchor: after every append the newest record's id and hash are also written to `<ledger db>.head`, so `GET /audit/verify` can detect deletion of the most recent records and a fully recomputed chain. Set `AEGISFLOW_LEDGER_KEY` to HMAC-sign the anchor; without it the anchor is a plain second copy of the head.
+
+`POST /alerts` is disabled unless `AEGISFLOW_API_KEY` is set on the server, and then needs that value in an `X-API-Key` header. The replay engine writes to the ledger directly and does not use this endpoint.
 
 
 # MITRE ATT&CK

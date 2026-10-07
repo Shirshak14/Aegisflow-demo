@@ -1,15 +1,16 @@
 """AegisFlow demo backend (FastAPI). Run: uvicorn backend.app.main:app --port 8000"""
 from __future__ import annotations
 
+import hmac
 import os
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from aegisflow.config import load_config
 
@@ -24,7 +25,7 @@ MAX_UPLOAD_BYTES = 200 * 2**20
 
 class ReplayStart(BaseModel):
     speed: int | None = None
-    reset: bool = True
+    reset: bool = True  # starts a fresh session; kept for compatibility. The ledger is no longer wiped.
 
 
 class ActionIn(BaseModel):
@@ -39,28 +40,50 @@ class StreamFlows(BaseModel):
     flows: list[dict[str, Any]]
 
 
+Prob = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
+Flag = Literal[0, 1]
+ShortStr = Annotated[str, Field(max_length=128)]
+Timestamp = Annotated[str, Field(max_length=64)]
+
+
 class AlertIn(BaseModel):
-    session_id: str | None = None
-    sequence_id: str
-    host_id: str
-    predicted_at: str | None = None
-    target_window_start: str | None = None
-    target_window_end: str | None = None
-    lstm_probability: float | None = None
-    lstm_threshold: float | None = None
-    lr_probability: float | None = None
-    lr_threshold: float | None = None
-    lr_flag: int | None = None
-    reference_rule_flag: int | None = None
-    risk_score: float | None = None
-    risk_components: dict[str, Any] | None = None
-    confidence: float | None = None
-    confidence_label: str | None = None
-    predicted_stage: str | None = None
-    truth_attack: int | None = None
-    truth_class: str | None = None
-    truth_stage: str | None = None
-    model_version: str | None = None
+    """Alert body for POST /alerts. Ranges match what the replay engine produces (probabilities 0-1, risk 0-100)."""
+    session_id: ShortStr | None = None
+    sequence_id: ShortStr
+    host_id: ShortStr
+    predicted_at: Timestamp | None = None
+    target_window_start: Timestamp | None = None
+    target_window_end: Timestamp | None = None
+    lstm_probability: Prob | None = None
+    lstm_threshold: Prob | None = None
+    lr_probability: Prob | None = None
+    lr_threshold: Prob | None = None
+    lr_flag: Flag | None = None
+    reference_rule_flag: Flag | None = None
+    risk_score: Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)] | None = None
+    risk_components: dict[ShortStr, float | int | str | None] | None = Field(None, max_length=32)
+    confidence: Prob | None = None
+    confidence_label: ShortStr | None = None
+    predicted_stage: ShortStr | None = None
+    truth_attack: Flag | None = None
+    truth_class: ShortStr | None = None
+    truth_stage: ShortStr | None = None
+    model_version: ShortStr | None = None
+
+
+API_KEY_ENV = "AEGISFLOW_API_KEY"
+
+
+def require_api_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
+    """Guard for endpoints that write to the ledger from outside the replay engine.
+
+    Closed by default: with no AEGISFLOW_API_KEY configured the endpoint is disabled rather than open.
+    """
+    expected = os.environ.get(API_KEY_ENV)
+    if not expected:
+        raise HTTPException(503, f"POST /alerts is disabled: set {API_KEY_ENV} on the server and send it as X-API-Key")
+    if not x_api_key or not hmac.compare_digest(x_api_key.encode("utf-8"), expected.encode("utf-8")):
+        raise HTTPException(401, "missing or invalid X-API-Key")
 
 
 def default_db_path() -> Path:
@@ -115,9 +138,21 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         """Trained models under artifacts/models with the test metrics their trainer wrote (nothing recomputed)."""
         return features.list_models(demo_dir=info.MODEL_DIR)
 
+    def scope(session_id: str | None) -> str | None:
+        """Session filter for alert reads: omitted = the current replay session (all alerts when none has
+        started); "all" = every session in the ledger; anything else = that session id."""
+        if session_id is None:
+            return engine.session_id
+        return None if session_id == "all" else session_id
+
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"status": "ok", "alerts_in_ledger": ledger.count(), "replay_state": engine.state}
+        return {"status": "ok", "alerts_in_ledger": ledger.count(), "alerts_in_session": ledger.count(scope(None)),
+                "session_id": engine.session_id, "replay_state": engine.state}
+
+    @app.get("/audit/sessions")
+    def audit_sessions() -> list[dict[str, Any]]:
+        return ledger.sessions()
 
     @app.get("/dataset/status")
     def dataset_status() -> dict[str, Any]:
@@ -162,7 +197,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         h = engine.host(host_id)
         if h is None:
             raise HTTPException(404, f"host {host_id} not seen in the current replay")
-        return h | {"alerts_list": ledger.list(limit=200, host_id=host_id)}
+        return h | {"alerts_list": ledger.list(limit=200, host_id=host_id, session_id=engine.session_id)}
 
     @app.get("/explain/{sequence_id}")
     def explain(sequence_id: str, model: str = "lstm", method: str = "shap", top: int = 5) -> dict[str, Any]:
@@ -209,15 +244,16 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
             raise HTTPException(404, f"unknown stage '{stage}'; known: {info.mitre_stages()}")
         return m
 
-    @app.post("/alerts", status_code=201)
+    @app.post("/alerts", status_code=201, dependencies=[Depends(require_api_key)])
     def post_alert(alert: AlertIn) -> dict[str, Any]:
-        """Internal: used by the replay engine to append an alert to the hash chain."""
+        """Append an externally produced alert to the hash chain. Needs the X-API-Key header (see require_api_key);
+        the replay engine writes to the ledger directly and does not use this endpoint."""
         return ledger.append(alert.model_dump())
 
     @app.get("/alerts")
     def list_alerts(limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
-                    host_id: str | None = None) -> list[dict[str, Any]]:
-        return ledger.list(limit=limit, offset=offset, host_id=host_id)
+                    host_id: str | None = None, session_id: str | None = None) -> list[dict[str, Any]]:
+        return ledger.list(limit=limit, offset=offset, host_id=host_id, session_id=scope(session_id))
 
     @app.get("/alerts/{alert_id}")
     def get_alert(alert_id: int) -> dict[str, Any]:
@@ -351,8 +387,8 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         return analyst.statuses()
 
     @app.get("/triage/summary")
-    def triage_summary() -> dict[str, int]:
-        return analyst.summary()
+    def triage_summary(session_id: str | None = None) -> dict[str, int]:
+        return analyst.summary(scope(session_id))
 
     @app.get("/audit/verify-actions")
     def verify_actions() -> dict[str, Any]:

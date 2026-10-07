@@ -4,6 +4,7 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.tests.conftest import AUTH
 from backend.app.analyst import ActionError, AnalystLog
 from backend.app.audit import Ledger
 from backend.app.main import create_app
@@ -95,7 +96,7 @@ def test_reset_clears_actions(log):
 def test_api(tmp_path):
     client = TestClient(create_app(tmp_path / "a.db", warm_up=False))
     for i in range(2):
-        assert client.post("/alerts", json=_alert(i)).status_code == 201
+        assert client.post("/alerts", headers=AUTH, json=_alert(i)).status_code == 201
     r = client.post("/alerts/1/actions", json={"action": "override_stage", "analyst": "asha", "stage": "Impact"})
     assert r.status_code == 201 and r.json()["status_after"] == "open"
     assert client.post("/alerts/1/actions", json={"action": "approve_response", "analyst": "ravi",

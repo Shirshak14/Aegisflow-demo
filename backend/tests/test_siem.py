@@ -5,6 +5,7 @@ import socket
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.tests.conftest import AUTH
 from backend.app.audit import Ledger
 from backend.app.main import create_app
 from backend.app.siem import alerts_since, render, send_syslog_udp, severity, to_cef, to_jsonl, to_syslog
@@ -73,7 +74,7 @@ def test_api_and_cli(tmp_path, capsys):
     db = tmp_path / "a.db"
     client = TestClient(create_app(db, warm_up=False))
     for i in range(1, 4):
-        client.post("/alerts", json=_alert(i))
+        client.post("/alerts", headers=AUTH, json=_alert(i))
     r = client.get("/export/alerts", params={"format": "jsonl", "since_id": 1})
     assert r.status_code == 200 and [json.loads(l)["event"]["id"] for l in r.text.splitlines()] == [2, 3]
     assert client.get("/export/alerts", params={"format": "xml"}).status_code == 422

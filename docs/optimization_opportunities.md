@@ -10,6 +10,9 @@ Rule applied: if touching an item could plausibly break the demo path (`backend/
 
 - **A1** (off-laptop backup and replay recording, done by you), **A2–A4, A6–A10, A12:** stale docs and report banners, `httpx` in `requirements.txt`, config comments, unused dependencies annotated as planned, unused imports, CLI docstring, stale metrics string, `requirements.lock.txt`.
 - **B8** (config wired to behaviour) and **B10** (lazy backend app): both are on `main`.
+- **C1–C5, C7:** `artifacts/experiments/**` gitignored; Makefile targets; `GET /alerts` validation; `pyproject.toml` cleanup; `modeling.py` defaults match `config.yaml`; seeding side effect documented.
+- **C17** (`python -m aegisflow doctor` / `make check` lists missing data, model and report files with the fix command for each), **C8** (`.github/workflows/tests.yml` runs `pytest` on every push and pull request), **C9** (`backend/tests/conftest.py` trains a tiny model on synthetic sequences, so `test_replay.py` runs without local data), **C14** (`AlertIn` range, flag and length limits).
+- **B4:** `POST /alerts` needs `X-API-Key` (disabled unless `AEGISFLOW_API_KEY` is set); a head anchor file `<db>.head`, HMAC-signed when `AEGISFLOW_LEDGER_KEY` is set, catches tail deletion and full chain recomputation; one reused SQLite connection per thread instead of a new connection and `PRAGMA` on every call. Replay Start no longer wipes the ledger: sessions accumulate in one verifiable chain and reads default to the current session (`session_id=all` for everything).
 - **A5** (README "Known limitations" section): tried, then reverted at your request. The README keeps its original generic wording.
 
 ---
@@ -29,7 +32,6 @@ Rule applied: if touching an item could plausibly break the demo path (`backend/
 | B1 | **Per-host normalisation / host-controlled representation** (z-score each host's windows against its own history, or key windows by victim host; see `reports/lodo_pilot_report.md` and `docs/host_disjoint_evaluation_design.md`) | The headline weakness: the LSTM acts as an attacker-host recogniser (29/29 benign flagged on `172.16.0.1`, and the host rule matches it). | 2-4 days including re-running preprocess, train, `phase3_baselines.py`, `lodo_pilot.py`, and rewriting the reports | Changes features, tensors, thresholds and every number on the dashboard and in every report. It may make the headline metrics worse before it makes them honest. |
 | B2 | **Push updates (WebSocket or SSE) instead of 1 s polling** (`index.html` polls three endpoints every second) | 3 requests/s per open tab, one-second lag, polling continues after stop. | 0.5-1 day | Touches `main.py`, `replay.py` and the whole UI loop; a subtle bug shows up as a frozen dashboard live. |
 | B3 | **Real streaming path** (flows → windows → sequences online, scoring as data arrives) | `ReplayEngine._prepare` scores the whole test split in one batch at startup; the replay only paces pre-computed scores. | 1-2 weeks | New code on the hot path; needs incremental windowing and a state store. |
-| B4 | **Ledger hardening** (`backend/app/audit.py`) — (a) per-session chains instead of `reset()` wiping everything; (b) authenticate `POST /alerts`; (c) HMAC or signed head hash, or write `head_hash` to a second location, to catch tail deletion and full recomputation; (d) reuse one connection instead of a new connection plus `PRAGMA journal_mode=WAL` on every call (`audit.py:_connect`); note `with sqlite3.connect()` commits but does not close the connection | Closes "can't someone recompute the chain?" and "is it really append-only?". | 1-2 days with tests | Changes the hashed fields or schema, which invalidates existing ledgers and the `test_audit.py` tests. |
 | B5 | **Read the ingest in chunks with `usecols`** (`cic_ids2017.py`) | Each CSV is read with all ~80 columns, `low_memory=False`, then frames are concatenated and copied again in `_to_canonical`. Fine at 500k rows; heavy at 2.83M. | 0.5-1 day | Must produce byte-identical Parquet; needs a golden-file comparison. |
 | B6 | **Vectorise windowing** (`windowing.py`: per-flow `np.arange` list comprehension; row-wise `.apply` for dominant class/stage/distribution) | Slowest Python-level loop in the pipeline. | 1 day | Output must match exactly; one off-by-one changes `attack_present`. |
 | B7 | **Store sequences as arrays, not nested Python lists** (`sequences.py` `.tolist()`; `modeling.py` `ForecastDataset.from_frame` converts back with a double `np.asarray(...tolist())`; per-sequence `np.flatnonzero` over a host's windows is quadratic per host) | `sequences.parquet` is ~32 MB for 85k rows; loading goes through slow object arrays. | 1 day | Touches the leakage-critical builder and the training loader. |
@@ -43,13 +45,9 @@ Rule applied: if touching an item could plausibly break the demo path (`backend/
 
 ## Section C — New findings (not in the earlier A/B lists)
 
-C1-C5 and C7 are done; C6 is partly done; C8-C17 are for after the deadline.
+C6 is partly done; C10-C13, C15 and C16 are for after the deadline. C1-C5, C7, C8, C9, C14 and C17 are done and removed.
 
-### C-low: done
-
-C1 (`artifacts/experiments/**` gitignored), C2 (Makefile: `preprocess`, `train`, `serve` targets, `test` runs plain `pytest`, `lint` removed), C3 (`GET /alerts` now validates `limit` 1-1000 and `offset` >= 0, returns 422 otherwise), C4 (`pyproject.toml`: dependencies read from `requirements.txt`, `aegisflow` console script, minimal ruff section), C5 (`modeling.py` defaults equal `config.yaml`: hidden 16, epochs 8, batch 256, patience 3), C7 (global seeding / deterministic-algorithms side effect documented in the `train_experiment` docstring). All 71 tests pass.
-
-Still open from this group:
+### C-low: still open
 
 | # | File | Issue | Fix | Risk |
 |---|---|---|---|---|
@@ -59,20 +57,16 @@ Still open from this group:
 
 | # | File | Issue | Fix | Effort |
 |---|---|---|---|---|
-| C8 | `.github/` (does not exist) | No CI. Nothing runs the tests on push, so a broken commit is found by hand. | Add a GitHub Actions workflow: install `requirements.txt`, run `pytest`. See C9 for why the demo path is not covered. | 1-2 hours |
-| C9 | `backend/tests/test_replay.py:10` | The replay test is skipped when `data/processed` and `artifacts/models` are absent, which is always the case on a fresh clone or in CI. So the demo path (scoring, risk, ledger, 349/79 counts) is only tested on this laptop. | Commit a tiny synthetic `sequences.parquet` and a small trained model as test fixtures (or generate them in a fixture), and assert on those. | 0.5-1 day |
 | C10 | `backend/app/replay.py` `_run`/`_process` | The hot loop does `ev.target_window_start.iloc[self.cursor]` and `ev.iloc[self.cursor]` per row. Each pandas `iloc` builds Series/objects, so a 10,000× replay spends most of its time in pandas overhead. | Convert the columns to NumPy arrays or a list of tuples once in `_prepare`, and iterate over those. | 2-3 hours (demo path; verify counts unchanged) |
 | C11 | `backend/app/replay.py:_prepare`, `modeling.py` `predict_sequences` | The LSTM scores the whole split in one `net(torch.tensor(x))` call, and `train_experiment` does the same for validation and test. Fine at 11k sequences; memory grows linearly, so the 2.83M ingest (B13) could run out of RAM. | Score in batches (e.g. 4,096) under `torch.no_grad()`. | 1-2 hours |
 | C12 | `backend/app/replay.py:_prepare` | Reads all of `sequences.parquet` (~32 MB) and then filters to `split == "test"`. `info._sequence_host_counts` reads it again. Slower server start-up than necessary. | Use `pd.read_parquet(path, filters=[("split", "==", "test")])` and only the columns needed. | 1 hour |
 | C13 | `aegisflow/ml/modeling.py:select_threshold` | Tries every unique validation probability as a candidate and calls `f1_score` for each, which is O(n²). It is instant at 1.5k rows but slow at larger validation sets. Ties also resolve to the lowest threshold. | Use `sklearn.metrics.precision_recall_curve` and compute F1 for all thresholds at once. | 1 hour; must reproduce the committed threshold exactly |
-| C14 | `backend/app/main.py` `AlertIn` | Fields such as `lstm_probability`, `risk_score` and `confidence` accept any float, and `truth_attack`/`lr_flag` accept any integer. Combined with the unauthenticated `POST /alerts` (B4b), anyone can write out-of-range data into the ledger. | Add `Field(ge=0, le=1)` bounds, `Literal[0, 1]` for the flags, and length limits on strings. | 1 hour; do together with B4 |
 | C15 | `backend/app/replay.py` `hosts` state | Each host's `timeline` list grows by one entry per sequence for the whole replay and `/hosts/{id}` copies it on every call. Fine for 11k sequences; unbounded for a longer run. | Cap the timeline (e.g. last 500 points) or downsample. | 1 hour |
 | C16 | `backend/app/info.py:evaluation` and `index.html` | The dashboard compares evaluation tables against the live replay at runtime and shows a warning when they differ. That check is only exercised when someone changes the model, and has no test. | Add a test that builds mismatching inputs and asserts the warning is raised. | 1-2 hours |
-| C17 | `README.md` | The quickstart assumes the local data and artifacts exist. A fresh clone still gets HTTP 503 on three endpoints (see A1). The README names this, but there is no one-command check. | Add a `python -m aegisflow doctor` (or `make check`) that lists which required files are missing and the command to create each. | 2-3 hours |
 
 ---
 
 ## Suggested order
 
 - **Before the deadline:** nothing further is needed (A11 is optional clutter cleanup).
-- **After the deadline:** B1 (the real scientific fix) first, then C8 and C9 (CI and a test that runs without local data), B4 together with C14, then C10 to C13 before any larger ingest (B13). B2 and B3 only if the product direction needs them.
+- **After the deadline:** B1 (the real scientific fix) first, C10 to C13 before any larger ingest (B13). B2 and B3 only if the product direction needs them.
