@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from aegisflow.config import load_config
 
-from . import features, info
+from . import features, info, live
 from .analyst import ActionError, AnalystLog
 from .audit import Ledger
 from .replay import ReplayEngine
@@ -389,6 +389,19 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     @app.get("/triage/summary")
     def triage_summary(session_id: str | None = None) -> dict[str, int]:
         return analyst.summary(scope(session_id))
+
+    def live_snapshot() -> dict[str, Any]:
+        """Same bodies as GET /replay/status, /hosts, /alerts?limit=50, /triage/statuses and /triage/summary."""
+        return {"st": engine.status(), "hosts": engine.host_list(),
+                "alerts": ledger.list(limit=50, offset=0, host_id=None, session_id=scope(None)),
+                "statuses": analyst.statuses(), "triage": analyst.summary(scope(None))}
+
+    @app.get("/live")
+    async def live_stream(request: Request, max_events: int | None = Query(None, ge=1, le=1000)) -> StreamingResponse:
+        """Server-sent events: a `snapshot` event whenever the dashboard's live data changes (see live.py)."""
+        return StreamingResponse(live.snapshot_events(live_snapshot, request.is_disconnected, max_events=max_events),
+                                 media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.get("/audit/verify-actions")
     def verify_actions() -> dict[str, Any]:

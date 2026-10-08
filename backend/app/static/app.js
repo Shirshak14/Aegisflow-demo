@@ -545,21 +545,33 @@ function App() {
     })().catch(setBootErr);
   }, []);
 
+  const apply = useCallback(snap => {
+    setLive(snap); setLiveErr(null);
+    if (snap.st.state === "running") setTick(x => x + 1);
+  }, []);
+  // one-shot refresh (after an analyst action, or as the fallback loop below)
   const poll = useCallback(async () => {
     try {
       const [st, hosts, alerts, statuses, triage] = await Promise.all([api("/replay/status"), api("/hosts"), api("/alerts?limit=50"),
         api("/triage/statuses"), api("/triage/summary")]);
-      setLive({ st, hosts, alerts, statuses, triage }); setLiveErr(null);
-      if (st.state === "running") setTick(x => x + 1);
+      apply({ st, hosts, alerts, statuses, triage });
     } catch (e) { setLiveErr(e.message); }
-  }, []);
+  }, [apply]);
   useEffect(() => {
     if (!boot) return;
     let stop = false;
     const loop = async () => { await poll(); if (!stop) timer.current = setTimeout(loop, 1000); };
-    loop();
-    return () => { stop = true; clearTimeout(timer.current); };
-  }, [boot, poll]);
+    if (!window.EventSource) { loop(); return () => { stop = true; clearTimeout(timer.current); }; }
+    // server-sent events: the backend pushes a snapshot only when it changes (GET /live)
+    const es = new EventSource("/live");
+    es.addEventListener("snapshot", e => apply(JSON.parse(e.data)));
+    es.addEventListener("error", e => {
+      if (e.data) setLiveErr(JSON.parse(e.data).detail);  // server-reported error event
+      else if (es.readyState === EventSource.CONNECTING) setLiveErr("live stream lost, reconnecting…");
+      else if (es.readyState === EventSource.CLOSED && !stop) { setLiveErr("live stream closed, polling every second"); loop(); }
+    });
+    return () => { stop = true; es.close(); clearTimeout(timer.current); };
+  }, [boot, poll, apply]);
 
   if (bootErr) return html`<main><section class="card span12"><h2>Cannot load</h2><div class="err">${bootErr.message}</div></section></main>`;
   if (!boot) return html`<p style=${{ padding: "20px" }} class="muted">Loading dashboard…</p>`;

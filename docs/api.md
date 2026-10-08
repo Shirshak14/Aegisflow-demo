@@ -18,6 +18,7 @@ Until `preprocess` and `train` have been run, endpoints that need data or the mo
 | POST | `/replay/start` | Body `{"speed": 1\|10\|100\|1000, "reset": true}`. `reset: true` starts a fresh session; the ledger is kept, earlier sessions stay in it and keep verifying. 409 if already running, 422 for a bad speed |
 | POST | `/replay/stop` | Stop the replay |
 | GET | `/replay/status` | State, progress, sim clock, alert counts |
+| GET | `/live` | Server-sent events for the dashboard: a `snapshot` event (`st`, `hosts`, `alerts`, `statuses`, `triage`, the bodies of `/replay/status`, `/hosts`, `/alerts?limit=50`, `/triage/statuses`, `/triage/summary`) whenever that data changes, checked every 0.5 s; a keep-alive comment every 15 s otherwise; an `error` event if a snapshot fails. `max_events` closes the stream after N events (tests) |
 | GET | `/hosts` | Hosts seen in the current replay, sorted by alerts then risk |
 | GET | `/hosts/{host_id}` | One host: risk timeline and its alerts |
 | GET | `/explain/{sequence_id}` | Feature / time-step attribution of one test-split prediction. Query: `model=lstm\|logistic_regression`, `method=shap\|integrated_gradients`, `top` (1-28). 404 if the sequence is not in the test split, 501 if `shap` is not installed. Not used by the dashboard; never writes to the ledger |
