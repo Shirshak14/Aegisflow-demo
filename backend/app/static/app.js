@@ -386,16 +386,23 @@ function AuditCard({ alerts }) {
     setBusy(true);
     try { setV(await api("/audit/verify")); setVa(await api("/audit/verify-actions")); } finally { setBusy(false); }
   };
-  const line = (r, what, name) => html`<div class=${"chain " + (!r ? "" : r.status === "VERIFIED" ? "ok" : "bad")}>
+  // unit: "record" for alerts, "action" for analyst actions. The id prefix is skipped when the reason
+  // already names it (head-anchor problems point at a record that may no longer exist).
+  const detail = (r, what, unit) => {
+    if (r.status === "VERIFIED") return `${r[what].toLocaleString()} ${unit}${r[what] === 1 ? "" : "s"}`;
+    const id = r.record_id ?? r.action_id;
+    return (id != null && !r.reason.includes(`${unit} ${id}`) ? `${unit} #${id}: ` : "") + r.reason;
+  };
+  const line = (r, what, unit, name) => html`<div class=${"chain " + (!r ? "" : r.status === "VERIFIED" ? "ok" : "bad")}>
     <div class="chain-k">${name}</div>
     ${!r ? html`<div class="chain-v muted">not checked</div>`
       : html`<div class="chain-v"><span class="chain-s">${r.status === "VERIFIED" ? "✓ " : "✗ "}${r.status}</span>
-        <span class="small muted">${r.status === "VERIFIED" ? `${r[what].toLocaleString()} records` : `${(r.record_id ?? r.action_id) != null ? `record #${r.record_id ?? r.action_id}: ` : ""}${r.reason}`}</span></div>`}
+        <span class="small muted">${detail(r, what, unit)}</span></div>`}
   </div>`;
   return html`<section class="card span5 audit"><h2>Audit ledger (SHA-256 hash chains)</h2>
     <div class="row" style=${{ marginBottom: "10px" }}><button class="primary" disabled=${busy} onClick=${check}>${busy ? "Verifying…" : "Verify chains"}</button>
       <span class="small muted">Recomputes every hash from the stored fields.</span></div>
-    <div class="chains">${line(v, "records_checked", "Alerts chain")}${line(va, "actions_checked", "Analyst actions")}</div>
+    <div class="chains">${line(v, "records_checked", "record", "Alerts chain")}${line(va, "actions_checked", "action", "Analyst actions")}</div>
     ${v && v.head_hash && html`<div class="small muted" style=${{ margin: "6px 0 0" }}>Head hash <${Hash} value=${v.head_hash}/> · anchor: ${v.anchor}</div>`}
     ${v && html`<div class="small muted" style=${{ margin: "4px 0 0" }}>The chain spans every replay session in the ledger; the table below lists the current session.</div>`}
     <div class="scroll" style=${{ maxHeight: "460px", marginTop: "10px" }}><table class="ledger">
