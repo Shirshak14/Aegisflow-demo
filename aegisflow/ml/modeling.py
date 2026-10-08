@@ -33,13 +33,14 @@ class ForecastDataset:
     stages: np.ndarray
     future_state: np.ndarray
     feature_names: list[str]
+    host_relative: bool = False
 
     @classmethod
-    def from_parquet(cls, path: str | Path) -> "ForecastDataset":
-        return cls.from_frame(pd.read_parquet(path))
+    def from_parquet(cls, path: str | Path, **kwargs: Any) -> "ForecastDataset":
+        return cls.from_frame(pd.read_parquet(path), **kwargs)
 
     @classmethod
-    def from_frame(cls, frame: pd.DataFrame) -> "ForecastDataset":
+    def from_frame(cls, frame: pd.DataFrame, *, host_relative: bool = False, **hr_kwargs: Any) -> "ForecastDataset":
         required = {"sequence_features", "target_features", "target_attack_present",
                     "target_dominant_class", "target_dominant_stage", "split"}
         missing = required - set(frame.columns)
@@ -53,12 +54,58 @@ class ForecastDataset:
         if X.ndim != 3 or X.shape[2] != len(raw_names) or ystate.shape != (len(frame), len(raw_names)):
             raise ValueError(f"Unexpected feature tensor shapes: X={X.shape}, target={ystate.shape}")
         X = X[:, :, [raw_names.index(name) for name in names]]
-        return cls(frame.reset_index(drop=True), X, frame.target_attack_present.to_numpy(np.int64),
+        frame = frame.reset_index(drop=True)
+        if host_relative:
+            # Must see every split of a host so its baseline is its own past, whatever the split.
+            X = host_relative_inputs(frame, X, names, **hr_kwargs)
+        return cls(frame, X, frame.target_attack_present.to_numpy(np.int64),
                    frame.target_dominant_class.astype(str).to_numpy(),
-                   frame.target_dominant_stage.astype(str).to_numpy(), ystate, names)
+                   frame.target_dominant_stage.astype(str).to_numpy(), ystate, names, host_relative)
 
     def indices(self, split: str) -> np.ndarray:
         return np.flatnonzero(self.frame.split.to_numpy() == split)
+
+
+def _signed_log(X: np.ndarray, names: list[str], log_features: set[str]) -> np.ndarray:
+    x = np.asarray(X, dtype=np.float64).copy()
+    x[~np.isfinite(x)] = np.nan
+    for i, name in enumerate(names):
+        if name in log_features:
+            x[..., i] = np.sign(x[..., i]) * np.log1p(np.abs(x[..., i]))
+    return x
+
+
+def host_relative_inputs(frame: pd.DataFrame, X: np.ndarray, names: list[str], *,
+                         window_seconds: float = 60.0, lookback: int = 240,
+                         min_history: int = 5) -> np.ndarray:
+    """Express every input window relative to the same host's own *past* (B1).
+
+    For a sequence starting at ``t`` the baseline is the per-feature median of that host's
+    earlier sequence-first-windows that had already ended by ``t`` (``start + window_seconds
+    <= t``), capped to the last ``lookback`` of them. Nothing at or after ``t`` is used, so
+    the baseline is causal. Output is ``log-space window - baseline``; a host with fewer than
+    ``min_history`` earlier windows gets a zero delta (no evidence it differs from itself).
+    Quiet hosts therefore look alike, and a host that is always noisy (e.g. an attacker) is
+    no longer recognisable merely by its level.
+    """
+    x = _signed_log(X, names, SequencePreprocessor.LOG_FEATURES)
+    out = np.zeros_like(x)
+    starts_all = pd.to_datetime(frame["seq_start_time"]).to_numpy("datetime64[ns]")
+    hosts = frame["host_id"].astype(str).to_numpy()
+    w = np.timedelta64(int(window_seconds * 1e9), "ns")
+    for host in pd.unique(hosts):
+        ix = np.flatnonzero(hosts == host)
+        ix = ix[np.argsort(starts_all[ix], kind="stable")]
+        starts = starts_all[ix]
+        first = x[ix, 0, :]                                  # (n, F) first window of each sequence
+        done = np.searchsorted(starts + w, starts, side="right")  # earlier windows ended by start_i
+        for pos, i in enumerate(ix):
+            k = min(done[pos], pos)                          # never include itself or later ones
+            if k < min_history:
+                continue
+            base = np.nanmedian(first[max(0, k - lookback):k], axis=0)
+            out[i] = x[i] - np.nan_to_num(base, nan=0.0)
+    return out.astype(np.float32)
 
 
 class SequencePreprocessor:
@@ -68,8 +115,9 @@ class SequencePreprocessor:
                     "unique_destination_ips", "unique_destination_ports", "unique_source_ports",
                     "connection_burst_max"}
 
-    def __init__(self, feature_names: list[str]):
+    def __init__(self, feature_names: list[str], prelogged: bool = False):
         self.feature_names = list(feature_names)
+        self.prelogged = prelogged  # host-relative inputs are already log-space deltas
         self.medians: np.ndarray | None = None
         self.scaler = RobustScaler()
 
@@ -80,6 +128,8 @@ class SequencePreprocessor:
 
     def _log(self, X: np.ndarray) -> np.ndarray:
         x = X.copy()
+        if getattr(self, "prelogged", False):
+            return x
         for i, name in enumerate(self.feature_names):
             if name in self.LOG_FEATURES:
                 x[..., i] = np.sign(x[..., i]) * np.log1p(np.abs(x[..., i]))
@@ -275,7 +325,7 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=8, 
         torch.cuda.manual_seed_all(seed)
     torch.use_deterministic_algorithms(True, warn_only=True)
     train_i, val_i, test_i = (data.indices(s) for s in ("train", "val", "test"))
-    prep = SequencePreprocessor(data.feature_names).fit(data.X[train_i])
+    prep = SequencePreprocessor(data.feature_names, prelogged=data.host_relative).fit(data.X[train_i])
     Xt = prep.transform(data.X[train_i]); Xv = prep.transform(data.X[val_i]); Xq = prep.transform(data.X[test_i])
     output.mkdir(parents=True, exist_ok=True)
     prep.save(output / "preprocessor.joblib")
@@ -350,7 +400,7 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=8, 
         "interpretation":"Derived as target_window_start - seq_end_time. Nonpositive values mean the target window starts before the input window ends; these examples are not leakage-free forecasts."}
     # Regression is descriptive persistence baseline for future network state, independently labeled.
     results["future_network_state"]={"status":"Not trained in Phase 3; sparse attack targets and primary binary objective prioritized."}
-    metadata={"feature_names":data.feature_names,"input_shape":list(data.X.shape[1:]),"label_mapping":{"benign":0,"attack":1},
+    metadata={"feature_names":data.feature_names,"input_shape":list(data.X.shape[1:]),"label_mapping":{"benign":0,"attack":1},"host_relative":data.host_relative,
               "threshold":lstm_threshold,"class_counts":counts[1],"training_config":results["training"]}
     (output/"metadata.json").write_text(json.dumps(metadata,indent=2),encoding="utf-8")
     (output/"metrics.json").write_text(json.dumps(results,indent=2,default=str),encoding="utf-8")
@@ -360,7 +410,8 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=8, 
 
 def predict_sequences(path: Path, model_dir: Path, threshold: float | None = None) -> list[dict[str, Any]]:
     import torch
-    data=ForecastDataset.from_parquet(path); model,meta=load_model(model_dir)
+    model,meta=load_model(model_dir)
+    data=ForecastDataset.from_parquet(path, host_relative=bool(meta.get("host_relative", False)))
     prep=joblib.load(model_dir/"preprocessor.joblib"); x=prep.transform(data.X)
     model_type=meta["training_config"].get("model_type","lstm")
     with torch.no_grad():
