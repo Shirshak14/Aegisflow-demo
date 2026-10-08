@@ -31,7 +31,7 @@ import pandas as pd
 
 from ...errors import AegisFlowError, DatasetNotFoundError
 from ...schema import coerce_canonical_frame, validate_canonical_frame
-from .pcap import PROTOCOL_NAMES, UNLABELED
+from .pcap import PROTOCOL_NAMES, UNLABELED, open_pcap_reader
 
 # NetFlow v9 / IPFIX information-element ids used here (identical numbering in both).
 IN_BYTES, IN_PKTS, PROTOCOL, TCP_FLAGS, L4_SRC_PORT, IPV4_SRC, L4_DST_PORT, IPV4_DST = 1, 2, 4, 6, 7, 8, 11, 12
@@ -222,9 +222,8 @@ def read_export_capture(path: str | Path, decoder: NetflowDecoder | None = None)
     """Decode NetFlow/IPFIX export datagrams from a capture of collector-bound UDP traffic."""
     from scapy.layers.inet import IP, UDP
     from scapy.layers.inet6 import IPv6
-    from scapy.utils import PcapReader
     dec = decoder or NetflowDecoder()
-    with PcapReader(str(path)) as reader:
+    with open_pcap_reader(path) as reader:
         for pkt in reader:
             if UDP not in pkt:
                 continue

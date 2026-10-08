@@ -15,6 +15,9 @@ from aegisflow.ml.ingestion.pcap import (UNLABELED, Packet, apply_label_file, fl
 
 T0 = 1499077800.0  # 2017-07-03 10:30:00 UTC
 A, B, C = "192.168.10.5", "192.168.10.50", "8.8.8.8"
+# Fixed MACs: a bare Ether(**ETH) makes scapy resolve the destination MAC (ARP / IPv6 neighbour
+# solicitation), which needs a layer-2 socket and fails on Windows without Npcap/WinPcap.
+ETH = {"src": "02:00:00:00:00:01", "dst": "02:00:00:00:00:02"}
 
 
 def at(pkt, t):
@@ -24,9 +27,9 @@ def at(pkt, t):
 
 def tcp_session(t, sport=40000, ttl_fwd=(64, 64, 62, 64, 64), retransmit=True):
     """Handshake, 100 B request (retransmitted once), 200 B response, FIN/ACK both ways."""
-    f = lambda flags, seq, ttl, payload=b"": Ether() / IP(src=A, dst=B, ttl=ttl) / TCP(
+    f = lambda flags, seq, ttl, payload=b"": Ether(**ETH) / IP(src=A, dst=B, ttl=ttl) / TCP(
         sport=sport, dport=80, flags=flags, seq=seq, window=8192) / (Raw(payload) if payload else b"")
-    r = lambda flags, seq, payload=b"": Ether() / IP(src=B, dst=A, ttl=128) / TCP(
+    r = lambda flags, seq, payload=b"": Ether(**ETH) / IP(src=B, dst=A, ttl=128) / TCP(
         sport=80, dport=sport, flags=flags, seq=seq, window=29200) / (Raw(payload) if payload else b"")
     pk = [at(f("S", 1000, ttl_fwd[0]), t), at(r("SA", 5000), t + 0.001), at(f("A", 1001, ttl_fwd[1]), t + 0.002),
           at(f("PA", 1001, ttl_fwd[2], b"x" * 100), t + 0.003)]
@@ -41,10 +44,10 @@ def tcp_session(t, sport=40000, ttl_fwd=(64, 64, 62, 64, 64), retransmit=True):
 def capture(tmp_path):
     pk = tcp_session(T0)
     pk += tcp_session(T0 + 10, retransmit=False)                       # same 5-tuple, new connection after FIN
-    pk += [at(Ether() / IP(src=A, dst=C, ttl=64) / UDP(sport=5353, dport=53) / Raw(b"q" * 30), T0 + s)
+    pk += [at(Ether(**ETH) / IP(src=A, dst=C, ttl=64) / UDP(sport=5353, dport=53) / Raw(b"q" * 30), T0 + s)
            for s in (1, 2, 400)]                                       # idle gap 398 s > 120 s -> 2 flows
-    pk += [at(Ether() / IP(src=C, dst=A, ttl=50) / ICMP(), T0 + 3)]
-    pk += [at(Ether() / IPv6(src="fe80::1", dst="fe80::2", hlim=255) / TCP(sport=1, dport=22, flags="S"), T0 + 4)]
+    pk += [at(Ether(**ETH) / IP(src=C, dst=A, ttl=50) / ICMP(), T0 + 3)]
+    pk += [at(Ether(**ETH) / IPv6(src="fe80::1", dst="fe80::2", hlim=255) / TCP(sport=1, dport=22, flags="S"), T0 + 4)]
     path = tmp_path / "cap.pcap"
     wrpcap(str(path), pk)
     return path
@@ -144,7 +147,7 @@ def long_capture(tmp_path):
     pk = []
     for i in range(24):
         pk += tcp_session(T0 + 20 * i, sport=41000 + i, retransmit=i % 3 == 0)
-        pk += [at(Ether() / IP(src=C, dst=A, ttl=50) / UDP(sport=53, dport=6000 + i) / Raw(b"r" * 60), T0 + 20 * i + 5)]
+        pk += [at(Ether(**ETH) / IP(src=C, dst=A, ttl=50) / UDP(sport=53, dport=6000 + i) / Raw(b"r" * 60), T0 + 20 * i + 5)]
     path = tmp_path / "long.pcap"
     wrpcap(str(path), pk)
     return path

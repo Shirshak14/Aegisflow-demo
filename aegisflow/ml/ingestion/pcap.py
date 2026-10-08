@@ -27,7 +27,9 @@ statistics, and timestamps are UTC from the capture (CIC-IDS2017 CSVs use local 
 """
 from __future__ import annotations
 
+import gzip
 import math
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,14 +62,28 @@ class Packet:
 
 
 # ------------------------------------------------------------------------------------------- readers
+@contextmanager
+def open_pcap_reader(path: str | Path):
+    """``scapy.utils.PcapReader`` over a file handle we own. Given a path, scapy opens the file itself
+    and leaks the handle when the content is neither pcap nor pcapng; on Windows that open handle then
+    blocks deleting the file (e.g. the upload endpoint's temp directory)."""
+    from scapy.utils import PcapReader
+    with open(path, "rb") as raw:
+        gzipped = raw.read(2) == b"\x1f\x8b"
+        raw.seek(0)
+        fh = gzip.GzipFile(fileobj=raw) if gzipped else raw
+        with PcapReader(fh) as reader:
+            yield reader
+
+
 def read_packets_scapy(path: str | Path) -> Iterator[Packet]:
     try:
         from scapy.layers.inet import ICMP, IP, TCP, UDP
         from scapy.layers.inet6 import IPv6
-        from scapy.utils import PcapReader
+        import scapy.utils  # noqa: F401
     except ImportError as exc:  # pragma: no cover - scapy is in requirements.txt
         raise MissingDependencyError("PCAP ingestion needs 'scapy' (pip install scapy)") from exc
-    with PcapReader(str(path)) as reader:
+    with open_pcap_reader(path) as reader:
         for pkt in reader:
             if IP in pkt:
                 ip = pkt[IP]; src, dst, proto, ttl = ip.src, ip.dst, int(ip.proto), int(ip.ttl)
