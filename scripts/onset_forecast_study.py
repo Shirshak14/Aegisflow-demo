@@ -44,7 +44,8 @@ FOLD_HOSTS = ["192.168.10.5", "192.168.10.8", "192.168.10.9", "192.168.10.14",
               "192.168.10.15", "192.168.10.17", "192.168.10.50"]
 N_PSEUDO = 200
 CLOCK_TOL_MIN = 60
-NEG_SUBSAMPLE = 0.3                   # neural training negatives only
+NEG_SUBSAMPLE = 0.3                   # training negatives kept, every model (test is never subsampled)
+SHIFTS = {"logistic": 3, "gboost": 1}  # shifted-label retrains per fold
 SEED = 42
 HP = dict(epochs=8, batch_size=256, lr=1e-3, hidden=16, dropout=0.2, patience=3)
 BARS = dict(p1_median_auc=0.70, p2_min_folds=5, p2_alpha=0.05, p3_clock_auc=0.65,
@@ -245,7 +246,14 @@ def summary_features(X: np.ndarray) -> np.ndarray:
     return np.concatenate([X[:, -1], X.mean(1), X.max(1), X.min(1), X[:, -1] - X[:, 0]], 1)
 
 
+def subsample(rows: np.ndarray, y: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    keep = (y == 1) | (np.random.default_rng(seed).random(len(rows)) < NEG_SUBSAMPLE)
+    return rows[keep], y[keep]
+
+
 def fit_classical(kind, A, f, h, features, y_train, seed):
+    f = dict(f)
+    f["train_i"], y_train = subsample(f["train_i"], y_train, seed)
     if features == "time":
         mk = lambda rows: np.stack([A["clock"][rows], A["dow"][rows]], 1)
         Xtr, Xv, Xte = mk(f["train_i"]), mk(f["val_i"]), mk(f["test_i"])
@@ -289,7 +297,7 @@ def classical_part(A, rng) -> dict:
                 pt, pv = fit_classical(kind, A, f, h, features, y[f["train_i"]], SEED)
                 per.append(evaluate_fold(A, f, h, pt, pv, rng))
                 if features != "time":
-                    for s in range(3):
+                    for s in range(SHIFTS[kind]):
                         ys = shifted_labels(A, y, f["train_i"], np.random.default_rng(1000 + s))
                         ps, _ = fit_classical(kind, A, f, h, features, ys[f["train_i"]], SEED + s)
                         a = auc(y[f["test_i"]], ps)
@@ -350,11 +358,7 @@ def train_neural(kind, A, f, h, y, seed):
     import torch
     random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
     torch.use_deterministic_algorithms(True, warn_only=True)
-    r = np.random.default_rng(seed)
-    tr = f["train_i"]
-    ytr = y[tr]
-    keep = (ytr == 1) | (r.random(len(tr)) < NEG_SUBSAMPLE)
-    tr, ytr = tr[keep], ytr[keep]
+    tr, ytr = subsample(f["train_i"], y[f["train_i"]], seed)
     Xtr_raw, names = tensor(A, tr, "own+net" if kind != "tgnn" else "own")
     prep = SequencePreprocessor(names).fit(Xtr_raw)
     nprep = None

@@ -53,3 +53,7 @@ About 40 variants are tried, so a variant that passes must also pass P1 to P5 on
 ## 8. Expected limit
 
 The local data has 18 attack episodes in total. Only about 8 start on a host that has benign traffic beforehand, and 6 of those are one Botnet campaign that begins within 33 minutes on Friday morning. Even a pass would be evidence about one campaign, not about attacks in general.
+
+## 9. Deviations recorded before results
+
+- Training negatives are subsampled to 30% for **every** model, not only the neural ones, and gradient boosting gets one shifted-label retrain per fold instead of three. Reason: the first run was on track for many hours of CPU time. No results had been produced when this was changed. Test anchors are never subsampled.
