@@ -145,8 +145,8 @@
     .evalbox-body, .chains { grid-template-columns: 1fr; }
     .kv { grid-template-columns: 110px 1fr; } .prov { grid-template-columns: 90px minmax(0, 1fr); }
   }
-  .card.audit { align-self: start; position: sticky; top: 16px; }
-  @media (max-width: 1100px) { .card.audit { position: static; } }
+  /* Not sticky: a sticky card slid out of its grid row on scroll and overlapped the cards below it. */
+  .card.audit { align-self: start; }
 
   /* Feature attribution panel */
   .seg-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
