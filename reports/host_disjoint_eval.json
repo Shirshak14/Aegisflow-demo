@@ -1,0 +1,1026 @@
+{
+  "notes": "Host-disjoint evaluation (docs/host_disjoint_evaluation_design.md, D1-D7).\n\nAnswers one question: does the score rank attack above benign *within a host the model\nnever saw*, better than a rule that only knows host identity? Only Botnet has enough\nattacker hosts for this; every other class is reported as not evaluable.\n\nParts:\n  committed -- D1/D2/D4 on the existing time split, scoring the committed demo model\n               (no retraining): per-host ROC-AUC with the 20/20 minimum, the identity\n               baseline on the pooled test set, and the 172.16.0.1 within-host control.\n  folds     -- D3: leave-one-host-out over the 5 internal Botnet hosts with >= 20 attack\n               targets. Each fold trains the existing LSTM + logistic regression with\n               ``train_experiment`` (committed hyperparameters) into its own directory.\n  permuted  -- D6: the same folds with training and validation labels shuffled. The design\n               says \"shuffle host labels\"; literally shuffling host IDs before building\n               folds would put every real host in both train and test, so this implements\n               the label-shuffle null instead: held-out performance must fall to chance.\n  time_control -- added after the first results, not pre-registered: re-scores the real fold\n               models against the same host's benign windows inside the Botnet hours (see\n               ``time_control_part``). Needs the ``folds`` models on disk.\n\nFold for held-out Botnet host H (hosts listed in BOTNET_HOSTS, V = the next one in the list):\n  test  -- every sequence of H\n  val   -- every sequence of V (selects the checkpoint and the 1%-FPR threshold)\n  train -- every sequence of every other host\nSequences whose target is a non-Botnet attack are dropped everywhere (positives are\nBotnet only, per D3). Hosts are disjoint between train, val and test, so no purge gap is\nneeded. Folds are host-disjoint, NOT campaign-disjoint: all Botnet hosts belong to one\nFriday campaign with one command-and-control server.\n\nIntervals (D5): 2,000 bootstrap resamples, stratified by host. Positives are resampled by\nattack episode (consecutive attack targets on one host less than 30 minutes apart, as in\nlodo_pilot.py). Benign targets cannot use that rule (a host's benign windows form one\ncontinuous run), so they are resampled in 30-minute clock blocks per host. On this data every\nBotnet host's positives form a single episode, so the intervals carry no positive-side\nuncertainty; the report says so.\n\nWrites artifacts/experiments/cic_ids2017_host_disjoint/<fold>/ and\nreports/host_disjoint_eval.json. Nothing here is read by the backend.",
+  "hyperparameters": {
+    "seed": 42,
+    "epochs": 8,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "hidden_size": 16,
+    "dropout": 0.2,
+    "patience": 3
+  },
+  "min_per_label": 20,
+  "bootstrap_resamples": 2000,
+  "botnet_hosts": [
+    "192.168.10.5",
+    "192.168.10.8",
+    "192.168.10.9",
+    "192.168.10.14",
+    "192.168.10.15"
+  ],
+  "committed": {
+    "split": "existing time split, test (Friday) only",
+    "n": 11379,
+    "pos": 487,
+    "train_attacker_hosts": [
+      "172.16.0.1"
+    ],
+    "per_host": {
+      "192.168.10.14": {
+        "pos": 56,
+        "neg": 576,
+        "evaluable": true,
+        "lstm": 0.6773313492063492,
+        "logistic_regression": 0.5770709325396826,
+        "ref_host_identity": 0.5,
+        "lstm_ci95": [
+          0.5947956838985594,
+          0.7372832971294244
+        ],
+        "logistic_regression_ci95": [
+          0.4879321451431876,
+          0.6574685730935731
+        ]
+      },
+      "192.168.10.15": {
+        "pos": 80,
+        "neg": 630,
+        "evaluable": true,
+        "lstm": 0.6241468253968254,
+        "logistic_regression": 0.5856349206349206,
+        "ref_host_identity": 0.5,
+        "lstm_ci95": [
+          0.5494892644557824,
+          0.6938807775050153
+        ],
+        "logistic_regression_ci95": [
+          0.5184499696576886,
+          0.6408066464098332
+        ]
+      },
+      "192.168.10.17": {
+        "pos": 2,
+        "neg": 608,
+        "evaluable": false,
+        "lstm": 0.05592105263157893,
+        "logistic_regression": 0.5304276315789473,
+        "ref_host_identity": 0.5
+      },
+      "192.168.10.5": {
+        "pos": 69,
+        "neg": 599,
+        "evaluable": true,
+        "lstm": 0.5041978176187365,
+        "logistic_regression": 0.428008032711524,
+        "ref_host_identity": 0.5,
+        "lstm_ci95": [
+          0.4610601955735663,
+          0.5445418206543067
+        ],
+        "logistic_regression_ci95": [
+          0.3440515199272824,
+          0.5118947651330916
+        ]
+      },
+      "192.168.10.50": {
+        "pos": 2,
+        "neg": 778,
+        "evaluable": false,
+        "lstm": 0.11568123393316199,
+        "logistic_regression": 0.023136246786632397,
+        "ref_host_identity": 0.5
+      },
+      "192.168.10.8": {
+        "pos": 62,
+        "neg": 548,
+        "evaluable": true,
+        "lstm": 0.6147574758653167,
+        "logistic_regression": 0.5934041676477514,
+        "ref_host_identity": 0.5,
+        "lstm_ci95": [
+          0.490817105867413,
+          0.7175337527100716
+        ],
+        "logistic_regression_ci95": [
+          0.4934007057392498,
+          0.6722654768226993
+        ]
+      },
+      "192.168.10.9": {
+        "pos": 67,
+        "neg": 583,
+        "evaluable": true,
+        "lstm": 0.4415657561250352,
+        "logistic_regression": 0.3674509101149484,
+        "ref_host_identity": 0.5,
+        "lstm_ci95": [
+          0.38744095003639073,
+          0.488918175651249
+        ],
+        "logistic_regression_ci95": [
+          0.3180765050712629,
+          0.4211353163184298
+        ]
+      },
+      "205.174.165.73": {
+        "pos": 73,
+        "neg": 2,
+        "evaluable": false,
+        "lstm": 0.2602739726027397,
+        "logistic_regression": 0.3013698630136986,
+        "ref_host_identity": 0.5
+      },
+      "172.16.0.1": {
+        "pos": 76,
+        "neg": 29,
+        "evaluable": true,
+        "lstm": 0.7722323049001816,
+        "logistic_regression": 0.48729582577132485,
+        "ref_host_identity": 0.5,
+        "lstm_ci95": [
+          0.0632183908045977,
+          1.0
+        ],
+        "logistic_regression_ci95": [
+          0.0625,
+          0.7989583333333333
+        ]
+      }
+    },
+    "evaluable_hosts": [
+      "192.168.10.14",
+      "192.168.10.15",
+      "192.168.10.5",
+      "192.168.10.8",
+      "192.168.10.9",
+      "172.16.0.1"
+    ],
+    "pooled_roc_auc": {
+      "lstm": 0.5529727750752016,
+      "logistic_regression": 0.47274962465151604,
+      "ref_host_identity": 0.5766974951380023
+    },
+    "pooled_shortcut_gap_vs_identity": {
+      "lstm": {
+        "gap": -0.023724720062800686,
+        "ci95": [
+          -0.13411318501061925,
+          0.07261717280539705
+        ]
+      },
+      "logistic_regression": {
+        "gap": -0.10394787048648624,
+        "ci95": [
+          -0.1763727037488625,
+          -0.0347847011709719
+        ]
+      }
+    },
+    "positive_episodes": 11,
+    "negative_blocks": 908
+  },
+  "folds": {
+    "folds": [
+      {
+        "test_host": "192.168.10.5",
+        "val_host": "192.168.10.8",
+        "counts": {
+          "train": {
+            "total": 78238,
+            "pos": 278,
+            "hosts": 1388
+          },
+          "val": {
+            "total": 3043,
+            "pos": 62,
+            "hosts": 1
+          },
+          "test": {
+            "total": 3193,
+            "pos": 69,
+            "hosts": 1
+          }
+        },
+        "lstm_epochs_run": 4,
+        "lstm_best_epoch": 1,
+        "models": {
+          "lstm": {
+            "roc_auc_within_host": 0.6160487297964333,
+            "roc_auc_within_host_friday_only": 0.5664894825314616,
+            "threshold_1pct_val_fpr": 0.7448129057884217,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.010243277848911651,
+            "val_roc_auc": 0.5621949767884775
+          },
+          "logistic_regression": {
+            "roc_auc_within_host": 0.5965642338881776,
+            "roc_auc_within_host_friday_only": 0.5562673208850121,
+            "threshold_1pct_val_fpr": 1.0000000000000002,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.0,
+            "val_roc_auc": 0.5338541948469337
+          },
+          "identity_only": {
+            "roc_auc_within_host": 0.5
+          }
+        },
+        "test_pos": 69,
+        "test_neg": 3124,
+        "test_pos_onset": 10,
+        "runtime_seconds": 115.1
+      },
+      {
+        "test_host": "192.168.10.8",
+        "val_host": "192.168.10.9",
+        "counts": {
+          "train": {
+            "total": 78295,
+            "pos": 280,
+            "hosts": 1388
+          },
+          "val": {
+            "total": 3136,
+            "pos": 67,
+            "hosts": 1
+          },
+          "test": {
+            "total": 3043,
+            "pos": 62,
+            "hosts": 1
+          }
+        },
+        "lstm_epochs_run": 4,
+        "lstm_best_epoch": 1,
+        "models": {
+          "lstm": {
+            "roc_auc_within_host": 0.6552033848784236,
+            "roc_auc_within_host_friday_only": 0.6155405030259287,
+            "threshold_1pct_val_fpr": 0.7439002990722657,
+            "recall_at_threshold": 0.016129032258064516,
+            "test_fpr_at_threshold": 0.011405568601140557,
+            "val_roc_auc": 0.5704177061904554
+          },
+          "logistic_regression": {
+            "roc_auc_within_host": 0.6030937875361158,
+            "roc_auc_within_host_friday_only": 0.6070179334850925,
+            "threshold_1pct_val_fpr": 0.9758190512657167,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.0278430057027843,
+            "val_roc_auc": 0.5994076538130462
+          },
+          "identity_only": {
+            "roc_auc_within_host": 0.5
+          }
+        },
+        "test_pos": 62,
+        "test_neg": 2981,
+        "test_pos_onset": 11,
+        "runtime_seconds": 118.7
+      },
+      {
+        "test_host": "192.168.10.9",
+        "val_host": "192.168.10.14",
+        "counts": {
+          "train": {
+            "total": 78153,
+            "pos": 286,
+            "hosts": 1388
+          },
+          "val": {
+            "total": 3185,
+            "pos": 56,
+            "hosts": 1
+          },
+          "test": {
+            "total": 3136,
+            "pos": 67,
+            "hosts": 1
+          }
+        },
+        "lstm_epochs_run": 5,
+        "lstm_best_epoch": 2,
+        "models": {
+          "lstm": {
+            "roc_auc_within_host": 0.5906294529308491,
+            "roc_auc_within_host_friday_only": 0.5633290177589956,
+            "threshold_1pct_val_fpr": 0.900018870830536,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.011078527207559466,
+            "val_roc_auc": 0.7770796237958272
+          },
+          "logistic_regression": {
+            "roc_auc_within_host": 0.5962222124956839,
+            "roc_auc_within_host_friday_only": 0.5564403840046901,
+            "threshold_1pct_val_fpr": 0.975357472896576,
+            "recall_at_threshold": 0.014925373134328358,
+            "test_fpr_at_threshold": 0.011730205278592375,
+            "val_roc_auc": 0.6449516048029951
+          },
+          "identity_only": {
+            "roc_auc_within_host": 0.5
+          }
+        },
+        "test_pos": 67,
+        "test_neg": 3069,
+        "test_pos_onset": 20,
+        "runtime_seconds": 123.7
+      },
+      {
+        "test_host": "192.168.10.14",
+        "val_host": "192.168.10.15",
+        "counts": {
+          "train": {
+            "total": 78049,
+            "pos": 273,
+            "hosts": 1388
+          },
+          "val": {
+            "total": 3240,
+            "pos": 80,
+            "hosts": 1
+          },
+          "test": {
+            "total": 3185,
+            "pos": 56,
+            "hosts": 1
+          }
+        },
+        "lstm_epochs_run": 7,
+        "lstm_best_epoch": 4,
+        "models": {
+          "lstm": {
+            "roc_auc_within_host": 0.6854768753138839,
+            "roc_auc_within_host_friday_only": 0.5972222222222222,
+            "threshold_1pct_val_fpr": 0.9680716395378114,
+            "recall_at_threshold": 0.07142857142857142,
+            "test_fpr_at_threshold": 0.0019175455417066154,
+            "val_roc_auc": 0.6863172468354432
+          },
+          "logistic_regression": {
+            "roc_auc_within_host": 0.5873510478016709,
+            "roc_auc_within_host_friday_only": 0.4473914565826331,
+            "threshold_1pct_val_fpr": 1.0000000000000002,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.00862895493767977,
+            "val_roc_auc": 0.6817662183544303
+          },
+          "identity_only": {
+            "roc_auc_within_host": 0.5
+          }
+        },
+        "test_pos": 56,
+        "test_neg": 3129,
+        "test_pos_onset": 12,
+        "runtime_seconds": 122.0
+      },
+      {
+        "test_host": "192.168.10.15",
+        "val_host": "192.168.10.5",
+        "counts": {
+          "train": {
+            "total": 78041,
+            "pos": 260,
+            "hosts": 1388
+          },
+          "val": {
+            "total": 3193,
+            "pos": 69,
+            "hosts": 1
+          },
+          "test": {
+            "total": 3240,
+            "pos": 80,
+            "hosts": 1
+          }
+        },
+        "lstm_epochs_run": 6,
+        "lstm_best_epoch": 3,
+        "models": {
+          "lstm": {
+            "roc_auc_within_host": 0.7342523734177215,
+            "roc_auc_within_host_friday_only": 0.6794452887537995,
+            "threshold_1pct_val_fpr": 0.9428716301918031,
+            "recall_at_threshold": 0.025,
+            "test_fpr_at_threshold": 0.005379746835443038,
+            "val_roc_auc": 0.7082799829278702
+          },
+          "logistic_regression": {
+            "roc_auc_within_host": 0.7008069620253164,
+            "roc_auc_within_host_friday_only": 0.6522796352583586,
+            "threshold_1pct_val_fpr": 0.9936828613281251,
+            "recall_at_threshold": 0.025,
+            "test_fpr_at_threshold": 0.007594936708860759,
+            "val_roc_auc": 0.7085444153723394
+          },
+          "identity_only": {
+            "roc_auc_within_host": 0.5
+          }
+        },
+        "test_pos": 80,
+        "test_neg": 3160,
+        "test_pos_onset": 12,
+        "runtime_seconds": 169.5
+      }
+    ],
+    "summary": {
+      "per_host": {
+        "192.168.10.5": {
+          "lstm": {
+            "roc_auc": 0.6160487297964333,
+            "ci95": [
+              0.5782876991941849,
+              0.6511244466394026
+            ],
+            "pos_units": 1,
+            "neg_units": 86
+          },
+          "logistic_regression": {
+            "roc_auc": 0.5965642338881776,
+            "ci95": [
+              0.5528261311335366,
+              0.6403820908891313
+            ],
+            "pos_units": 1,
+            "neg_units": 86
+          }
+        },
+        "192.168.10.8": {
+          "lstm": {
+            "roc_auc": 0.6552033848784236,
+            "ci95": [
+              0.6277110508625825,
+              0.6821892511634834
+            ],
+            "pos_units": 1,
+            "neg_units": 84
+          },
+          "logistic_regression": {
+            "roc_auc": 0.6030937875361158,
+            "ci95": [
+              0.5569362088950259,
+              0.6460136326798093
+            ],
+            "pos_units": 1,
+            "neg_units": 84
+          }
+        },
+        "192.168.10.9": {
+          "lstm": {
+            "roc_auc": 0.5906294529308491,
+            "ci95": [
+              0.5594897451681372,
+              0.619236358972214
+            ],
+            "pos_units": 1,
+            "neg_units": 86
+          },
+          "logistic_regression": {
+            "roc_auc": 0.5962222124956839,
+            "ci95": [
+              0.5626682779035963,
+              0.6275591989817227
+            ],
+            "pos_units": 1,
+            "neg_units": 86
+          }
+        },
+        "192.168.10.14": {
+          "lstm": {
+            "roc_auc": 0.6854768753138839,
+            "ci95": [
+              0.6575007097433568,
+              0.7139899504709947
+            ],
+            "pos_units": 1,
+            "neg_units": 87
+          },
+          "logistic_regression": {
+            "roc_auc": 0.5873510478016709,
+            "ci95": [
+              0.5418748993004859,
+              0.6335913610970312
+            ],
+            "pos_units": 1,
+            "neg_units": 87
+          }
+        },
+        "192.168.10.15": {
+          "lstm": {
+            "roc_auc": 0.7342523734177215,
+            "ci95": [
+              0.707765725157509,
+              0.7597995178223991
+            ],
+            "pos_units": 1,
+            "neg_units": 84
+          },
+          "logistic_regression": {
+            "roc_auc": 0.7008069620253164,
+            "ci95": [
+              0.6741413980836237,
+              0.7260669014523642
+            ],
+            "pos_units": 1,
+            "neg_units": 84
+          }
+        }
+      },
+      "aggregate": {
+        "lstm": {
+          "median_host_auc": 0.6552033848784236,
+          "median_ci95": [
+            0.6285954437555623,
+            0.6801987083882591
+          ],
+          "mean_host_auc": 0.6563221632674623,
+          "shortcut_gap_mean": 0.1563221632674623,
+          "shortcut_gap_ci95": [
+            0.14268792761243643,
+            0.16920965019013898
+          ],
+          "hosts_lower_bound_above_0.5": 5
+        },
+        "logistic_regression": {
+          "median_host_auc": 0.5965642338881776,
+          "median_ci95": [
+            0.5771388583477015,
+            0.6273292084797736
+          ],
+          "mean_host_auc": 0.6168076487493929,
+          "shortcut_gap_mean": 0.11680764874939287,
+          "shortcut_gap_ci95": [
+            0.0994941481897941,
+            0.13357496628808177
+          ],
+          "hosts_lower_bound_above_0.5": 5
+        }
+      }
+    }
+  },
+  "permuted": {
+    "folds": [
+      {
+        "test_host": "192.168.10.5",
+        "val_host": "192.168.10.8",
+        "counts": {
+          "train": {
+            "total": 78238,
+            "pos": 278,
+            "hosts": 1388
+          },
+          "val": {
+            "total": 3043,
+            "pos": 62,
+            "hosts": 1
+          },
+          "test": {
+            "total": 3193,
+            "pos": 69,
+            "hosts": 1
+          }
+        },
+        "lstm_epochs_run": 7,
+        "lstm_best_epoch": 4,
+        "models": {
+          "lstm": {
+            "roc_auc_within_host": 0.500199484124775,
+            "roc_auc_within_host_friday_only": 0.4866884739448457,
+            "threshold_1pct_val_fpr": 0.582533895969391,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.008002560819462228,
+            "val_roc_auc": 0.4807733927779161
+          },
+          "logistic_regression": {
+            "roc_auc_within_host": 0.5278117983261891,
+            "roc_auc_within_host_friday_only": 0.5719867339057745,
+            "threshold_1pct_val_fpr": 0.9014688730239869,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.010243277848911651,
+            "val_roc_auc": 0.3708324766532123
+          },
+          "identity_only": {
+            "roc_auc_within_host": 0.5
+          }
+        },
+        "test_pos": 69,
+        "test_neg": 3124,
+        "test_pos_onset": 10,
+        "runtime_seconds": 122.7
+      },
+      {
+        "test_host": "192.168.10.8",
+        "val_host": "192.168.10.9",
+        "counts": {
+          "train": {
+            "total": 78295,
+            "pos": 280,
+            "hosts": 1388
+          },
+          "val": {
+            "total": 3136,
+            "pos": 67,
+            "hosts": 1
+          },
+          "test": {
+            "total": 3043,
+            "pos": 62,
+            "hosts": 1
+          }
+        },
+        "lstm_epochs_run": 7,
+        "lstm_best_epoch": 4,
+        "models": {
+          "lstm": {
+            "roc_auc_within_host": 0.324539286448583,
+            "roc_auc_within_host_friday_only": 0.36788629171062126,
+            "threshold_1pct_val_fpr": 0.6579970717430116,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.010063737001006373,
+            "val_roc_auc": 0.5573768498660169
+          },
+          "logistic_regression": {
+            "roc_auc_within_host": 0.44171689517481677,
+            "roc_auc_within_host_friday_only": 0.45527733052023767,
+            "threshold_1pct_val_fpr": 0.9456592798233033,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.020127474002012747,
+            "val_roc_auc": 0.4558196310723995
+          },
+          "identity_only": {
+            "roc_auc_within_host": 0.5
+          }
+        },
+        "test_pos": 62,
+        "test_neg": 2981,
+        "test_pos_onset": 11,
+        "runtime_seconds": 140.7
+      },
+      {
+        "test_host": "192.168.10.9",
+        "val_host": "192.168.10.14",
+        "counts": {
+          "train": {
+            "total": 78153,
+            "pos": 286,
+            "hosts": 1388
+          },
+          "val": {
+            "total": 3185,
+            "pos": 56,
+            "hosts": 1
+          },
+          "test": {
+            "total": 3136,
+            "pos": 67,
+            "hosts": 1
+          }
+        },
+        "lstm_epochs_run": 6,
+        "lstm_best_epoch": 3,
+        "models": {
+          "lstm": {
+            "roc_auc_within_host": 0.5145338799647898,
+            "roc_auc_within_host_friday_only": 0.5359943327552092,
+            "threshold_1pct_val_fpr": 0.6092723608016969,
+            "recall_at_threshold": 0.014925373134328358,
+            "test_fpr_at_threshold": 0.007820136852394917,
+            "val_roc_auc": 0.49320869287312236
+          },
+          "logistic_regression": {
+            "roc_auc_within_host": 0.486871604830199,
+            "roc_auc_within_host_friday_only": 0.49524879693187085,
+            "threshold_1pct_val_fpr": 0.920804262161255,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.006842619745845552,
+            "val_roc_auc": 0.4727149248961329
+          },
+          "identity_only": {
+            "roc_auc_within_host": 0.5
+          }
+        },
+        "test_pos": 67,
+        "test_neg": 3069,
+        "test_pos_onset": 20,
+        "runtime_seconds": 262.1
+      },
+      {
+        "test_host": "192.168.10.14",
+        "val_host": "192.168.10.15",
+        "counts": {
+          "train": {
+            "total": 78049,
+            "pos": 273,
+            "hosts": 1388
+          },
+          "val": {
+            "total": 3240,
+            "pos": 80,
+            "hosts": 1
+          },
+          "test": {
+            "total": 3185,
+            "pos": 56,
+            "hosts": 1
+          }
+        },
+        "lstm_epochs_run": 5,
+        "lstm_best_epoch": 2,
+        "models": {
+          "lstm": {
+            "roc_auc_within_host": 0.3571828060083093,
+            "roc_auc_within_host_friday_only": 0.3705357142857143,
+            "threshold_1pct_val_fpr": 0.5340603590011598,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.009907318632150847,
+            "val_roc_auc": 0.5248536392405063
+          },
+          "logistic_regression": {
+            "roc_auc_within_host": 0.5569784960964251,
+            "roc_auc_within_host_friday_only": 0.5683356676003735,
+            "threshold_1pct_val_fpr": 0.9998169541358949,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.0028763183125599234,
+            "val_roc_auc": 0.53890625
+          },
+          "identity_only": {
+            "roc_auc_within_host": 0.5
+          }
+        },
+        "test_pos": 56,
+        "test_neg": 3129,
+        "test_pos_onset": 12,
+        "runtime_seconds": 319.2
+      },
+      {
+        "test_host": "192.168.10.15",
+        "val_host": "192.168.10.5",
+        "counts": {
+          "train": {
+            "total": 78041,
+            "pos": 260,
+            "hosts": 1388
+          },
+          "val": {
+            "total": 3193,
+            "pos": 69,
+            "hosts": 1
+          },
+          "test": {
+            "total": 3240,
+            "pos": 80,
+            "hosts": 1
+          }
+        },
+        "lstm_epochs_run": 6,
+        "lstm_best_epoch": 3,
+        "models": {
+          "lstm": {
+            "roc_auc_within_host": 0.5932318037974684,
+            "roc_auc_within_host_friday_only": 0.5838905775075988,
+            "threshold_1pct_val_fpr": 0.593534290790558,
+            "recall_at_threshold": 0.0125,
+            "test_fpr_at_threshold": 0.004746835443037975,
+            "val_roc_auc": 0.4868989960845441
+          },
+          "logistic_regression": {
+            "roc_auc_within_host": 0.5020055379746835,
+            "roc_auc_within_host_friday_only": 0.49093844984802437,
+            "threshold_1pct_val_fpr": 0.9447805285453797,
+            "recall_at_threshold": 0.0,
+            "test_fpr_at_threshold": 0.014556962025316455,
+            "val_roc_auc": 0.454466588728683
+          },
+          "identity_only": {
+            "roc_auc_within_host": 0.5
+          }
+        },
+        "test_pos": 80,
+        "test_neg": 3160,
+        "test_pos_onset": 12,
+        "runtime_seconds": 282.7
+      }
+    ],
+    "summary": {
+      "per_host": {
+        "192.168.10.5": {
+          "lstm": {
+            "roc_auc": 0.500199484124775,
+            "ci95": [
+              0.4790989606286518,
+              0.5208123825897562
+            ],
+            "pos_units": 1,
+            "neg_units": 86
+          },
+          "logistic_regression": {
+            "roc_auc": 0.5278117983261891,
+            "ci95": [
+              0.5084554231418582,
+              0.5482484628844522
+            ],
+            "pos_units": 1,
+            "neg_units": 86
+          }
+        },
+        "192.168.10.8": {
+          "lstm": {
+            "roc_auc": 0.324539286448583,
+            "ci95": [
+              0.2982788644641763,
+              0.3512814347164417
+            ],
+            "pos_units": 1,
+            "neg_units": 84
+          },
+          "logistic_regression": {
+            "roc_auc": 0.44171689517481677,
+            "ci95": [
+              0.41863702189540825,
+              0.46439249000384286
+            ],
+            "pos_units": 1,
+            "neg_units": 84
+          }
+        },
+        "192.168.10.9": {
+          "lstm": {
+            "roc_auc": 0.5145338799647898,
+            "ci95": [
+              0.4978401758326231,
+              0.531843545766881
+            ],
+            "pos_units": 1,
+            "neg_units": 86
+          },
+          "logistic_regression": {
+            "roc_auc": 0.486871604830199,
+            "ci95": [
+              0.47074672919220767,
+              0.5038775338818099
+            ],
+            "pos_units": 1,
+            "neg_units": 86
+          }
+        },
+        "192.168.10.14": {
+          "lstm": {
+            "roc_auc": 0.3571828060083093,
+            "ci95": [
+              0.3419137853104146,
+              0.3724396390963166
+            ],
+            "pos_units": 1,
+            "neg_units": 87
+          },
+          "logistic_regression": {
+            "roc_auc": 0.5569784960964251,
+            "ci95": [
+              0.5460394413312811,
+              0.5669120878315085
+            ],
+            "pos_units": 1,
+            "neg_units": 87
+          }
+        },
+        "192.168.10.15": {
+          "lstm": {
+            "roc_auc": 0.5932318037974684,
+            "ci95": [
+              0.5735315358231707,
+              0.6121611670525554
+            ],
+            "pos_units": 1,
+            "neg_units": 84
+          },
+          "logistic_regression": {
+            "roc_auc": 0.5020055379746835,
+            "ci95": [
+              0.4863651675453026,
+              0.5179923974749796
+            ],
+            "pos_units": 1,
+            "neg_units": 84
+          }
+        }
+      },
+      "aggregate": {
+        "lstm": {
+          "median_host_auc": 0.500199484124775,
+          "median_ci95": [
+            0.4790989606286518,
+            0.5170884943165095
+          ],
+          "mean_host_auc": 0.45793745206878517,
+          "shortcut_gap_mean": -0.04206254793121483,
+          "shortcut_gap_ci95": [
+            -0.05119491871375059,
+            -0.03251018077879743
+          ],
+          "hosts_lower_bound_above_0.5": 1
+        },
+        "logistic_regression": {
+          "median_host_auc": 0.5020055379746835,
+          "median_ci95": [
+            0.4885368812559228,
+            0.5176412565773738
+          ],
+          "mean_host_auc": 0.5030768664804628,
+          "shortcut_gap_mean": 0.003076866480462792,
+          "shortcut_gap_ci95": [
+            -0.0046514167274679784,
+            0.011031485460819215
+          ],
+          "hosts_lower_bound_above_0.5": 2
+        }
+      }
+    }
+  },
+  "time_control": {
+    "span": [
+      "2017-07-07 10:03:22",
+      "2017-07-07 12:58:52"
+    ],
+    "hosts": {
+      "192.168.10.5": {
+        "pos": 69,
+        "benign_in_span": 177,
+        "benign_in_span_clean_inputs": 74,
+        "benign_friday_outside_span_clean_inputs": 451,
+        "lstm": {
+          "time_matched_auc": 0.5761074265127324,
+          "span_benign_auc": 0.39887337448313065,
+          "attack_in_inputs_auc": 0.5547757948894583
+        },
+        "logistic_regression": {
+          "time_matched_auc": 0.51003029558667,
+          "span_benign_auc": 0.5229519985617547,
+          "attack_in_inputs_auc": 0.5940843433147481
+        }
+      },
+      "192.168.10.8": {
+        "pos": 62,
+        "benign_in_span": 162,
+        "benign_in_span_clean_inputs": 49,
+        "benign_friday_outside_span_clean_inputs": 408,
+        "lstm": {
+          "time_matched_auc": 0.5519713261648747,
+          "span_benign_auc": 0.4185674269707883,
+          "attack_in_inputs_auc": 0.6731086239805658
+        },
+        "logistic_regression": {
+          "time_matched_auc": 0.5888092393468738,
+          "span_benign_auc": 0.5349639855942377,
+          "attack_in_inputs_auc": 0.5269390942217594
+        }
+      },
+      "192.168.10.9": {
+        "pos": 67,
+        "benign_in_span": 202,
+        "benign_in_span_clean_inputs": 49,
+        "benign_friday_outside_span_clean_inputs": 398,
+        "lstm": {
+          "time_matched_auc": 0.5146298211910743,
+          "span_benign_auc": 0.35073325812737155,
+          "attack_in_inputs_auc": 0.6202909974710152
+        },
+        "logistic_regression": {
+          "time_matched_auc": 0.511674301758534,
+          "span_benign_auc": 0.44046764434416985,
+          "attack_in_inputs_auc": 0.5739974381712484
+        }
+      },
+      "192.168.10.14": {
+        "pos": 56,
+        "benign_in_span": 170,
+        "benign_in_span_clean_inputs": 75,
+        "benign_friday_outside_span_clean_inputs": 442,
+        "lstm": {
+          "time_matched_auc": 0.5098739495798319,
+          "span_benign_auc": 0.6197586726998492,
+          "attack_in_inputs_auc": 0.6511312217194571
+        },
+        "logistic_regression": {
+          "time_matched_auc": 0.42920168067226894,
+          "span_benign_auc": 0.5926998491704374,
+          "attack_in_inputs_auc": 0.45782329125982374
+        }
+      },
+      "192.168.10.15": {
+        "pos": 80,
+        "benign_in_span": 162,
+        "benign_in_span_clean_inputs": 31,
+        "benign_friday_outside_span_clean_inputs": 484,
+        "lstm": {
+          "time_matched_auc": 0.5638888888888889,
+          "span_benign_auc": 0.613503065849107,
+          "attack_in_inputs_auc": 0.6917229196896095
+        },
+        "logistic_regression": {
+          "time_matched_auc": 0.6007716049382714,
+          "span_benign_auc": 0.539522793921621,
+          "attack_in_inputs_auc": 0.60617626648161
+        }
+      }
+    }
+  }
+}

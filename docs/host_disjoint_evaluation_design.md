@@ -1,4 +1,6 @@
-# Host-disjoint evaluation: design (scoping only, nothing implemented)
+# Host-disjoint evaluation: design
+
+> Implemented in `scripts/host_disjoint_eval.py`; results in `docs/host_disjoint_evaluation_report.md` (2026-10-08). The design below is unchanged.
 
 Status: proposal, bars agreed (see section 6). Follows from `reports/hostrel_report.md` (B1 negative result, B13 data limitation), which is in draft PR #1 and not yet on `main`. No pcap re-extraction, no full CIC-IDS2017 re-ingest and no new dataset is assumed. All counts below come from the committed `sequences.parquet` (85,077 sequences, 1,390 hosts) and the raw-CSV count in the B1 report.
 
