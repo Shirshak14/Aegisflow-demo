@@ -305,7 +305,7 @@ function AlertDetail({ id, cfg, feats, models, onChange }) {
 
     <div class="tags">
       <${Chip} label="Confidence" value=${a.confidence_label} tone=${a.confidence_label === uncertain ? "warn" : "ok"}
-        title=${a.confidence_label === uncertain ? `Probability below ${cfg.confidence_threshold}: the alert fired on the lower validation-selected threshold` : `Probability ≥ ${cfg.confidence_threshold}`}/>
+        title=${`${cfg.confidence_calibrated ? "Calibrated probability" : "Probability"} ${a.confidence_label === uncertain ? `below ${cfg.confidence_threshold}: the alert fired on the lower validation-selected threshold` : `≥ ${cfg.confidence_threshold}`}`}/>
       <${Chip} label="Stage" value=${a.predicted_stage || "–"} tone=${a.predicted_stage === uncertain ? "dim" : "acc"}
         title=${stageModel ? "From the multi-task stage head" : "No stage model configured: binary attack detector only"}/>
       ${hasLr && html`<${Chip} label="Logistic regression" value=${a.lr_flag ? "also flags" : "does not flag"} tone=${a.lr_flag ? "bad" : "dim"}

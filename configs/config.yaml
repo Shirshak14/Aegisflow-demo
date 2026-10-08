@@ -44,7 +44,8 @@ model:
   early_stopping_patience: 3
 
 confidence:
-  # In the default replay this is a cutoff on the ATTACK probability: alerts with p >= this are
+  # In the default replay this is a cutoff on the ATTACK probability (Platt-calibrated when the model
+  # directory has calibration.json, see `python -m aegisflow calibrate`): alerts with p >= this are
   # labelled LIKELY_ATTACK, lower ones carry confidence_label = uncertain_label. It does not
   # change which alerts fire (that is the validation-selected LSTM threshold in metrics.json).
   # With a multi-task model (`forecast`, or replay.stage_model_dir) it is ALSO the minimum stage

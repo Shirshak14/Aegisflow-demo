@@ -12,8 +12,8 @@ Until `preprocess` and `train` have been run, endpoints that need data or the mo
 | GET | `/models` | Trained models under `artifacts/models/` with type, training time, test split size and the test metrics from each model's own `metrics.json` (nothing recomputed) |
 | GET | `/health` | Status, alerts in the whole ledger, alerts in the current session, session id, replay state |
 | GET | `/dataset/status` | Dataset summary and split (from `reports/data_quality_report.json`, `split_metadata.json`) |
-| GET | `/model/status` | Model version, features, thresholds, training config, test metrics, limitations |
-| GET | `/risk/config` | Risk weights, low/medium bands, max reachable risk, confidence cutoff, uncertain label, replay speeds. Read from `configs/config.yaml`; the dashboard uses it instead of hard-coded copies |
+| GET | `/model/status` | Model version, features, thresholds, training config, test metrics, limitations, `confidence_calibration` (Platt parameters and test Brier/ECE, or `none`) |
+| GET | `/risk/config` | Risk weights, low/medium bands, max reachable risk, confidence cutoff, `confidence_calibrated`, uncertain label, replay speeds. Read from `configs/config.yaml`; the dashboard uses it instead of hard-coded copies |
 | GET | `/evaluation` | Baseline tables (any/onset targets), host check, leave-one-day-out DoS summary |
 | POST | `/replay/start` | Body `{"speed": 1\|10\|100\|1000, "reset": true}`. `reset: true` starts a fresh session; the ledger is kept, earlier sessions stay in it and keep verifying. 409 if already running, 422 for a bad speed |
 | POST | `/replay/stop` | Stop the replay |

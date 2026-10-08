@@ -17,6 +17,9 @@ Risk score (0-100) = 100 * sum(weight_k * component_k), weights from config.yaml
   abnormality_score      share of the 28 inputs in the last window beyond 3 robust-scaled
                          units (scaler fitted on training data only); label-free
   recent_attack_history  min(1, this host's alerts in the previous 10 simulated minutes / 5)
+Alert ``confidence`` is the Platt-calibrated LSTM probability when ``calibration.json`` exists in the
+model directory (``python -m aegisflow calibrate``), else the raw probability. Calibration is monotone,
+so it never changes which alerts fire; the risk score above still uses the raw probability.
 """
 from __future__ import annotations
 
@@ -33,6 +36,7 @@ import numpy as np
 import pandas as pd
 
 from aegisflow.config import load_config
+from aegisflow.ml.calibration import CALIBRATION_FILE, load_calibrator
 from aegisflow.ml.modeling import ForecastDataset, LSTMForecaster
 from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES
 
@@ -121,6 +125,9 @@ class ReplayEngine:
         with torch.no_grad():
             lstm_p = torch.sigmoid(net(torch.tensor(x))).numpy().astype(float)
         lr_p = lr.predict_proba(x.reshape(len(x), -1))[:, 1].astype(float)
+        # `python -m aegisflow calibrate` writes calibration.json; without it confidence is the raw probability
+        calibrator = load_calibrator(MODEL_DIR)
+        conf = calibrator.transform(lstm_p).astype(float) if calibrator else lstm_p
         std = list(STANDARD_NUMERIC_WINDOW_FEATURES)
         raw_last = np.stack([np.stack(v)[-1] for v in frame.sequence_features])
         if self.stage_model_dir is not None:
@@ -134,7 +141,7 @@ class ReplayEngine:
             "predicted_at": pd.to_datetime(frame.seq_end_time),
             "target_window_start": pd.to_datetime(frame.target_window_start),
             "target_window_end": pd.to_datetime(frame.target_window_end),
-            "lstm_p": lstm_p, "lr_p": lr_p,
+            "lstm_p": lstm_p, "lr_p": lr_p, "conf": conf,
             "rule": (raw_last[:, std.index("attack_flow_ratio")] > 0).astype(int),
             "abnormality": (np.abs(x[:, -1, :]) > 3).mean(axis=1),
             "truth_attack": frame.target_attack_present.astype(int).to_numpy(),
@@ -254,7 +261,8 @@ class ReplayEngine:
         return {"weights": dict(self.weights),
                 "thresholds": {"low": float(self.levels["low"]), "medium": float(self.levels["medium"])},
                 "max_reachable_risk": round(max_reachable, 2),
-                "confidence_threshold": self.conf_threshold, "uncertain_label": self.uncertain,
+                "confidence_threshold": self.conf_threshold,
+                "confidence_calibrated": (MODEL_DIR / CALIBRATION_FILE).exists(), "uncertain_label": self.uncertain,
                 "default_speed": self.default_speed, "allowed_speeds": self.allowed_speeds}
 
     # ------------------------------------------------------------------ control
@@ -321,7 +329,7 @@ class ReplayEngine:
         alerted = row.lstm_p >= self.lstm_threshold
         alert_id = None
         if alerted:
-            conf = float(row.lstm_p)
+            conf = float(row.conf)
             rec = self.ledger.append({
                 "session_id": self.session_id, "sequence_id": row.sequence_id, "host_id": row.host_id,
                 "predicted_at": row.predicted_at.isoformat(), "target_window_start": row.target_window_start.isoformat(),

@@ -137,6 +137,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_train.add_argument("--output-dir", default=None, help="Override the model output directory.")
     _common_args(p_train)
 
+    p_cal = sub.add_parser("calibrate", help="Fit Platt scaling on the validation split for a trained model "
+                           "(writes calibration.json; alert decisions are unchanged).")
+    p_cal.add_argument("--dataset", default="cic_ids2017")
+    p_cal.add_argument("--model-dir", default="artifacts/models/cic_ids2017")
+    _common_args(p_cal)
+
     p_predict = sub.add_parser("predict", help="Run Phase 3 model inference on a sequences Parquet file "
                                "(attention models also print per-window attention weights).")
     p_predict.add_argument("--input", required=True)
@@ -305,6 +311,16 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         print(f"Phase 3 training complete: {out}")
         for name, metrics in result["models"].items(): print(f"  {name}: {metrics}")
         print(f"  Metrics: {out / 'metrics.json'}")
+        return 0
+    if args.command == "calibrate":
+        from .ml.calibration import calibrate_model_dir
+        out = calibrate_model_dir(cfg.path(args.model_dir),
+                                  cfg.path(cfg.config.paths.data_processed, args.dataset, "sequences.parquet"))
+        print(f"Platt calibration: a={out['a']:.4f} b={out['b']:.4f}; threshold "
+              f"{out['raw_threshold']:.4f} -> {out['calibrated_threshold']:.4f}")
+        for split, m in out["metrics"].items():
+            print(f"  {split:4s} ({m['role']}): Brier {m['raw']['brier']:.4f} -> {m['calibrated']['brier']:.4f}, "
+                  f"ECE {m['raw']['ece']:.4f} -> {m['calibrated']['ece']:.4f}")
         return 0
     if args.command == "predict":
         from .ml.modeling import predict_sequences

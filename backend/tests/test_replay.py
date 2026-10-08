@@ -100,3 +100,20 @@ def test_starting_a_replay_keeps_earlier_sessions(tmp_path, synthetic_replay):
     assert started["session_id"] != "old"
     assert ledger.count("old") == 1
     assert ledger.verify()["status"] == "VERIFIED"
+
+
+def test_calibrated_confidence_keeps_alerts_and_maps_probability(tmp_path, synthetic_replay, monkeypatch):
+    import shutil
+
+    from aegisflow.ml.calibration import calibrate_model_dir, load_calibrator
+    from backend.app import replay
+    data_dir, model_dir = synthetic_replay
+    cal_dir = tmp_path / "model"
+    shutil.copytree(model_dir, cal_dir)  # the session-wide synthetic model stays uncalibrated
+    calibrate_model_dir(cal_dir, data_dir / "sequences.parquet")
+    monkeypatch.setattr(replay, "MODEL_DIR", cal_dir)
+    engine, alerts = _replay_and_check(tmp_path, cal_dir)  # same alert count and true positives
+    cal = load_calibrator(cal_dir)
+    # the ledger stores reals rounded to 6 decimals
+    assert all(a["confidence"] == pytest.approx(cal.transform(a["lstm_probability"]), abs=2e-6) for a in alerts)
+    assert engine.risk_config()["confidence_calibrated"] is True
