@@ -97,3 +97,16 @@ Chronological 60/20/20 on sequence target-end time; sequences straddling a cutof
 - Botnet (84 % of test positives) never appears in training and is not detected.
 - Most positives are continuations of an attack already visible in the inputs; onset prediction is at or below chance.
 - Validation is thin (127 positives, 2 episodes), so thresholds do not transfer.
+
+## Alert threshold after calibration (decision: unchanged)
+
+The alert threshold stays at the validation-selected raw LSTM probability 0.3308 (0.0448 on the calibrated scale). Calibration is a monotone map, so it cannot change which sequences alert: 349 alerts, 79 true positives, before and after. Only the displayed confidence moved, and with it the `LIKELY_ATTACK` label count (80 to 41), because that label is the calibrated confidence reaching 0.5.
+
+Why it was not moved:
+
+- The 80 to 41 change is a relabelling, not a change in detection quality. The 349 alerts have precision 0.23, so most should read UNCERTAIN, and now more of them do.
+- Choosing a threshold to make the label counts look better would be tuning on the outcome. Thresholds here are chosen on validation only (max F1), and validation has just 127 positives from 2 episodes, so any threshold chosen from it is fragile.
+- The calibration map was fitted on validation, where positives are 1.1 % of sequences. On the test split they are 4.3 %, so calibrated probabilities under-predict there (mean 0.011 against an observed rate of 0.043, ECE 0.032). The calibrated scale is therefore a sensible ranking and relative confidence, not a reliable absolute probability, and it is a poor basis for re-picking a cutoff.
+- Moving it would change every alert count and dashboard number, and would not address the real weakness (the model recognises the attacker host).
+
+Revisit it only after the data or evaluation design changes (B1, B13 in `docs/optimization_opportunities.md`).
