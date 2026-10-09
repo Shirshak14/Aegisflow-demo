@@ -1,0 +1,232 @@
+{
+  "diagnose": {
+    "windows": 11037,
+    "hosts": 35,
+    "escalation_windows": 6007,
+    "escalation_episodes": 62,
+    "anchors": 3512,
+    "per_scenario": {
+      "1": {
+        "hosts": 1,
+        "episodes": 1,
+        "anchors": 0,
+        "positives": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        },
+        "episodes_with_positive_anchor": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        }
+      },
+      "2": {
+        "hosts": 1,
+        "episodes": 1,
+        "anchors": 0,
+        "positives": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        },
+        "episodes_with_positive_anchor": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        }
+      },
+      "3": {
+        "hosts": 1,
+        "episodes": 9,
+        "anchors": 1353,
+        "positives": {
+          "1": 8,
+          "5": 40,
+          "15": 120,
+          "30": 213
+        },
+        "episodes_with_positive_anchor": {
+          "1": 4,
+          "5": 4,
+          "15": 4,
+          "30": 4
+        }
+      },
+      "4": {
+        "hosts": 1,
+        "episodes": 3,
+        "anchors": 29,
+        "positives": {
+          "1": 0,
+          "5": 4,
+          "15": 6,
+          "30": 8
+        },
+        "episodes_with_positive_anchor": {
+          "1": 0,
+          "5": 1,
+          "15": 1,
+          "30": 1
+        }
+      },
+      "5": {
+        "hosts": 1,
+        "episodes": 1,
+        "anchors": 0,
+        "positives": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        },
+        "episodes_with_positive_anchor": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        }
+      },
+      "6": {
+        "hosts": 1,
+        "episodes": 1,
+        "anchors": 0,
+        "positives": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        },
+        "episodes_with_positive_anchor": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        }
+      },
+      "7": {
+        "hosts": 1,
+        "episodes": 1,
+        "anchors": 0,
+        "positives": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        },
+        "episodes_with_positive_anchor": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        }
+      },
+      "8": {
+        "hosts": 1,
+        "episodes": 3,
+        "anchors": 1967,
+        "positives": {
+          "1": 4,
+          "5": 19,
+          "15": 55,
+          "30": 84
+        },
+        "episodes_with_positive_anchor": {
+          "1": 2,
+          "5": 2,
+          "15": 2,
+          "30": 2
+        }
+      },
+      "9": {
+        "hosts": 10,
+        "episodes": 12,
+        "anchors": 7,
+        "positives": {
+          "1": 4,
+          "5": 6,
+          "15": 7,
+          "30": 7
+        },
+        "episodes_with_positive_anchor": {
+          "1": 3,
+          "5": 4,
+          "15": 4,
+          "30": 4
+        }
+      },
+      "10": {
+        "hosts": 10,
+        "episodes": 24,
+        "anchors": 113,
+        "positives": {
+          "1": 9,
+          "5": 28,
+          "15": 78,
+          "30": 103
+        },
+        "episodes_with_positive_anchor": {
+          "1": 1,
+          "5": 3,
+          "15": 3,
+          "30": 3
+        }
+      },
+      "11": {
+        "hosts": 3,
+        "episodes": 2,
+        "anchors": 0,
+        "positives": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        },
+        "episodes_with_positive_anchor": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        }
+      },
+      "12": {
+        "hosts": 3,
+        "episodes": 3,
+        "anchors": 43,
+        "positives": {
+          "1": 0,
+          "5": 3,
+          "15": 9,
+          "30": 9
+        },
+        "episodes_with_positive_anchor": {
+          "1": 0,
+          "5": 1,
+          "15": 1,
+          "30": 1
+        }
+      },
+      "13": {
+        "hosts": 1,
+        "episodes": 1,
+        "anchors": 0,
+        "positives": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        },
+        "episodes_with_positive_anchor": {
+          "1": 0,
+          "5": 0,
+          "15": 0,
+          "30": 0
+        }
+      }
+    }
+  }
+}
