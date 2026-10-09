@@ -101,3 +101,36 @@ ctu_13:
     attack_stage: "Benign"
     confidence: "inferred"
     note: "Unverified university traffic, not confirmed benign. Counted as non-attack so windows are not flagged by it."
+
+# DARPA OpTC (opt-in, aegisflow/ml/datasets/optc.py). Labels come from the corrected
+# host ground truth: flows of red-team processes (and their children) are Malicious.
+optc:
+  Malicious:
+    normalized_attack_class: "APT"
+    attack_stage: "Lateral Movement"
+    confidence: "inferred"
+    note: "Red-team process traffic in scenarios 1-3 (PowerShell Empire, DeathStar, malicious upgrade); includes C2, discovery, lateral movement and exfiltration. Stage is the dominant one, not per flow."
+  Benign:
+    normalized_attack_class: "Benign"
+    attack_stage: "Benign"
+    confidence: "inferred"
+    note: "Not a red-team process per the corrected ground truth; the labels are not official and may miss activity."
+
+# LANL 2015 flows (opt-in, aegisflow/ml/datasets/lanl_2015.py). The ground truth is a list
+# of red-team authentications; flows are matched to it by (source, destination) pair.
+lanl_2015:
+  RedTeam:
+    normalized_attack_class: "APT"
+    attack_stage: "Lateral Movement"
+    confidence: "inferred"
+    note: "Flow from a red-team source computer to a computer it authenticated to as red team, from first red-team auth minus contact_slack_s."
+  RedTeamSource:
+    normalized_attack_class: "APT"
+    attack_stage: "Command and Control"
+    confidence: "inferred"
+    note: "Other flows from the four red-team source computers; may include their ordinary traffic."
+  Benign:
+    normalized_attack_class: "Benign"
+    attack_stage: "Benign"
+    confidence: "inferred"
+    note: "No red-team label; LANL does not claim the remaining data is attack-free."
