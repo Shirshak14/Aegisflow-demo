@@ -2,7 +2,7 @@
 
 SIH26153 · Team CyberVanguard (Team ID 40) · Theme: Blockchain & Cybersecurity
 
-> **Current state vs this original plan.** This document is the original design. What is built: CIC-IDS2017 ingestion, host windows and sequences with a chronological split, a majority / logistic-regression / LSTM baseline (binary attack-next-window), a FastAPI backend with a replay engine, a SHA-256 hash-chained SQLite ledger, and a single-page vanilla-JS dashboard that polls the API. **Not built:** React/TypeScript/Vite frontend, WebSocket updates, GRU/Transformer selection, future-state and attack-stage heads, attention, SHAP, XGBoost, temporal GNN, additional dataset adapters. Phase table in §9 is out of date; everything through Phase 6-7 (in simplified form) exists. See `docs/model.md`, `docs/api.md`, `docs/demo.md` and `docs/codebase_walkthrough.md` for what actually runs.
+> **Current state vs this original plan.** This document is the original design. What is built: CIC-IDS2017 ingestion, host windows and sequences with a chronological split, a majority / logistic-regression / LSTM baseline (binary attack-next-window), a FastAPI backend with a replay engine, a SHA-256 hash-chained SQLite ledger, and a React 18 dashboard (vendored with htm, no build step) that receives live updates over server-sent events (`GET /live`) and shows every feature below. Opt-in additions (none changes the demo model or default replay): per-prediction SHAP / Integrated Gradients explanations (`aegisflow explain`, `GET /explain/{sequence_id}`); attention-LSTM and temporal Transformer models (`train --model`); a multi-task model with attack-stage and K-step future-state heads (`train-multitask`, `forecast`, `replay.stage_model_dir`); PCAP ingestion (`ingest-pcap`, `score-pcap`); NetFlow v5/v9/IPFIX ingestion (`ingest-netflow`, `score-netflow`); an analyst action chain (`/alerts/{id}/actions`); streaming scoring (`/stream/*`, `aegisflow stream`); a temporal GNN over the per-window host-communication graph (`train-gnn`); and SIEM export (CEF / syslog / JSON lines). **Not built:** TypeScript/Vite build, WebSocket updates (server-sent events are used instead), GRU, XGBoost, additional dataset adapters. None of the opt-in models has been trained on the full dataset yet, so no metrics are claimed for them. Phase table in §9 is out of date. See `docs/model.md`, `docs/api.md`, `docs/demo.md` and `docs/codebase_walkthrough.md` for what actually runs.
 
 ## 1. Component diagram
 
@@ -101,8 +101,8 @@ Phase-by-phase, per the priority order in the project brief:
    API so the dashboard can show "which past windows drove this prediction".
 4. **Transformer** (Phase 5, optional): selectable via `model.type=transformer`,
    only after GRU/LSTM works and has a baseline comparison.
-5. **Temporal GNN**: documented as future work (`docs/architecture.md` §7)
-   unless a real per-host communication graph is built — never faked.
+5. **Temporal GNN**: built as an opt-in model (`aegisflow/ml/graph.py`, `train-gnn`) on a real
+   per-window host-communication graph derived from flows.
 
 ## 6. Training / evaluation strategy
 

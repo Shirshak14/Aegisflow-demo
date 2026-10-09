@@ -56,6 +56,7 @@ def generate_data_quality_report(
     raw_count: int,
     cleaned_df: pd.DataFrame,
     cleaning_dropped_by_reason: dict[str, int],
+    ingest_counts_recorded: bool = True,
     windows_df: pd.DataFrame,
     sequences_df: pd.DataFrame,
     split_metadata: SplitMetadata,
@@ -123,6 +124,12 @@ def generate_data_quality_report(
         warnings.append(
             f"Limited positive sequence targets ({atk_seqs} sequences with target_attack_present=1). "
             f"Phase 3 models must employ class-weighted loss functions or focal loss."
+        )
+
+    if not ingest_counts_recorded:
+        warnings.append(
+            "Raw row count and cleaning drops were not recorded for this interim file (no ingest summary); "
+            "'Raw Rows Loaded' shows the cleaned count. Re-run with --reingest to measure them."
         )
 
     if target_gap["nonpositive_count"]:

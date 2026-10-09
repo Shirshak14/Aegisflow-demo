@@ -34,7 +34,7 @@ from ...config import AegisFlowConfig
 from ...errors import DatasetNotFoundError, MissingDependencyError
 from ...logging_setup import get_logger
 from ..features.flow_features import compute_flow_features
-from ..ingestion.pipeline import run_ingestion
+from ..ingestion.pipeline import read_ingest_summary, run_ingestion
 from .reporting import QualityMetrics, generate_data_quality_report
 from .sequences import build_host_sequences
 from .split import compute_temporal_splits
@@ -66,6 +66,20 @@ def _write_parquet(df: pd.DataFrame, path: Path) -> None:
         raise MissingDependencyError(
             "Writing processed Parquet data requires 'pyarrow'. Original error: " f"{exc}"
         ) from exc
+
+
+def recorded_ingest_counts(interim_path: Path, cleaned_rows: int) -> tuple[int, dict[str, int], bool]:
+    """(raw_count, dropped_by_reason, recorded) for an existing interim file.
+
+    Reads the summary that ``run_ingestion`` writes beside the Parquet. Without one, the raw
+    count is unknown: it is reported as the cleaned count with no drops and ``recorded=False``.
+    """
+    summary = read_ingest_summary(interim_path, cleaned_rows)
+    if summary is None:
+        log.warning("no ingest summary for interim parquet; raw row count and cleaning drops unknown",
+                    path=str(interim_path))
+        return cleaned_rows, {}, False
+    return int(summary["rows_raw"]), dict(summary.get("dropped_by_reason", {})), True
 
 
 def run_preprocessing(
@@ -102,6 +116,7 @@ def run_preprocessing(
     # 1. Ensure interim data exists or run Phase 1 ingestion
     cleaning_drops = {}
     raw_count = 0
+    counts_recorded = True
     if not interim_path.exists() or reingest:
         log.info("interim parquet missing or reingest requested, running Phase 1 ingestion", dataset=dataset_key)
         ingest_res = run_ingestion(cfg, dataset_key, sample_size=sample_size)
@@ -113,13 +128,9 @@ def run_preprocessing(
         cleaned_df = pd.read_parquet(interim_path)
         if sample_size is not None and len(cleaned_df) > sample_size:
             cleaned_df = cleaned_df.iloc[:sample_size].copy()
-            raw_count = len(cleaned_df)
-        elif len(cleaned_df) == 181905:
-            # Established Phase 1 sample ingestion benchmark
-            raw_count = 200000
-            cleaning_drops = {"exact_duplicate_flow": 18088, "negative_duration": 7}
+            raw_count, counts_recorded = len(cleaned_df), False
         else:
-            raw_count = len(cleaned_df)
+            raw_count, cleaning_drops, counts_recorded = recorded_ingest_counts(interim_path, len(cleaned_df))
 
     log.info("interim flows loaded", rows=len(cleaned_df))
 
@@ -169,6 +180,7 @@ def run_preprocessing(
         raw_count=raw_count,
         cleaned_df=cleaned_df,
         cleaning_dropped_by_reason=cleaning_drops,
+        ingest_counts_recorded=counts_recorded,
         windows_df=windows_df,
         sequences_df=seq_df,
         split_metadata=split_metadata,
@@ -210,9 +222,7 @@ def rebuild_temporal_outputs_from_flows(
 
     flows_df = pd.read_parquet(flows_path)
     cleaned_df = pd.read_parquet(interim_path)
-    raw_count = 200000 if dataset_key == "cic_ids2017" and len(cleaned_df) == 181905 else len(cleaned_df)
-    dropped = ({"exact_duplicate_flow": 18088, "negative_duration": 7}
-               if raw_count == 200000 else {})
+    raw_count, dropped, counts_recorded = recorded_ingest_counts(interim_path, len(cleaned_df))
 
     windows_df = aggregate_host_windows(flows_df, cfg=cfg)
     windows_path = processed_dir / "host_windows.parquet"
@@ -225,7 +235,7 @@ def rebuild_temporal_outputs_from_flows(
     split_meta.save(split_path)
     report_md, report_json, quality = generate_data_quality_report(
         dataset_key=dataset_key, raw_count=raw_count, cleaned_df=cleaned_df,
-        cleaning_dropped_by_reason=dropped, windows_df=windows_df,
+        cleaning_dropped_by_reason=dropped, ingest_counts_recorded=counts_recorded, windows_df=windows_df,
         sequences_df=seq_df, split_metadata=split_meta,
         reports_dir=cfg.path(cfg.config.paths.reports))
     return PreprocessingResult(dataset_key, len(flows_df), len(windows_df), len(seq_df),

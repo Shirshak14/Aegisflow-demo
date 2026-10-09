@@ -41,10 +41,11 @@ ctu_13:
   display_name: "CTU-13"
   adapter: "ctu_13"
   raw_dir: "data/raw/ctu_13"
-  format: "csv"
+  format: "binetflow"   # Argus bidirectional flows, plain or .gz
   official_url: "https://www.stratosphereips.org/datasets-ctu13"
   citation: >
-    Garcia, S. et al. (2014). An empirical comparison of botnet detection methods.
-    Computers & Security.
-  expected_files_glob: "**/*.binetflow"
-  status: "planned"
+    Garcia, S., Grill, M., Stiborek, J., Zunino, A. (2014). An empirical comparison of
+    botnet detection methods. Computers & Security 45, 100-123.
+  expected_files_glob: "**/*.binetflow[.gz]"
+  # scenarios: [11, 12]   # optional: load only these CTU-13 scenarios (1-13)
+  status: "opt-in prototype"   # never the active_dataset by default; see docs/combined_datasets_feasibility.md

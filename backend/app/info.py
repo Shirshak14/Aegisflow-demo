@@ -80,9 +80,21 @@ def model_status() -> dict[str, Any]:
         "training": metrics["training"],
         "test_metrics": {m: {k: v for k, v in x.items() if k != "threshold"} for m, x in metrics["models"].items()},
         "stage_prediction": "not available", "stage_note": STAGE_NOTE, "limitation": HOST_NOTE,
+        "confidence_calibration": _calibration_summary(),
         "artifacts": {p: _mtime(MODEL_DIR / p) for p in ("best.pt", "logistic.joblib", "preprocessor.joblib",
-                                                         "metadata.json", "metrics.json")},
+                                                         "metadata.json", "metrics.json", "calibration.json")},
     }
+
+
+def _calibration_summary() -> dict[str, Any]:
+    path = MODEL_DIR / "calibration.json"
+    if not path.exists():
+        return {"status": "none: alert confidence is the raw LSTM sigmoid (inflated by pos_weight); "
+                          "run `python -m aegisflow calibrate`"}
+    c = _read(path)
+    return {"status": c["method"], "a": c["a"], "b": c["b"], "calibrated_threshold": c["calibrated_threshold"],
+            "test_brier": {k: c["metrics"]["test"][k]["brier"] for k in ("raw", "calibrated")},
+            "test_ece": {k: c["metrics"]["test"][k]["ece"] for k in ("raw", "calibrated")}}
 
 
 @lru_cache(maxsize=1)

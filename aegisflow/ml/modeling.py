@@ -33,13 +33,14 @@ class ForecastDataset:
     stages: np.ndarray
     future_state: np.ndarray
     feature_names: list[str]
+    host_relative: bool = False
 
     @classmethod
-    def from_parquet(cls, path: str | Path) -> "ForecastDataset":
-        return cls.from_frame(pd.read_parquet(path))
+    def from_parquet(cls, path: str | Path, **kwargs: Any) -> "ForecastDataset":
+        return cls.from_frame(pd.read_parquet(path), **kwargs)
 
     @classmethod
-    def from_frame(cls, frame: pd.DataFrame) -> "ForecastDataset":
+    def from_frame(cls, frame: pd.DataFrame, *, host_relative: bool = False, **hr_kwargs: Any) -> "ForecastDataset":
         required = {"sequence_features", "target_features", "target_attack_present",
                     "target_dominant_class", "target_dominant_stage", "split"}
         missing = required - set(frame.columns)
@@ -53,12 +54,58 @@ class ForecastDataset:
         if X.ndim != 3 or X.shape[2] != len(raw_names) or ystate.shape != (len(frame), len(raw_names)):
             raise ValueError(f"Unexpected feature tensor shapes: X={X.shape}, target={ystate.shape}")
         X = X[:, :, [raw_names.index(name) for name in names]]
-        return cls(frame.reset_index(drop=True), X, frame.target_attack_present.to_numpy(np.int64),
+        frame = frame.reset_index(drop=True)
+        if host_relative:
+            # Must see every split of a host so its baseline is its own past, whatever the split.
+            X = host_relative_inputs(frame, X, names, **hr_kwargs)
+        return cls(frame, X, frame.target_attack_present.to_numpy(np.int64),
                    frame.target_dominant_class.astype(str).to_numpy(),
-                   frame.target_dominant_stage.astype(str).to_numpy(), ystate, names)
+                   frame.target_dominant_stage.astype(str).to_numpy(), ystate, names, host_relative)
 
     def indices(self, split: str) -> np.ndarray:
         return np.flatnonzero(self.frame.split.to_numpy() == split)
+
+
+def _signed_log(X: np.ndarray, names: list[str], log_features: set[str]) -> np.ndarray:
+    x = np.asarray(X, dtype=np.float64).copy()
+    x[~np.isfinite(x)] = np.nan
+    for i, name in enumerate(names):
+        if name in log_features:
+            x[..., i] = np.sign(x[..., i]) * np.log1p(np.abs(x[..., i]))
+    return x
+
+
+def host_relative_inputs(frame: pd.DataFrame, X: np.ndarray, names: list[str], *,
+                         window_seconds: float = 60.0, lookback: int = 240,
+                         min_history: int = 5) -> np.ndarray:
+    """Express every input window relative to the same host's own *past* (B1).
+
+    For a sequence starting at ``t`` the baseline is the per-feature median of that host's
+    earlier sequence-first-windows that had already ended by ``t`` (``start + window_seconds
+    <= t``), capped to the last ``lookback`` of them. Nothing at or after ``t`` is used, so
+    the baseline is causal. Output is ``log-space window - baseline``; a host with fewer than
+    ``min_history`` earlier windows gets a zero delta (no evidence it differs from itself).
+    Quiet hosts therefore look alike, and a host that is always noisy (e.g. an attacker) is
+    no longer recognisable merely by its level.
+    """
+    x = _signed_log(X, names, SequencePreprocessor.LOG_FEATURES)
+    out = np.zeros_like(x)
+    starts_all = pd.to_datetime(frame["seq_start_time"]).to_numpy("datetime64[ns]")
+    hosts = frame["host_id"].astype(str).to_numpy()
+    w = np.timedelta64(int(window_seconds * 1e9), "ns")
+    for host in pd.unique(hosts):
+        ix = np.flatnonzero(hosts == host)
+        ix = ix[np.argsort(starts_all[ix], kind="stable")]
+        starts = starts_all[ix]
+        first = x[ix, 0, :]                                  # (n, F) first window of each sequence
+        done = np.searchsorted(starts + w, starts, side="right")  # earlier windows ended by start_i
+        for pos, i in enumerate(ix):
+            k = min(done[pos], pos)                          # never include itself or later ones
+            if k < min_history:
+                continue
+            base = np.nanmedian(first[max(0, k - lookback):k], axis=0)
+            out[i] = x[i] - np.nan_to_num(base, nan=0.0)
+    return out.astype(np.float32)
 
 
 class SequencePreprocessor:
@@ -68,8 +115,9 @@ class SequencePreprocessor:
                     "unique_destination_ips", "unique_destination_ports", "unique_source_ports",
                     "connection_burst_max"}
 
-    def __init__(self, feature_names: list[str]):
+    def __init__(self, feature_names: list[str], prelogged: bool = False):
         self.feature_names = list(feature_names)
+        self.prelogged = prelogged  # host-relative inputs are already log-space deltas
         self.medians: np.ndarray | None = None
         self.scaler = RobustScaler()
 
@@ -80,6 +128,8 @@ class SequencePreprocessor:
 
     def _log(self, X: np.ndarray) -> np.ndarray:
         x = X.copy()
+        if getattr(self, "prelogged", False):
+            return x
         for i, name in enumerate(self.feature_names):
             if name in self.LOG_FEATURES:
                 x[..., i] = np.sign(x[..., i]) * np.log1p(np.abs(x[..., i]))
@@ -136,27 +186,146 @@ def select_threshold(y: np.ndarray, p: np.ndarray) -> tuple[float, str]:
 
 
 class LSTMForecaster:
-    def __init__(self, feature_count: int, hidden_size: int = 32, dropout: float = 0.2):
+    # hidden_size default matches configs/config.yaml `model.hidden_size` (the committed demo model).
+    def __init__(self, feature_count: int, hidden_size: int = 16, dropout: float = 0.2):
         from torch import nn
         class Net(nn.Module):
             def __init__(self):
-                super().__init__(); self.lstm = nn.LSTM(feature_count, hidden_size, batch_first=True)
-                self.dropout = nn.Dropout(dropout); self.head = nn.Linear(hidden_size, 1)
+                super().__init__()
+                self.lstm = nn.LSTM(feature_count, hidden_size, batch_first=True)
+                self.dropout = nn.Dropout(dropout)
+                self.head = nn.Linear(hidden_size, 1)
             def forward(self, x):
                 _, (h, _) = self.lstm(x)
                 return self.head(self.dropout(h[-1])).squeeze(-1)
         self.net = Net()
 
 
-def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20, batch_size=128,
-                     learning_rate=0.001, hidden_size=32, dropout=0.2, patience=4) -> dict[str, Any]:
+def _attention_pool_class():
+    """Additive (Bahdanau-style) attention over time steps: one weight per input window, summing to 1."""
+    from torch import nn
+
+    class AttentionPool(nn.Module):
+        def __init__(self, dim: int):
+            super().__init__()
+            self.score = nn.Sequential(nn.Linear(dim, dim), nn.Tanh(), nn.Linear(dim, 1, bias=False))
+
+        def forward(self, h):                      # h: (n, L, dim)
+            w = self.score(h).squeeze(-1).softmax(dim=-1)   # (n, L)
+            return (w.unsqueeze(-1) * h).sum(dim=1), w
+    return AttentionPool
+
+
+class AttentionLSTMForecaster:
+    """LSTM over all windows + attention pooling. ``net.attention(x)`` returns per-window weights (n, L)."""
+    def __init__(self, feature_count: int, hidden_size: int = 32, dropout: float = 0.2):
+        from torch import nn
+        AttentionPool = _attention_pool_class()
+
+        class Net(nn.Module):
+            def __init__(self):
+                super().__init__(); self.lstm = nn.LSTM(feature_count, hidden_size, batch_first=True)
+                self.pool = AttentionPool(hidden_size)
+                self.dropout = nn.Dropout(dropout); self.head = nn.Linear(hidden_size, 1)
+
+            def _pooled(self, x):
+                out, _ = self.lstm(x)
+                return self.pool(out)
+
+            def forward(self, x):
+                ctx, _ = self._pooled(x)
+                return self.head(self.dropout(ctx)).squeeze(-1)
+
+            def attention(self, x):
+                return self._pooled(x)[1]
+        self.net = Net()
+
+
+class TransformerForecaster:
+    """Temporal Transformer encoder over the window sequence, then attention pooling over time.
+
+    Input windows are projected to ``hidden_size`` (d_model), a learned positional embedding marks
+    each window's place in the sequence, and ``num_layers`` pre-norm encoder layers with ``num_heads``
+    heads mix information across windows. ``net.attention(x)`` returns the pooling weights (n, L).
+    """
+    def __init__(self, feature_count: int, hidden_size: int = 32, dropout: float = 0.2, *,
+                 num_heads: int = 4, num_layers: int = 2, max_len: int = 64):
+        import torch
+        from torch import nn
+        if hidden_size % num_heads:
+            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by num_heads ({num_heads})")
+        AttentionPool = _attention_pool_class()
+
+        class Net(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.proj = nn.Linear(feature_count, hidden_size)
+                self.pos = nn.Parameter(torch.zeros(1, max_len, hidden_size))
+                nn.init.normal_(self.pos, std=0.02)
+                layer = nn.TransformerEncoderLayer(hidden_size, num_heads, dim_feedforward=2 * hidden_size,
+                                                   dropout=dropout, batch_first=True, norm_first=True)
+                self.encoder = nn.TransformerEncoder(layer, num_layers, enable_nested_tensor=False)
+                self.pool = AttentionPool(hidden_size)
+                self.dropout = nn.Dropout(dropout); self.head = nn.Linear(hidden_size, 1)
+
+            def _pooled(self, x):
+                if x.shape[1] > max_len:
+                    raise ValueError(f"sequence length {x.shape[1]} exceeds max_len {max_len}")
+                h = self.encoder(self.proj(x) + self.pos[:, :x.shape[1]])
+                return self.pool(h)
+
+            def forward(self, x):
+                ctx, _ = self._pooled(x)
+                return self.head(self.dropout(ctx)).squeeze(-1)
+
+            def attention(self, x):
+                return self._pooled(x)[1]
+        self.net = Net()
+
+
+MODEL_TYPES = ("lstm", "attention_lstm", "transformer")
+
+
+def build_model(model_type: str, feature_count: int, hidden_size: int = 32, dropout: float = 0.2):
+    """Return the torch module for ``model_type`` (one of MODEL_TYPES)."""
+    if model_type == "lstm":
+        return LSTMForecaster(feature_count, hidden_size, dropout).net
+    if model_type == "attention_lstm":
+        return AttentionLSTMForecaster(feature_count, hidden_size, dropout).net
+    if model_type == "transformer":
+        return TransformerForecaster(feature_count, hidden_size, dropout).net
+    raise ValueError(f"unknown model type {model_type!r}; choose from {MODEL_TYPES}")
+
+
+def load_model(model_dir: Path, map_location: str = "cpu"):
+    """Load ``best.pt`` from ``model_dir`` with the architecture recorded in metadata.json (default lstm)."""
+    import torch
+    meta = json.loads((Path(model_dir) / "metadata.json").read_text(encoding="utf-8"))
+    tc = meta["training_config"]
+    net = build_model(tc.get("model_type", "lstm"), len(meta["feature_names"]), tc["hidden_size"], tc["dropout"])
+    net.load_state_dict(torch.load(Path(model_dir) / "best.pt", map_location=map_location, weights_only=True))
+    net.eval()
+    return net, meta
+
+
+def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=8, batch_size=256,
+                     learning_rate=0.001, hidden_size=16, dropout=0.2, patience=3,
+                     model_type: str = "lstm") -> dict[str, Any]:
+    """Train the baselines and write artifacts to ``output``.
+
+    Defaults equal configs/config.yaml `model:` (the committed demo model). Side effect: this seeds
+    the Python/NumPy/torch RNGs and turns on torch deterministic algorithms for the whole process.
+    """
     import torch
     from torch.utils.data import DataLoader, TensorDataset
-    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
-    if torch.cuda.is_available(): torch.cuda.manual_seed_all(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
     torch.use_deterministic_algorithms(True, warn_only=True)
     train_i, val_i, test_i = (data.indices(s) for s in ("train", "val", "test"))
-    prep = SequencePreprocessor(data.feature_names).fit(data.X[train_i])
+    prep = SequencePreprocessor(data.feature_names, prelogged=data.host_relative).fit(data.X[train_i])
     Xt = prep.transform(data.X[train_i]); Xv = prep.transform(data.X[val_i]); Xq = prep.transform(data.X[test_i])
     output.mkdir(parents=True, exist_ok=True)
     prep.save(output / "preprocessor.joblib")
@@ -172,26 +341,35 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20,
     # For common model comparison, validation threshold is chosen for LSTM as well.
     counts = positive_class_weight(data.attack[train_i])
     pos_weight = counts[0]
-    model = LSTMForecaster(data.X.shape[-1], hidden_size, dropout).net
+    model = build_model(model_type, data.X.shape[-1], hidden_size, dropout)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu"); model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight], dtype=torch.float32, device=device))
     loader = DataLoader(TensorDataset(torch.tensor(Xt), torch.tensor(data.attack[train_i], dtype=torch.float32)),
                         batch_size=batch_size, shuffle=True, generator=torch.Generator().manual_seed(seed))
     vx = torch.tensor(Xv, device=device); vy = torch.tensor(data.attack[val_i], dtype=torch.float32, device=device)
-    best_loss=float("inf"); best_epoch=0; stale=0; history=[]
+    best_loss, best_epoch, stale, history = float("inf"), 0, 0, []
     for epoch in range(epochs):
-        model.train(); losses=[]
+        model.train()
+        losses = []
         for xb, yb in loader:
-            xb=xb.to(device); yb=yb.to(device); optimizer.zero_grad(); loss=loss_fn(model(xb),yb); loss.backward(); optimizer.step(); losses.append(float(loss.item()))
+            xb, yb = xb.to(device), yb.to(device)
+            optimizer.zero_grad()
+            loss = loss_fn(model(xb), yb)
+            loss.backward()
+            optimizer.step()
+            losses.append(float(loss.item()))
         model.eval()
-        with torch.no_grad(): val_loss=float(loss_fn(model(vx),vy).item()) if len(val_i) else float(np.mean(losses))
-        history.append({"epoch": epoch+1, "train_loss": float(np.mean(losses)), "val_loss": val_loss})
+        with torch.no_grad():
+            val_loss = float(loss_fn(model(vx), vy).item()) if len(val_i) else float(np.mean(losses))
+        history.append({"epoch": epoch + 1, "train_loss": float(np.mean(losses)), "val_loss": val_loss})
         if val_loss < best_loss:
-            best_loss=val_loss; best_epoch=epoch+1; stale=0; torch.save(model.state_dict(), output / "best.pt")
+            best_loss, best_epoch, stale = val_loss, epoch + 1, 0
+            torch.save(model.state_dict(), output / "best.pt")
         else:
-            stale+=1
-            if stale>=patience: break
+            stale += 1
+            if stale >= patience:
+                break
     torch.save(model.state_dict(), output / "last.pt")
     model.load_state_dict(torch.load(output / "best.pt", map_location=device, weights_only=True)); model.eval()
     with torch.no_grad():
@@ -202,11 +380,13 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20,
              "train_class_counts":counts[1], "threshold_selection":lstm_reason,
              "threshold":lstm_threshold, "models":{"majority":metrics_at(data.attack[test_i],prior_probs,0.5),
              "logistic_regression":metrics_at(data.attack[test_i],cp,threshold),
-             "lstm":metrics_at(data.attack[test_i],lp,lstm_threshold)},
+             model_type:metrics_at(data.attack[test_i],lp,lstm_threshold)},
              "training":{"seed":seed,"epochs_requested":epochs,"epochs_run":len(history),"batch_size":batch_size,
                          "learning_rate":learning_rate,"hidden_size":hidden_size,"dropout":dropout,"patience":patience,
                          "device":str(device),"best_checkpoint_epoch":best_epoch,
                          "checkpoint_selection":"minimum validation BCEWithLogitsLoss"}, "history":history}
+    if model_type != "lstm":  # the default LSTM's metadata stays byte-for-byte what it was
+        results["training"]["model_type"] = model_type
     for name, idx in zip(("train","val","test"),(train_i,val_i,test_i)):
         results["splits"][name]={"sequences":len(idx),"positive_targets":int(data.attack[idx].sum()),"benign_targets":int((data.attack[idx]==0).sum())}
     results["stage_proxy"]={"status":"Not scored: too few attack-positive test targets per stage to support meaningful stage forecasting.",
@@ -220,7 +400,7 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20,
         "interpretation":"Derived as target_window_start - seq_end_time. Nonpositive values mean the target window starts before the input window ends; these examples are not leakage-free forecasts."}
     # Regression is descriptive persistence baseline for future network state, independently labeled.
     results["future_network_state"]={"status":"Not trained in Phase 3; sparse attack targets and primary binary objective prioritized."}
-    metadata={"feature_names":data.feature_names,"input_shape":list(data.X.shape[1:]),"label_mapping":{"benign":0,"attack":1},
+    metadata={"feature_names":data.feature_names,"input_shape":list(data.X.shape[1:]),"label_mapping":{"benign":0,"attack":1},"host_relative":data.host_relative,
               "threshold":lstm_threshold,"class_counts":counts[1],"training_config":results["training"]}
     (output/"metadata.json").write_text(json.dumps(metadata,indent=2),encoding="utf-8")
     (output/"metrics.json").write_text(json.dumps(results,indent=2,default=str),encoding="utf-8")
@@ -230,11 +410,17 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=20,
 
 def predict_sequences(path: Path, model_dir: Path, threshold: float | None = None) -> list[dict[str, Any]]:
     import torch
-    data=ForecastDataset.from_parquet(path); meta=json.loads((model_dir/"metadata.json").read_text(encoding="utf-8"))
+    model,meta=load_model(model_dir)
+    data=ForecastDataset.from_parquet(path, host_relative=bool(meta.get("host_relative", False)))
     prep=joblib.load(model_dir/"preprocessor.joblib"); x=prep.transform(data.X)
-    model=LSTMForecaster(len(meta["feature_names"]),meta["training_config"]["hidden_size"],meta["training_config"]["dropout"]).net
-    model.load_state_dict(torch.load(model_dir/"best.pt",map_location="cpu",weights_only=True)); model.eval()
-    with torch.no_grad(): probs=torch.sigmoid(model(torch.tensor(x))).numpy()
+    model_type=meta["training_config"].get("model_type","lstm")
+    with torch.no_grad():
+        xt=torch.tensor(x); probs=torch.sigmoid(model(xt)).numpy()
+        attn=model.attention(xt).numpy() if hasattr(model,"attention") else None
     t=float(meta["threshold"] if threshold is None else threshold)
-    return [{"sequence_id":str(data.frame.iloc[i].get("sequence_id","")),"attack_probability":float(probs[i]),
-             "predicted_attack":bool(probs[i]>=t),"threshold":t,"model":"cic_ids2017-lstm-phase3"} for i in range(len(probs))]
+    name="cic_ids2017-lstm-phase3" if model_type=="lstm" else f"cic_ids2017-{model_type}"
+    rows=[{"sequence_id":str(data.frame.iloc[i].get("sequence_id","")),"attack_probability":float(probs[i]),
+           "predicted_attack":bool(probs[i]>=t),"threshold":t,"model":name} for i in range(len(probs))]
+    if attn is not None:  # per-input-window attention weights, oldest window first
+        for row,w in zip(rows,attn): row["attention"]=[round(float(v),6) for v in w]
+    return rows

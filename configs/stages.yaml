@@ -83,3 +83,21 @@ cic_ids2017:
     normalized_attack_class: "Denial of Service"
     attack_stage: "Impact"
     confidence: "inferred"
+
+# CTU-13 (opt-in, aegisflow/ml/datasets/ctu_13.py). The adapter reduces the hundreds of
+# fine CTU labels to their family; the raw label stays in the ctu_label column.
+ctu_13:
+  Botnet:
+    normalized_attack_class: "Botnet"
+    attack_stage: "Command and Control"
+    confidence: "inferred"
+    note: "Every flow from an infected host; includes C2, spam, click fraud, scans and DDoS. Same class as CIC-IDS2017 'Bot'."
+  Normal:
+    normalized_attack_class: "Benign"
+    attack_stage: "Benign"
+    confidence: "ground_truth"
+  Background:
+    normalized_attack_class: "Benign"
+    attack_stage: "Benign"
+    confidence: "inferred"
+    note: "Unverified university traffic, not confirmed benign. Counted as non-attack so windows are not flagged by it."

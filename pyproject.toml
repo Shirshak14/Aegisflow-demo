@@ -3,9 +3,21 @@ name = "aegisflow"
 version = "0.1.0"
 description = "AI-based network attack forecasting from network traffic data (SIH26153, Team CyberVanguard)"
 requires-python = ">=3.10"
+dynamic = ["dependencies"]
+
+[project.scripts]
+aegisflow = "aegisflow.cli:main"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.ruff]
+line-length = 120
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "backend/tests"]
+# Plain `pytest` (as CI runs it) does not put the repo root on sys.path; `python -m pytest` does.
+pythonpath = ["."]
 addopts = "-v"
 
 [tool.setuptools.packages.find]

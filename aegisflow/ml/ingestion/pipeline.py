@@ -1,6 +1,7 @@
 """Phase-1 ingestion pipeline: raw dataset -> canonical -> cleaned -> labeled -> interim Parquet."""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -39,6 +40,34 @@ def _write_parquet(df: pd.DataFrame, path: Path) -> None:
         ) from exc
 
 
+def summary_path(interim_path: Path) -> Path:
+    """Sidecar next to the interim Parquet that records the measured ingestion counts."""
+    return interim_path.with_name(interim_path.stem + ".ingest.json")
+
+
+def write_ingest_summary(interim_path: Path, *, rows_raw: int, rows_clean: int,
+                         dropped_by_reason: dict[str, int], sample_size: int | None) -> Path:
+    path = summary_path(interim_path)
+    path.write_text(json.dumps({"rows_raw": int(rows_raw), "rows_clean": int(rows_clean),
+                                "dropped_by_reason": {k: int(v) for k, v in dropped_by_reason.items()},
+                                "sample_size": sample_size}, indent=2), encoding="utf-8")
+    return path
+
+
+def read_ingest_summary(interim_path: Path, rows_clean: int) -> dict | None:
+    """The recorded counts, or None when missing, unreadable, or written for a different interim file."""
+    path = summary_path(interim_path)
+    try:
+        summary = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(summary, dict) or summary.get("rows_clean") != rows_clean:
+        log.warning("ingest summary does not match interim parquet, ignoring it", path=str(path),
+                    recorded=summary.get("rows_clean") if isinstance(summary, dict) else None, actual=rows_clean)
+        return None
+    return summary
+
+
 def run_ingestion(cfg: AegisFlowConfig, dataset_key: str, sample_size: int | None = None) -> IngestResult:
     """Run the full Phase-1 pipeline for one dataset and write data/interim/<dataset_key>.parquet."""
     entry = cfg.datasets[dataset_key]
@@ -56,6 +85,8 @@ def run_ingestion(cfg: AegisFlowConfig, dataset_key: str, sample_size: int | Non
     out_path = cfg.path(cfg.config.paths.data_interim) / f"{dataset_key}.parquet"
     _write_parquet(labeled, out_path)
     log.info("wrote interim parquet", path=str(out_path), rows=len(labeled))
+    write_ingest_summary(out_path, rows_raw=len(raw), rows_clean=len(labeled),
+                         dropped_by_reason=cleaning_report.dropped_by_reason, sample_size=sample_size)
 
     class_dist = labeled["normalized_attack_class"].value_counts(dropna=False).to_dict()
     stage_dist = labeled["attack_stage"].value_counts(dropna=False).to_dict()

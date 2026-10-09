@@ -18,10 +18,66 @@ Tensor `[batch, 10, 28]`: 28 numeric traffic features per window (counts, byte/p
 | Logistic regression | Flattened normalised history, `class_weight="balanced"`. |
 | LSTM (demo model) | 1-layer LSTM (hidden 16), dropout 0.2 on the last hidden state, linear output; `BCEWithLogitsLoss` with `pos_weight` 132.75; Adam 1e-3, batch 256; early stopping on validation loss. About 3k parameters. Best checkpoint was epoch 1 of 4. |
 
-Hyperparameters are the defaults in `configs/config.yaml` under `model:` (epochs 8, batch 256, lr 0.001, hidden 16, dropout 0.2, patience 3 = the committed model). CLI flags or `--set model.hidden_size=8` override them; `model.type` must be `lstm`.
+### Optional architectures (`--model`)
+
+| `--model` | Architecture | Attention output |
+|---|---|---|
+| `lstm` (default, demo model) | as above | none |
+| `attention_lstm` | LSTM over all 10 windows → additive attention pooling over time → linear output | one weight per input window (sums to 1) |
+| `transformer` | Linear projection to d_model = `hidden_size`, learned positional embedding, 2 pre-norm Transformer encoder layers × 4 heads, attention pooling over time → linear output (`hidden_size` must be divisible by 4) | one weight per input window |
+
+`python -m aegisflow train --model transformer` writes to `artifacts/models/cic_ids2017_transformer/` (`--output-dir` to change), so the demo model in `artifacts/models/cic_ids2017/` is never overwritten. `metadata.json` records `training_config.model_type`; `predict --model-dir <dir>` loads the right architecture and adds an `attention` list per sequence. Same split, preprocessing, class weighting, early stopping and validation-selected threshold as the LSTM. No test metrics are reported here for these models: they have not been trained on the full processed dataset yet. Attention weights show where the model looked; for `attention_lstm` they weight LSTM states, each of which already summarises all earlier windows, so they are not a per-window attribution.
+
+Hyperparameters are the defaults in `configs/config.yaml` under `model:` (epochs 8, batch 256, lr 0.001, hidden 16, dropout 0.2, patience 3 = the committed model). CLI flags or `--set model.hidden_size=8` override them; `model.type` is `lstm` unless `--model` says otherwise.
 `python -m aegisflow train --dataset cic_ids2017`
 
-There is no stage-prediction head, attention, or explainability module. Predicted stage is always `UNCERTAIN`.
+### Temporal GNN (`aegisflow/ml/graph.py`, opt-in)
+
+For each window, flows define a host-communication graph: an edge joins two hosts that exchanged a flow in that window. For each step of a host's 10-window sequence, the model combines three inputs:
+- the host's own 28 features
+- the mean features of its neighbours in that window
+- log(1 + neighbour count)
+
+It combines them with a GraphSAGE-style mean-aggregation layer, then runs a GRU over time and a linear attack head. Target, split, class weighting, early stopping and threshold selection are the same as the LSTM's.
+
+`python -m aegisflow train-gnn` reads `sequences.parquet`, `host_windows.parquet` and `flows.parquet` and writes to `artifacts/models/cic_ids2017_tgnn/`. A synthetic test checks that the graph carries information per-host models cannot see: there, the label depends only on which peer a host talked to, and the GNN reaches ROC-AUC ~0.88 vs ~0.48 for the LSTM. That is a property of the test data, not a CIC-IDS2017 result. On CIC-IDS2017 the graph is dominated by the attacker host 172.16.0.1, so expect the same shortcut. No CIC-IDS2017 metrics are reported here.
+
+
+## Explanations (`aegisflow/ml/explain.py`)
+
+Every prediction can be attributed to its 10 × 28 inputs (time step × feature):
+
+| Model | Method | Property |
+|---|---|---|
+| LSTM | `shap`: SHAP values via `shap.GradientExplainer` (expected gradients), background = 100 training sequences | attributions sum to output − mean background output, approximately (sampled) |
+| LSTM | `integrated_gradients`: Integrated Gradients from the median training sequence, 128 steps, pure PyTorch | attributions sum to output − baseline output (gap reported as `additivity_gap`) |
+| Logistic regression | exact linear SHAP, `w · (x − E[x])` | exact |
+
+All three explain the **log-odds** of an attack in the target window. Output per sequence: top features with sign (towards attack / towards benign), the time step where each mattered most, the raw last-window value, and attribution per time step.
+
+`python -m aegisflow explain --dataset cic_ids2017 --limit 5` (or `--sequence-id <id>`, `--model logistic_regression`, `--method integrated_gradients`), and `GET /explain/{sequence_id}` in the API; the dashboard shows it in each alert's detail. Explanations are faithful to the model; they do not make the model more accurate, and given the host shortcut below, features that identify host `172.16.0.1`'s traffic are expected to dominate.
+The demo LSTM has no stage head, so in the default replay the predicted stage is always `UNCERTAIN`.
+
+## Multi-task model: stage prediction and K-step future state (`aegisflow/ml/multitask.py`)
+
+An opt-in second model with one LSTM encoder and three heads:
+
+| Head | Target | Loss | Reported in `metrics.json` |
+|---|---|---|---|
+| attack | attack in the horizon-1 target window (same as the LSTM) | BCE with `pos_weight` | precision / recall / F1 / ROC-AUC / PR-AUC / FPR at a validation-selected threshold |
+| stage | dominant stage of the horizon-1 target window, over `stages.yaml: stages_order` | cross-entropy, inverse-frequency class weights | accuracy, macro-F1, **accuracy on attack-positive targets**, confusion matrix, all next to a majority-class baseline; stages with no training examples are listed |
+| future state | the 28 traffic features of each of the next K windows (`--horizons`, default 3) | masked MSE in preprocessed units | MAE / RMSE per horizon next to a persistence baseline (last input window repeated) |
+
+Horizon k means the k-th same-host window that starts after the input ends, the same rule `build_host_sequences` uses; targets for k > 1 come from `host_windows.parquet`, and a horizon with no window is masked.
+
+```
+python -m aegisflow train-multitask --dataset cic_ids2017 --horizons 3   # -> artifacts/models/cic_ids2017_multitask/
+python -m aegisflow forecast --limit 5                                   # attack p, stage + MITRE tactic, future windows in raw units
+```
+
+`forecast` keeps a stage only if its probability is at least `confidence.stage_prediction_threshold`, otherwise it prints `confidence.uncertain_label`. Setting `replay.stage_model_dir: artifacts/models/cic_ids2017_multitask` in `config.yaml` makes the replay label each alert with that stage, so the stage-severity risk term and the MITRE lookup apply to live alerts. Default `null` keeps the demo exactly as it was.
+
+Limits: stages are the label-to-stage proxy in `stages.yaml`, not ground truth. CIC-IDS2017 has no Exfiltration traffic and very few attack windows per stage in the test split, so stage numbers will be noisy. No metrics are quoted here until the model is trained on the full processed dataset.
 
 ## Split
 
@@ -41,3 +97,16 @@ Chronological 60/20/20 on sequence target-end time; sequences straddling a cutof
 - Botnet (84 % of test positives) never appears in training and is not detected.
 - Most positives are continuations of an attack already visible in the inputs; onset prediction is at or below chance.
 - Validation is thin (127 positives, 2 episodes), so thresholds do not transfer.
+
+## Alert threshold after calibration (decision: unchanged)
+
+The alert threshold stays at the validation-selected raw LSTM probability 0.3308 (0.0448 on the calibrated scale). Calibration is a monotone map, so it cannot change which sequences alert: 349 alerts, 79 true positives, before and after. Only the displayed confidence moved, and with it the `LIKELY_ATTACK` label count (80 to 41), because that label is the calibrated confidence reaching 0.5.
+
+Why it was not moved:
+
+- The 80 to 41 change is a relabelling, not a change in detection quality. The 349 alerts have precision 0.23, so most should read UNCERTAIN, and now more of them do.
+- Choosing a threshold to make the label counts look better would be tuning on the outcome. Thresholds here are chosen on validation only (max F1), and validation has just 127 positives from 2 episodes, so any threshold chosen from it is fragile.
+- The calibration map was fitted on validation, where positives are 1.1 % of sequences. On the test split they are 4.3 %, so calibrated probabilities under-predict there (mean 0.011 against an observed rate of 0.043, ECE 0.032). The calibrated scale is therefore a sensible ranking and relative confidence, not a reliable absolute probability, and it is a poor basis for re-picking a cutoff.
+- Moving it would change every alert count and dashboard number, and would not address the real weakness (the model recognises the attacker host).
+
+Revisit it only after the data or evaluation design changes (B1, B13 in `docs/optimization_opportunities.md`).

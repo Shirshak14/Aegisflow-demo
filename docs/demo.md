@@ -13,7 +13,7 @@ Open http://127.0.0.1:8000. Wait until the progress line stops saying "loading m
 ## Click path
 
 1. Read the "Honest finding" banner: detections are largely attacker-host recognition; stage is not predicted.
-2. Choose speed (1000x finishes quickly), press **Start**. Note: Start clears the alert ledger.
+2. Choose speed (1000x finishes quickly), press **Start**. Note: each Start opens a new session; earlier sessions stay in the ledger, and the dashboard shows the current one.
 3. Watch Hosts monitored, Alerts, progress and the sim clock. Replay covers the held-out test period (from 2017-07-07 09:15).
 4. Click an alert: risk score and components (max reachable 75), LSTM probability vs threshold, logistic-regression comparison, dataset label (revealed for evaluation only), MITRE lookup for that label.
 5. Click a host for its risk timeline.
