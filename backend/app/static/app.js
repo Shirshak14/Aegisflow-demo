@@ -483,7 +483,7 @@ function SiemCard() {
 function ModelsCard({ models }) {
   const demo = models.find(m => m.demo_model);
   return html`<section class="card span12"><h2>Models on this machine</h2>
-    <div class="scroll"><table>
+    <div class="scroll" data-lenis-prevent><table>
       <thead><tr><th>Model</th><th>Type</th><th>Trained</th><th class="num">Test seqs</th><th class="num">Test positives</th>
         <th class="num">ROC-AUC</th><th class="num">PR-AUC</th><th class="num">F1</th><th class="num">FPR</th><th>Extra</th></tr></thead>
       <tbody>${models.map(m => { const x = m.test_metrics || {}; return html`<tr key=${m.name} style=${{ cursor: "default" }}>
@@ -516,7 +516,7 @@ function EvaluationCard({ ev, model, feats }) {
       <button class=${split === "test" ? "on" : ""} onClick=${() => setSplit("test")}>test</button>
       <button class=${split === "val" ? "on" : ""} onClick=${() => setSplit("val")}>validation</button>
     </div>
-    <div class="scroll"><table>
+    <div class="scroll" data-lenis-prevent><table>
       <thead><tr><th>Model</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">ROC-AUC</th><th class="num">PR-AUC</th><th class="num">FPR</th><th>Confusion [[TN,FP],[FN,TP]]</th></tr></thead>
       <tbody>${ev.table[variant].map(r => { const m = r[split]; return html`<tr key=${r.model} style=${{ cursor: "default" }}><td>${r.model}</td>
         <td class="num">${fmt(m.precision)}</td><td class="num">${fmt(m.recall)}</td><td class="num">${fmt(m.f1)}</td><td class="num">${fmt(m.roc_auc)}</td>
@@ -573,6 +573,8 @@ function App() {
     return () => { stop = true; es.close(); clearTimeout(timer.current); };
   }, [boot, poll, apply]);
 
+  useEffect(() => { if (boot) FX.revealCards(); }, [!!boot]);
+
   if (bootErr) return html`<main><section class="card span12"><h2>Cannot load</h2><div class="err">${bootErr.message}</div></section></main>`;
   if (!boot) return html`<p style=${{ padding: "20px" }} class="muted">Loading dashboard…</p>`;
   const { cfg, ds, model, ev, feats, models } = boot, { st, hosts, alerts, statuses, triage } = live;
@@ -586,18 +588,18 @@ function App() {
 
   return html`<div>
   <header>
-    <div><h1>AegisFlow — network attack forecasting demo</h1>
+    <div><h1><${FX.ShinyText}>AegisFlow — network attack forecasting demo<//></h1>
       <div class="sub">Replays the held-out CIC-IDS2017 test period through the saved model. All scores are real model outputs. <a href="/classic">classic view</a></div></div>
     <div class="row"><span class=${"chip " + (st ? st.state : "idle")}>${st ? st.state + (st.state === "running" ? ` · ${st.speed}×` : "") : "idle"}</span>
       <span class="muted small">sim clock</span><span class="mono">${st ? t(st.sim_time) : "–"}</span></div>
   </header>
   <main>
-    <section class="card span3"><h2>Hosts monitored</h2><div class="big">${st ? st.hosts_seen.toLocaleString() : 0}</div>
+    <section class="card span3"><h2>Hosts monitored</h2><div class="big"><${FX.CountUp} value=${st ? st.hosts_seen : 0}/></div>
       <div class="small muted">of ${ds.hosts.toLocaleString()} in dataset · test split ${ds.split.test_sequences.toLocaleString()} sequences</div></section>
-    <section class="card span3"><h2>Alerts this replay</h2><div class="big">${st ? st.alerts_emitted.toLocaleString() : 0}</div>
+    <section class="card span3"><h2>Alerts this replay</h2><div class="big"><${FX.CountUp} value=${st ? st.alerts_emitted : 0}/></div>
       <div class="small muted">${st && st.alerts_emitted ? `${tp} match an attack label, ${st.alerts_emitted - tp} benign` : " "}</div>
       <div class="small muted">${triageLine}</div></section>
-    <section class="card span3"><h2>Replay</h2><div class="big">${pct}%</div>
+    <section class="card span3"><h2>Replay</h2><div class="big"><${FX.CountUp} value=${pct}/>%</div>
       <div class="bar"><div style=${{ width: pct + "%" }}></div></div>
       <div class="small muted">${liveErr ? "backend: " + liveErr : st ? (st.model_ready ? `${st.processed.toLocaleString()} / ${st.total.toLocaleString()} test sequences` : "loading model and scoring test split…") + (st.error ? ` · ERROR ${st.error}` : "") : " "}</div></section>
     <section class="card span3"><h2>Replay controls</h2>
@@ -608,13 +610,13 @@ function App() {
       <div class="small muted" style=${{ marginTop: "8px" }}>Model <span class="mono">${model.version}</span><br/>alert when LSTM p ≥ ${fmt(model.lstm_threshold, 4)} (validation-selected)</div>
     </section>
 
-    <section class="card span6"><h2>Host risk</h2><div class="scroll"><table>
+    <section class="card span6"><h2>Host risk</h2><div class="scroll" data-lenis-prevent><table>
       <thead><tr><th>Host</th><th class="num">Seqs</th><th class="num">Alerts</th><th class="num">Latest risk</th><th class="num">Max risk</th><th class="num">LSTM p</th></tr></thead>
       <tbody>${hosts.length ? hosts.slice(0, 60).map(h => html`<tr key=${h.host_id} class=${sel && sel.host === h.host_id ? "sel" : ""} onClick=${() => setSel({ host: h.host_id })}>
         <td class="mono">${h.host_id}</td><td class="num">${h.sequences}</td><td class="num">${h.alerts}</td>
         <td class=${"num lvl-" + levelOf(h.latest_risk, cfg)}>${fmt(h.latest_risk, 1)}</td><td class=${"num lvl-" + levelOf(h.max_risk, cfg)}>${fmt(h.max_risk, 1)}</td>
         <td class="num">${fmt(h.latest_lstm_p)}</td></tr>`) : html`<tr><td colspan="6" class="muted">Start the replay to see hosts.</td></tr>`}</tbody></table></div></section>
-    <section class="card span6"><h2>Alerts (newest first)</h2><div class="scroll"><table>
+    <section class="card span6"><h2>Alerts (newest first)</h2><div class="scroll" data-lenis-prevent><table>
       <thead><tr><th>#</th><th>Host</th><th>Target</th><th class="num">Risk</th><th class="num">LSTM p</th><th>Stage</th><th>Status</th><th>Dataset label</th></tr></thead>
       <tbody>${alerts.length ? alerts.map(a => { const s = statuses[a.id] || "open"; return html`<tr key=${a.id} class=${sel && sel.alert === a.id ? "sel" : ""} onClick=${() => setSel({ alert: a.id })}>
         <td>${a.id}</td><td class="mono">${a.host_id}</td><td class="mono">${hm(a.target_window_start)}</td>
