@@ -63,3 +63,28 @@ The design's counts table under-counted episodes by merging bots that escalate i
 - Nothing is added to the product, not even as an opt-in model. The demo model and its threshold are unchanged.
 - Together with `docs/onset_forecasting_report.md` and `docs/combined_datasets_feasibility.md`: neither CIC-IDS2017 nor CTU-13 supports a claim that AegisFlow forecasts attack starts or escalations. The defensible wording stays "next-window risk", i.e. early detection of activity that is already under way.
 - The escalation signal (median 0.74, beating the clock) is worth recording as a lead, not a result. Testing it properly needs many independent escalations from many botnet families, and per-host calibration in the design from the start.
+
+## 6. Round 2: per-host baselines and per-scenario thresholds
+
+Design: `docs/escalation_forecasting_round2_design.md`, pushed (b522495) before any round-2 model was trained. Each anchor's inputs are expressed relative to the median of the same host's own windows up to the anchor time, and E4 uses a label-free top-1% rank threshold inside each held-out scenario. Everything else, including the bars, is unchanged. Raw output: the `normalised` key of `reports/escalation_forecast_study.json`.
+
+**Answer: still no, and the round-1 signal disappears.** No variant passes E1, E2 or E4.
+
+| Variant | H (min) | Median AUC | Round 1 AUC | Time-only | Shifted-label | p<.05 | Alerted (rank) | Worst FPR (rank) | Bars passed |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Logistic | 1 | 0.442 | 0.635 | 0.473 | 0.498 | 0/4 | 1/18 | 0.52 | none |
+| Gradient boosting | 1 | 0.637 | 0.693 | 0.473 | 0.468 | 2/4 | 1/18 | 0.07 | E3 |
+| Logistic | 5 | 0.663 | 0.590 | 0.538 | 0.506 | 1/6 | 2/30 | 0.08 | E3 |
+| Gradient boosting | 5 | 0.518 | **0.736** | 0.538 | 0.476 | 0/6 | 2/30 | 0.03 | none |
+| Logistic | 15 | 0.538 | 0.575 | 0.417 | 0.519 | 1/5 | 20/26 | 1.00 | none |
+| Gradient boosting | 15 | 0.560 | 0.597 | 0.417 | 0.583 | 2/5 | 8/26 | 0.11 | none |
+| Logistic | 30 | 0.500 | 0.697 | 0.366 | 0.500 | 1/5 | 19/26 | 1.00 | none |
+| Gradient boosting | 30 | 0.492 | 0.556 | 0.366 | 0.476 | 2/5 | 4/26 | 0.13 | none |
+
+What it means:
+
+- **The round-1 signal was mostly the host's level, not a change before escalation.** Once each host is compared with its own past, the best round-1 variant (gradient boosting, 5 minutes) falls from 0.74 to 0.52, which is chance. A model that knows "this looks like a Neris or Rbot capture" can rank that capture's anchors above another's; it cannot tell when, inside one host's timeline, the escalation is about to come.
+- **The threshold problem is mostly fixed, but there is nothing left to alert on.** With the per-scenario rank threshold, the worst false-positive rate drops to 3 to 13% for gradient boosting, against 98 to 100% in round 1. At that rate it catches 2 of 30 escalations at 5 minutes. The remaining 100% rows are logistic models that give one constant score across scenario 10, so every anchor ties at the threshold.
+- **E2 is no closer.** At most 2 folds beat random placements of the escalation on the same hosts, against the 5 required.
+
+Conclusion across both rounds (16 variants): CTU-13 does not show that an infected host's own traffic forecasts its escalation. With about 6 independent escalations it could not show it reliably even if the effect were real. Further rounds on this data would amount to searching for a variant that passes, so I recommend stopping here.

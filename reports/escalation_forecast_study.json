@@ -1204,5 +1204,1125 @@
       "shifted_label_median_auc": null,
       "seconds": 9.6
     }
+  },
+  "normalised": {
+    "logistic|rel|H1": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 8,
+          "negatives": 1345,
+          "auc": 0.38327137546468404,
+          "pseudo_null_median": 0.46630677587490693,
+          "pseudo_null_p95": 0.9172375279225613,
+          "pseudo_p": 0.582089552238806,
+          "test_fpr": 0.0,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.010408921933085501,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 8,
+          "positives": 4,
+          "negatives": 1963,
+          "auc": 0.6139836984207845,
+          "pseudo_null_median": 0.5182942376338603,
+          "pseudo_null_p95": 0.9430902600713921,
+          "pseudo_p": 0.36318407960199006,
+          "test_fpr": 0.0056036678553234845,
+          "episodes": 2,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.010188487009679063,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 9,
+          "positives": 4,
+          "negatives": 3,
+          "auc": 0.5,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.5,
+          "pseudo_p": 1.0,
+          "test_fpr": 0.0,
+          "episodes": 3,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 10,
+          "positives": 9,
+          "negatives": 104,
+          "auc": 0.24038461538461536,
+          "pseudo_null_median": 0.510989010989011,
+          "pseudo_null_p95": 0.677536231884058,
+          "pseudo_p": 1.0,
+          "test_fpr": 0.5192307692307693,
+          "episodes": 9,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.5192307692307693,
+          "rank_episodes_alerted": 0
+        }
+      ],
+      "summary": {
+        "folds_scored": 4,
+        "median_auc": 0.441635687732342,
+        "folds_p_lt_05": 0,
+        "episodes": 18,
+        "episodes_alerted": 0,
+        "max_test_fpr": 0.5192307692307693,
+        "rank_episodes_alerted": 1,
+        "rank_max_test_fpr": 0.5192307692307693
+      },
+      "shifted_label_median_auc": 0.49759615384615385,
+      "seconds": 4.4,
+      "bars": {
+        "E1": false,
+        "E2": false,
+        "E3": false,
+        "E4": false,
+        "all": false
+      }
+    },
+    "gboost|rel|H1": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 8,
+          "negatives": 1345,
+          "auc": 0.5161710037174722,
+          "pseudo_null_median": 0.473752792256143,
+          "pseudo_null_p95": 0.9234735666418465,
+          "pseudo_p": 0.43781094527363185,
+          "test_fpr": 0.0,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.017843866171003718,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 8,
+          "positives": 4,
+          "negatives": 1963,
+          "auc": 0.32240193581253185,
+          "pseudo_null_median": 0.4418663946965834,
+          "pseudo_null_p95": 0.887901580826109,
+          "pseudo_p": 0.6069651741293532,
+          "test_fpr": 0.7819663779928681,
+          "episodes": 2,
+          "episodes_alerted": 2,
+          "rank_test_fpr": 0.010697911360163017,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 9,
+          "positives": 4,
+          "negatives": 3,
+          "auc": 1.0,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.5,
+          "pseudo_p": 0.004975124378109453,
+          "test_fpr": 0.0,
+          "episodes": 3,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 10,
+          "positives": 9,
+          "negatives": 104,
+          "auc": 0.7585470085470085,
+          "pseudo_null_median": 0.5366144387912426,
+          "pseudo_null_p95": 0.6916971980778418,
+          "pseudo_p": 0.009950248756218905,
+          "test_fpr": 0.0,
+          "episodes": 9,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.0673076923076923,
+          "rank_episodes_alerted": 0
+        }
+      ],
+      "summary": {
+        "folds_scored": 4,
+        "median_auc": 0.6373590061322403,
+        "folds_p_lt_05": 2,
+        "episodes": 18,
+        "episodes_alerted": 2,
+        "max_test_fpr": 0.7819663779928681,
+        "rank_episodes_alerted": 1,
+        "rank_max_test_fpr": 0.0673076923076923
+      },
+      "shifted_label_median_auc": 0.4684369162845984,
+      "seconds": 99.2,
+      "bars": {
+        "E1": false,
+        "E2": false,
+        "E3": true,
+        "E4": false,
+        "all": false
+      }
+    },
+    "gboost|time|H1": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 8,
+          "negatives": 1345,
+          "auc": 0.4461895910780669,
+          "pseudo_null_median": 0.3209233060312733,
+          "pseudo_null_p95": 0.8216679076693969,
+          "pseudo_p": 0.38308457711442784,
+          "test_fpr": 0.0,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.3576208178438662,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 8,
+          "positives": 4,
+          "negatives": 1963,
+          "auc": 0.1323229750382068,
+          "pseudo_null_median": 0.46659867414584394,
+          "pseudo_null_p95": 0.936511983681795,
+          "pseudo_p": 0.8308457711442786,
+          "test_fpr": 1.0,
+          "episodes": 2,
+          "episodes_alerted": 2,
+          "rank_test_fpr": 0.026999490575649515,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 9,
+          "positives": 4,
+          "negatives": 3,
+          "auc": 0.5,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.5,
+          "pseudo_p": 1.0,
+          "test_fpr": 1.0,
+          "episodes": 3,
+          "episodes_alerted": 3,
+          "rank_test_fpr": 1.0,
+          "rank_episodes_alerted": 3
+        },
+        {
+          "scenario": 10,
+          "positives": 9,
+          "negatives": 104,
+          "auc": 0.7115384615384616,
+          "pseudo_null_median": 0.5163307751502673,
+          "pseudo_null_p95": 0.6555367709213863,
+          "pseudo_p": 0.014925373134328358,
+          "test_fpr": 0.5769230769230769,
+          "episodes": 9,
+          "episodes_alerted": 9,
+          "rank_test_fpr": 0.5769230769230769,
+          "rank_episodes_alerted": 9
+        }
+      ],
+      "summary": {
+        "folds_scored": 4,
+        "median_auc": 0.47309479553903344,
+        "folds_p_lt_05": 1,
+        "episodes": 18,
+        "episodes_alerted": 14,
+        "max_test_fpr": 1.0,
+        "rank_episodes_alerted": 13,
+        "rank_max_test_fpr": 1.0
+      },
+      "shifted_label_median_auc": null,
+      "seconds": 6.3
+    },
+    "logistic|rel|H5": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 40,
+          "negatives": 1313,
+          "auc": 0.4474485910129475,
+          "pseudo_null_median": 0.5036454336147352,
+          "pseudo_null_p95": 0.9468419033000767,
+          "pseudo_p": 0.5621890547263682,
+          "test_fpr": 0.27722772277227725,
+          "episodes": 4,
+          "episodes_alerted": 1,
+          "rank_test_fpr": 0.0753998476770754,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 4,
+          "positives": 4,
+          "negatives": 25,
+          "auc": 1.0,
+          "pseudo_null_median": 0.25333333333333335,
+          "pseudo_null_p95": 0.9236111111111112,
+          "pseudo_p": 0.004975124378109453,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 1,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 8,
+          "positives": 19,
+          "negatives": 1948,
+          "auc": 0.6928833891710796,
+          "pseudo_null_median": 0.48804179566563466,
+          "pseudo_null_p95": 0.8891572284750235,
+          "pseudo_p": 0.23880597014925373,
+          "test_fpr": 0.03182751540041068,
+          "episodes": 2,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.01026694045174538,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 9,
+          "positives": 6,
+          "negatives": 1,
+          "auc": 0.6666666666666666,
+          "pseudo_p": null,
+          "test_fpr": 0.0,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 10,
+          "positives": 28,
+          "negatives": 85,
+          "auc": 0.4647058823529412,
+          "pseudo_null_median": 0.5137085137085137,
+          "pseudo_null_p95": 0.5662146415943428,
+          "pseudo_p": 0.845771144278607,
+          "test_fpr": 0.07058823529411765,
+          "episodes": 18,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.07058823529411765,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 12,
+          "positives": 3,
+          "negatives": 40,
+          "auc": 0.6583333333333334,
+          "pseudo_null_median": 0.38351254480286734,
+          "pseudo_null_p95": 0.9119838588588581,
+          "pseudo_p": 0.18407960199004975,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.025,
+          "rank_episodes_alerted": 0
+        }
+      ],
+      "summary": {
+        "folds_scored": 6,
+        "median_auc": 0.6625000000000001,
+        "folds_p_lt_05": 1,
+        "episodes": 30,
+        "episodes_alerted": 2,
+        "max_test_fpr": 0.27722772277227725,
+        "rank_episodes_alerted": 2,
+        "rank_max_test_fpr": 0.0753998476770754
+      },
+      "shifted_label_median_auc": 0.5057406702208682,
+      "seconds": 5.3,
+      "bars": {
+        "E1": false,
+        "E2": false,
+        "E3": true,
+        "E4": false,
+        "all": false
+      }
+    },
+    "gboost|rel|H5": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 40,
+          "negatives": 1313,
+          "auc": 0.40518849961919273,
+          "pseudo_null_median": 0.5653683806600154,
+          "pseudo_null_p95": 0.9332411242733641,
+          "pseudo_p": 0.6368159203980099,
+          "test_fpr": 0.03655750190403656,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.011424219345011425,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 4,
+          "positives": 4,
+          "negatives": 25,
+          "auc": 0.63,
+          "pseudo_null_median": 0.375,
+          "pseudo_null_p95": 0.9533333333333334,
+          "pseudo_p": 0.3283582089552239,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 8,
+          "positives": 19,
+          "negatives": 1948,
+          "auc": 0.29597157678590724,
+          "pseudo_null_median": 0.4835003844466408,
+          "pseudo_null_p95": 0.8670626934984516,
+          "pseudo_p": 0.7512437810945274,
+          "test_fpr": 0.44455852156057496,
+          "episodes": 2,
+          "episodes_alerted": 1,
+          "rank_test_fpr": 0.012320328542094456,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 9,
+          "positives": 6,
+          "negatives": 1,
+          "auc": 0.6666666666666666,
+          "pseudo_p": null,
+          "test_fpr": 0.0,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 10,
+          "positives": 28,
+          "negatives": 85,
+          "auc": 0.37857142857142856,
+          "pseudo_null_median": 0.5338438644688644,
+          "pseudo_null_p95": 0.7071056748300788,
+          "pseudo_p": 0.8756218905472637,
+          "test_fpr": 0.2823529411764706,
+          "episodes": 18,
+          "episodes_alerted": 7,
+          "rank_test_fpr": 0.023529411764705882,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 12,
+          "positives": 3,
+          "negatives": 40,
+          "auc": 0.675,
+          "pseudo_null_median": 0.5703125,
+          "pseudo_null_p95": 1.0,
+          "pseudo_p": 0.25870646766169153,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.025,
+          "rank_episodes_alerted": 0
+        }
+      ],
+      "summary": {
+        "folds_scored": 6,
+        "median_auc": 0.5175942498095963,
+        "folds_p_lt_05": 0,
+        "episodes": 30,
+        "episodes_alerted": 8,
+        "max_test_fpr": 0.44455852156057496,
+        "rank_episodes_alerted": 2,
+        "rank_max_test_fpr": 0.025
+      },
+      "shifted_label_median_auc": 0.47639106670848075,
+      "seconds": 207.3,
+      "bars": {
+        "E1": false,
+        "E2": false,
+        "E3": false,
+        "E4": false,
+        "all": false
+      }
+    },
+    "gboost|time|H5": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 40,
+          "negatives": 1313,
+          "auc": 0.5835872048743336,
+          "pseudo_null_median": 0.47889485801995396,
+          "pseudo_null_p95": 0.9002302379125097,
+          "pseudo_p": 0.1890547263681592,
+          "test_fpr": 0.0,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.012185833968012186,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 4,
+          "positives": 4,
+          "negatives": 25,
+          "auc": 0.9600000000000001,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.9791666666666667,
+          "pseudo_p": 0.07960199004975124,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.08,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 8,
+          "positives": 19,
+          "negatives": 1948,
+          "auc": 0.081554630930509,
+          "pseudo_null_median": 0.5085139318885449,
+          "pseudo_null_p95": 0.8637770897832817,
+          "pseudo_p": 0.9203980099502488,
+          "test_fpr": 0.7756673511293635,
+          "episodes": 2,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.27618069815195073,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 9,
+          "positives": 6,
+          "negatives": 1,
+          "auc": 0.5,
+          "pseudo_p": null,
+          "test_fpr": 1.0,
+          "episodes": 4,
+          "episodes_alerted": 4,
+          "rank_test_fpr": 1.0,
+          "rank_episodes_alerted": 4
+        },
+        {
+          "scenario": 10,
+          "positives": 28,
+          "negatives": 85,
+          "auc": 0.5756302521008404,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.667910447761194,
+          "pseudo_p": 0.2537313432835821,
+          "test_fpr": 0.5764705882352941,
+          "episodes": 18,
+          "episodes_alerted": 10,
+          "rank_test_fpr": 0.5764705882352941,
+          "rank_episodes_alerted": 10
+        },
+        {
+          "scenario": 12,
+          "positives": 3,
+          "negatives": 40,
+          "auc": 0.5,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.5,
+          "pseudo_p": 1.0,
+          "test_fpr": 1.0,
+          "episodes": 1,
+          "episodes_alerted": 1,
+          "rank_test_fpr": 1.0,
+          "rank_episodes_alerted": 1
+        }
+      ],
+      "summary": {
+        "folds_scored": 6,
+        "median_auc": 0.5378151260504203,
+        "folds_p_lt_05": 0,
+        "episodes": 30,
+        "episodes_alerted": 15,
+        "max_test_fpr": 1.0,
+        "rank_episodes_alerted": 16,
+        "rank_max_test_fpr": 1.0
+      },
+      "shifted_label_median_auc": null,
+      "seconds": 13.2
+    },
+    "logistic|rel|H15": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 120,
+          "negatives": 1233,
+          "auc": 0.5382265477155989,
+          "pseudo_null_median": 0.4564837905236908,
+          "pseudo_null_p95": 0.7683000831255195,
+          "pseudo_p": 0.38308457711442784,
+          "test_fpr": 0.275750202757502,
+          "episodes": 4,
+          "episodes_alerted": 4,
+          "rank_test_fpr": 0.0113544201135442,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 4,
+          "positives": 6,
+          "negatives": 23,
+          "auc": 0.681159420289855,
+          "pseudo_null_median": 0.30303030303030304,
+          "pseudo_null_p95": 0.8,
+          "pseudo_p": 0.07462686567164178,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 1,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 8,
+          "positives": 55,
+          "negatives": 1912,
+          "auc": 0.5145112209965766,
+          "pseudo_null_median": 0.4791730982380844,
+          "pseudo_null_p95": 0.800180379804787,
+          "pseudo_p": 0.43283582089552236,
+          "test_fpr": 0.0,
+          "episodes": 2,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.010460251046025104,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 9,
+          "positives": 7,
+          "negatives": 0,
+          "auc": null
+        },
+        {
+          "scenario": 10,
+          "positives": 78,
+          "negatives": 35,
+          "auc": 0.5,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.5,
+          "pseudo_p": 1.0,
+          "test_fpr": 1.0,
+          "episodes": 18,
+          "episodes_alerted": 18,
+          "rank_test_fpr": 1.0,
+          "rank_episodes_alerted": 18
+        },
+        {
+          "scenario": 12,
+          "positives": 9,
+          "negatives": 34,
+          "auc": 0.6895424836601307,
+          "pseudo_null_median": 0.35833333333333334,
+          "pseudo_null_p95": 0.48484848484848486,
+          "pseudo_p": 0.004975124378109453,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 1,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        }
+      ],
+      "summary": {
+        "folds_scored": 5,
+        "median_auc": 0.5382265477155989,
+        "folds_p_lt_05": 1,
+        "episodes": 26,
+        "episodes_alerted": 24,
+        "max_test_fpr": 1.0,
+        "rank_episodes_alerted": 20,
+        "rank_max_test_fpr": 1.0
+      },
+      "shifted_label_median_auc": 0.5193134271586154,
+      "seconds": 6.1,
+      "bars": {
+        "E1": false,
+        "E2": false,
+        "E3": false,
+        "E4": false,
+        "all": false
+      }
+    },
+    "gboost|rel|H15": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 120,
+          "negatives": 1233,
+          "auc": 0.3385002703433361,
+          "pseudo_null_median": 0.5298645628512662,
+          "pseudo_null_p95": 0.9273829315599889,
+          "pseudo_p": 0.7611940298507462,
+          "test_fpr": 0.027575020275750203,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.0113544201135442,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 4,
+          "positives": 6,
+          "negatives": 23,
+          "auc": 0.9855072463768116,
+          "pseudo_null_median": 0.25757575757575757,
+          "pseudo_null_p95": 0.9047619047619048,
+          "pseudo_p": 0.004975124378109453,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 8,
+          "positives": 55,
+          "negatives": 1912,
+          "auc": 0.39384747052111074,
+          "pseudo_null_median": 0.42779667392277854,
+          "pseudo_null_p95": 0.8202652320226709,
+          "pseudo_p": 0.582089552238806,
+          "test_fpr": 0.11192468619246862,
+          "episodes": 2,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.10930962343096234,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 9,
+          "positives": 7,
+          "negatives": 0,
+          "auc": null
+        },
+        {
+          "scenario": 10,
+          "positives": 78,
+          "negatives": 35,
+          "auc": 0.5597069597069597,
+          "pseudo_null_median": 0.6630434782608696,
+          "pseudo_null_p95": 0.8021062091503267,
+          "pseudo_p": 0.8905472636815921,
+          "test_fpr": 0.8571428571428571,
+          "episodes": 18,
+          "episodes_alerted": 14,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 6
+        },
+        {
+          "scenario": 12,
+          "positives": 9,
+          "negatives": 34,
+          "auc": 0.9803921568627451,
+          "pseudo_null_median": 0.42803030303030304,
+          "pseudo_null_p95": 0.7575757575757576,
+          "pseudo_p": 0.004975124378109453,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        }
+      ],
+      "summary": {
+        "folds_scored": 5,
+        "median_auc": 0.5597069597069597,
+        "folds_p_lt_05": 2,
+        "episodes": 26,
+        "episodes_alerted": 14,
+        "max_test_fpr": 0.8571428571428571,
+        "rank_episodes_alerted": 8,
+        "rank_max_test_fpr": 0.10930962343096234
+      },
+      "shifted_label_median_auc": 0.5826676128683428,
+      "seconds": 194.6,
+      "bars": {
+        "E1": false,
+        "E2": false,
+        "E3": false,
+        "E4": false,
+        "all": false
+      }
+    },
+    "gboost|time|H15": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 120,
+          "negatives": 1233,
+          "auc": 0.41747769667477697,
+          "pseudo_null_median": 0.3117206982543641,
+          "pseudo_null_p95": 0.8832086450540316,
+          "pseudo_p": 0.30845771144278605,
+          "test_fpr": 0.0,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.0454176804541768,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 4,
+          "positives": 6,
+          "negatives": 23,
+          "auc": 0.5652173913043479,
+          "pseudo_null_median": 0.3798076923076923,
+          "pseudo_null_p95": 0.5882352941176471,
+          "pseudo_p": 0.12437810945273632,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.8695652173913043,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 8,
+          "positives": 55,
+          "negatives": 1912,
+          "auc": 0.0683149486496767,
+          "pseudo_null_median": 0.42804036112586297,
+          "pseudo_null_p95": 0.9296335634625598,
+          "pseudo_p": 0.9651741293532339,
+          "test_fpr": 0.0,
+          "episodes": 2,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.028765690376569036,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 9,
+          "positives": 7,
+          "negatives": 0,
+          "auc": null
+        },
+        {
+          "scenario": 10,
+          "positives": 78,
+          "negatives": 35,
+          "auc": 0.3007326007326008,
+          "pseudo_null_median": 0.5674342105263157,
+          "pseudo_null_p95": 0.6667824074074075,
+          "pseudo_p": 1.0,
+          "test_fpr": 1.0,
+          "episodes": 18,
+          "episodes_alerted": 18,
+          "rank_test_fpr": 0.8857142857142857,
+          "rank_episodes_alerted": 10
+        },
+        {
+          "scenario": 12,
+          "positives": 9,
+          "negatives": 34,
+          "auc": 1.0,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.5,
+          "pseudo_p": 0.004975124378109453,
+          "test_fpr": 1.0,
+          "episodes": 1,
+          "episodes_alerted": 1,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        }
+      ],
+      "summary": {
+        "folds_scored": 5,
+        "median_auc": 0.41747769667477697,
+        "folds_p_lt_05": 1,
+        "episodes": 26,
+        "episodes_alerted": 19,
+        "max_test_fpr": 1.0,
+        "rank_episodes_alerted": 12,
+        "rank_max_test_fpr": 0.8857142857142857
+      },
+      "shifted_label_median_auc": null,
+      "seconds": 12.6
+    },
+    "logistic|rel|H30": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 213,
+          "negatives": 1140,
+          "auc": 0.5226134585289515,
+          "pseudo_null_median": 0.4450308641975309,
+          "pseudo_null_p95": 0.8705470150515805,
+          "pseudo_p": 0.32338308457711445,
+          "test_fpr": 0.11052631578947368,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.021929824561403508,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 4,
+          "positives": 8,
+          "negatives": 21,
+          "auc": 0.40476190476190477,
+          "pseudo_null_median": 0.25,
+          "pseudo_null_p95": 1.0,
+          "pseudo_p": 0.31443298969072164,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 1,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 8,
+          "positives": 84,
+          "negatives": 1883,
+          "auc": 0.4945692031459423,
+          "pseudo_null_median": 0.491332749982914,
+          "pseudo_null_p95": 0.7409049569725354,
+          "pseudo_p": 0.4925373134328358,
+          "test_fpr": 1.0,
+          "episodes": 2,
+          "episodes_alerted": 2,
+          "rank_test_fpr": 0.010621348911311737,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 9,
+          "positives": 7,
+          "negatives": 0,
+          "auc": null
+        },
+        {
+          "scenario": 10,
+          "positives": 103,
+          "negatives": 10,
+          "auc": 0.5,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.5,
+          "pseudo_p": 1.0,
+          "test_fpr": 1.0,
+          "episodes": 18,
+          "episodes_alerted": 18,
+          "rank_test_fpr": 1.0,
+          "rank_episodes_alerted": 18
+        },
+        {
+          "scenario": 12,
+          "positives": 9,
+          "negatives": 34,
+          "auc": 0.5686274509803921,
+          "pseudo_null_median": 0.3894230769230769,
+          "pseudo_null_p95": 0.45849802371541504,
+          "pseudo_p": 0.004975124378109453,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.029411764705882353,
+          "rank_episodes_alerted": 0
+        }
+      ],
+      "summary": {
+        "folds_scored": 5,
+        "median_auc": 0.5,
+        "folds_p_lt_05": 1,
+        "episodes": 26,
+        "episodes_alerted": 21,
+        "max_test_fpr": 1.0,
+        "rank_episodes_alerted": 19,
+        "rank_max_test_fpr": 1.0
+      },
+      "shifted_label_median_auc": 0.5,
+      "seconds": 6.5,
+      "bars": {
+        "E1": false,
+        "E2": false,
+        "E3": false,
+        "E4": false,
+        "all": false
+      }
+    },
+    "gboost|rel|H30": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 213,
+          "negatives": 1140,
+          "auc": 0.3729779260357467,
+          "pseudo_null_median": 0.5596296296296296,
+          "pseudo_null_p95": 0.8865895061728394,
+          "pseudo_p": 0.8656716417910447,
+          "test_fpr": 0.0,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.012280701754385965,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 4,
+          "positives": 8,
+          "negatives": 21,
+          "auc": 0.9761904761904762,
+          "pseudo_null_median": 0.21052631578947367,
+          "pseudo_null_p95": 0.5526315789473684,
+          "pseudo_p": 0.005154639175257732,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 1,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 8,
+          "positives": 84,
+          "negatives": 1883,
+          "auc": 0.39929633563462563,
+          "pseudo_null_median": 0.5969000892060661,
+          "pseudo_null_p95": 0.754732145144632,
+          "pseudo_p": 0.6318407960199005,
+          "test_fpr": 0.41688794476898566,
+          "episodes": 2,
+          "episodes_alerted": 2,
+          "rank_test_fpr": 0.1253319171534785,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 9,
+          "positives": 7,
+          "negatives": 0,
+          "auc": null
+        },
+        {
+          "scenario": 10,
+          "positives": 103,
+          "negatives": 10,
+          "auc": 0.49174757281553394,
+          "pseudo_null_median": 0.2222222222222222,
+          "pseudo_null_p95": 0.2222222222222222,
+          "pseudo_p": 0.009259259259259259,
+          "test_fpr": 0.0,
+          "episodes": 18,
+          "episodes_alerted": 8,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 12,
+          "positives": 9,
+          "negatives": 34,
+          "auc": 0.7745098039215685,
+          "pseudo_null_median": 0.6754807692307693,
+          "pseudo_null_p95": 1.0,
+          "pseudo_p": 0.26865671641791045,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 1,
+          "rank_test_fpr": 0.0,
+          "rank_episodes_alerted": 1
+        }
+      ],
+      "summary": {
+        "folds_scored": 5,
+        "median_auc": 0.49174757281553394,
+        "folds_p_lt_05": 2,
+        "episodes": 26,
+        "episodes_alerted": 12,
+        "max_test_fpr": 0.41688794476898566,
+        "rank_episodes_alerted": 4,
+        "rank_max_test_fpr": 0.1253319171534785
+      },
+      "shifted_label_median_auc": 0.4764307209872796,
+      "seconds": 195.0,
+      "bars": {
+        "E1": false,
+        "E2": false,
+        "E3": false,
+        "E4": false,
+        "all": false
+      }
+    },
+    "gboost|time|H30": {
+      "per_fold": [
+        {
+          "scenario": 3,
+          "positives": 213,
+          "negatives": 1140,
+          "auc": 0.3663145539906103,
+          "pseudo_null_median": 0.47638888888888886,
+          "pseudo_null_p95": 0.9485088734567901,
+          "pseudo_p": 0.8706467661691543,
+          "test_fpr": 0.0,
+          "episodes": 4,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.12631578947368421,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 4,
+          "positives": 8,
+          "negatives": 21,
+          "auc": 0.25,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.5,
+          "pseudo_p": 1.0,
+          "test_fpr": 0.0,
+          "episodes": 1,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 1.0,
+          "rank_episodes_alerted": 1
+        },
+        {
+          "scenario": 8,
+          "positives": 84,
+          "negatives": 1883,
+          "auc": 0.5226715221404548,
+          "pseudo_null_median": 0.45136643250074343,
+          "pseudo_null_p95": 0.7522227155195077,
+          "pseudo_p": 0.4626865671641791,
+          "test_fpr": 0.020711630377057887,
+          "episodes": 2,
+          "episodes_alerted": 0,
+          "rank_test_fpr": 0.020711630377057887,
+          "rank_episodes_alerted": 0
+        },
+        {
+          "scenario": 9,
+          "positives": 7,
+          "negatives": 0,
+          "auc": null
+        },
+        {
+          "scenario": 10,
+          "positives": 103,
+          "negatives": 10,
+          "auc": 0.28640776699029125,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.5,
+          "pseudo_p": 1.0,
+          "test_fpr": 1.0,
+          "episodes": 18,
+          "episodes_alerted": 10,
+          "rank_test_fpr": 1.0,
+          "rank_episodes_alerted": 10
+        },
+        {
+          "scenario": 12,
+          "positives": 9,
+          "negatives": 34,
+          "auc": 0.5,
+          "pseudo_null_median": 0.5,
+          "pseudo_null_p95": 0.5,
+          "pseudo_p": 1.0,
+          "test_fpr": 1.0,
+          "episodes": 1,
+          "episodes_alerted": 1,
+          "rank_test_fpr": 1.0,
+          "rank_episodes_alerted": 1
+        }
+      ],
+      "summary": {
+        "folds_scored": 5,
+        "median_auc": 0.3663145539906103,
+        "folds_p_lt_05": 0,
+        "episodes": 26,
+        "episodes_alerted": 11,
+        "max_test_fpr": 1.0,
+        "rank_episodes_alerted": 12,
+        "rank_max_test_fpr": 1.0
+      },
+      "shifted_label_median_auc": null,
+      "seconds": 9.5
+    }
   }
 }
