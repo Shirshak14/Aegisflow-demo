@@ -1,0 +1,2286 @@
+{
+  "1": {
+    "file": "scenario_01_botnet_42.binetflow.gz",
+    "capture_start": "2011-08-10 09:46:53.047277",
+    "capture_end": "2011-08-10 15:54:07.368340",
+    "capture_hours": 6.12,
+    "flows": 2824636,
+    "label_families": {
+      "Background": 2753288,
+      "Botnet": 40961,
+      "Normal": 30387
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 40961,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-10 11:04:24.863449",
+        "onset_clock": "11:04",
+        "onset_minutes_after_capture_start": 77.5,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 8,
+        "inbound_history_minutes": 71.9,
+        "episodes": [
+          {
+            "start": "2011-08-10 11:04:24.863449",
+            "end": "2011-08-10 15:48:49.449944",
+            "minutes": 284.4,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-10 11:06:42.968159",
+          "spam": "2011-08-10 11:08:50.260837",
+          "click_fraud": "2011-08-10 11:06:53.418159",
+          "icmp": "2011-08-10 11:41:00.393009",
+          "dns": "2011-08-10 11:04:24.863449"
+        },
+        "activity_flow_counts": {
+          "dns": 29197,
+          "spam": 8487,
+          "other": 2123,
+          "click_fraud": 811,
+          "c2": 341,
+          "icmp": 2
+        },
+        "escalation_onsets": {
+          "icmp": {
+            "at": "2011-08-10 11:41:00.393009",
+            "minutes_of_prior_botnet_traffic": 36.6
+          }
+        }
+      }
+    ],
+    "external_ips_with_botnet_label": 0,
+    "normal_hosts": [
+      "147.32.80.9",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.15",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.25",
+      "147.32.84.5",
+      "147.32.84.59",
+      "147.32.84.8",
+      "147.32.86.111",
+      "147.32.86.140",
+      "147.32.86.187",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.214",
+      "147.32.87.252",
+      "147.32.87.36"
+    ]
+  },
+  "2": {
+    "file": "scenario_02_botnet_43.binetflow.gz",
+    "capture_start": "2011-08-11 09:49:35.721274",
+    "capture_end": "2011-08-11 14:01:11.264754",
+    "capture_hours": 4.19,
+    "flows": 1808122,
+    "label_families": {
+      "Background": 1778061,
+      "Botnet": 20941,
+      "Normal": 9120
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 20941,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-11 10:27:20.087827",
+        "onset_clock": "10:27",
+        "onset_minutes_after_capture_start": 37.7,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-11 10:27:20.087827",
+            "end": "2011-08-11 13:55:34.778838",
+            "minutes": 208.2,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-11 10:37:55.027500",
+          "spam": "2011-08-11 10:40:26.114914",
+          "click_fraud": "2011-08-11 10:32:25.294505",
+          "dns": "2011-08-11 10:27:20.087827"
+        },
+        "activity_flow_counts": {
+          "other": 11475,
+          "spam": 5706,
+          "click_fraud": 2299,
+          "dns": 788,
+          "c2": 673
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-11 10:40:26.114914",
+            "minutes_of_prior_botnet_traffic": 13.1
+          }
+        }
+      }
+    ],
+    "external_ips_with_botnet_label": 0,
+    "normal_hosts": [
+      "147.32.80.9",
+      "147.32.84.137",
+      "147.32.84.15",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.25",
+      "147.32.84.5",
+      "147.32.84.8",
+      "147.32.86.194",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.214",
+      "147.32.87.36"
+    ]
+  },
+  "3": {
+    "file": "scenario_03_botnet_44.binetflow.gz",
+    "capture_start": "2011-08-12 15:24:01.105063",
+    "capture_end": "2011-08-15 10:13:26.439802",
+    "capture_hours": 66.82,
+    "flows": 4710638,
+    "label_families": {
+      "Background": 4566929,
+      "Normal": 116887,
+      "Botnet": 26822
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 26759,
+        "non_botnet_src_flows_total": 2,
+        "onset": "2011-08-12 15:53:17.142311",
+        "onset_clock": "15:53",
+        "onset_minutes_after_capture_start": 29.3,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 2,
+        "inbound_history_minutes": 27.5,
+        "episodes": [
+          {
+            "start": "2011-08-12 15:53:17.142311",
+            "end": "2011-08-12 15:53:17.142311",
+            "minutes": 0.0,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-12 16:56:52.873156",
+            "end": "2011-08-12 16:59:14.036630",
+            "minutes": 2.4,
+            "quiet_minutes_before": 63.6,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-12 20:27:40.149019",
+            "end": "2011-08-12 20:27:40.149019",
+            "minutes": 0.0,
+            "quiet_minutes_before": 208.4,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-13 02:22:52.493377",
+            "end": "2011-08-13 02:22:52.493377",
+            "minutes": 0.0,
+            "quiet_minutes_before": 355.2,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-13 10:39:48.795258",
+            "end": "2011-08-13 10:39:48.795258",
+            "minutes": 0.0,
+            "quiet_minutes_before": 496.9,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-13 15:04:22.452392",
+            "end": "2011-08-13 15:04:26.955072",
+            "minutes": 0.1,
+            "quiet_minutes_before": 264.6,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-13 21:26:57.704069",
+            "end": "2011-08-13 23:59:03.348198",
+            "minutes": 152.1,
+            "quiet_minutes_before": 382.5,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-14 20:54:11.283317",
+            "end": "2011-08-14 20:54:11.283317",
+            "minutes": 0.0,
+            "quiet_minutes_before": 1255.1,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-14 21:41:33.623918",
+            "end": "2011-08-15 09:54:43.695571",
+            "minutes": 733.2,
+            "quiet_minutes_before": 47.4,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "icmp": "2011-08-12 15:53:17.142311",
+          "dns": "2011-08-12 16:56:52.873156"
+        },
+        "activity_flow_counts": {
+          "other": 26732,
+          "icmp": 21,
+          "dns": 6
+        },
+        "escalation_onsets": {}
+      }
+    ],
+    "external_ips_with_botnet_label": 1,
+    "normal_hosts": [
+      "147.32.80.9",
+      "147.32.84.118",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.138",
+      "147.32.84.15",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.232",
+      "147.32.84.25",
+      "147.32.84.5",
+      "147.32.84.8",
+      "147.32.85.109",
+      "147.32.85.14",
+      "147.32.85.7",
+      "147.32.86.194",
+      "147.32.86.89",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.214",
+      "147.32.87.36"
+    ]
+  },
+  "4": {
+    "file": "scenario_04_botnet_45.binetflow.gz",
+    "capture_start": "2011-08-15 10:42:52.613616",
+    "capture_end": "2011-08-15 15:11:19.149682",
+    "capture_hours": 4.47,
+    "flows": 1121076,
+    "label_families": {
+      "Background": 1093228,
+      "Normal": 25268,
+      "Botnet": 2580
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 2580,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-15 11:00:12.932584",
+        "onset_clock": "11:00",
+        "onset_minutes_after_capture_start": 17.3,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-15 11:00:12.932584",
+            "end": "2011-08-15 11:00:12.932584",
+            "minutes": 0.0,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-15 11:57:16.094347",
+            "end": "2011-08-15 15:10:59.399939",
+            "minutes": 193.7,
+            "quiet_minutes_before": 57.1,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-15 12:15:32.357522",
+          "spam": "2011-08-15 14:41:33.202226",
+          "click_fraud": "2011-08-15 11:00:12.932584",
+          "icmp": "2011-08-15 13:34:18.697496",
+          "dns": "2011-08-15 11:57:16.094347"
+        },
+        "activity_flow_counts": {
+          "spam": 1127,
+          "icmp": 812,
+          "other": 512,
+          "dns": 70,
+          "c2": 52,
+          "click_fraud": 7
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-15 14:41:33.202226",
+            "minutes_of_prior_botnet_traffic": 221.3
+          },
+          "icmp": {
+            "at": "2011-08-15 13:34:18.697496",
+            "minutes_of_prior_botnet_traffic": 154.1
+          }
+        }
+      }
+    ],
+    "external_ips_with_botnet_label": 0,
+    "normal_hosts": [
+      "147.32.80.9",
+      "147.32.84.118",
+      "147.32.84.13",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.15",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.232",
+      "147.32.84.25",
+      "147.32.84.59",
+      "147.32.84.8",
+      "147.32.85.60",
+      "147.32.85.7",
+      "147.32.85.76",
+      "147.32.86.126",
+      "147.32.86.194",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.214",
+      "147.32.87.36"
+    ]
+  },
+  "5": {
+    "file": "scenario_05_botnet_46.binetflow.gz",
+    "capture_start": "2011-08-15 16:43:20.931208",
+    "capture_end": "2011-08-15 17:13:26.758894",
+    "capture_hours": 0.5,
+    "flows": 129832,
+    "label_families": {
+      "Background": 124252,
+      "Normal": 4679,
+      "Botnet": 901
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 901,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-15 16:52:50.947767",
+        "onset_clock": "16:52",
+        "onset_minutes_after_capture_start": 9.5,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 3.1,
+        "episodes": [
+          {
+            "start": "2011-08-15 16:52:50.947767",
+            "end": "2011-08-15 17:12:54.584374",
+            "minutes": 20.1,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-15 16:54:36.930921",
+          "spam": "2011-08-15 16:56:09.949959",
+          "click_fraud": "2011-08-15 16:53:59.980186",
+          "dns": "2011-08-15 16:52:50.947767"
+        },
+        "activity_flow_counts": {
+          "other": 592,
+          "spam": 219,
+          "dns": 52,
+          "c2": 24,
+          "click_fraud": 14
+        },
+        "escalation_onsets": {}
+      }
+    ],
+    "external_ips_with_botnet_label": 0,
+    "normal_hosts": [
+      "147.32.80.9",
+      "147.32.84.118",
+      "147.32.84.13",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.15",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.232",
+      "147.32.84.25",
+      "147.32.84.59",
+      "147.32.84.8",
+      "147.32.85.7",
+      "147.32.86.126",
+      "147.32.86.187",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.214",
+      "147.32.87.36"
+    ]
+  },
+  "6": {
+    "file": "scenario_06_botnet_47.binetflow.gz",
+    "capture_start": "2011-08-16 10:01:46.972101",
+    "capture_end": "2011-08-16 12:10:56.805092",
+    "capture_hours": 2.15,
+    "flows": 558919,
+    "label_families": {
+      "Background": 546795,
+      "Normal": 7494,
+      "Botnet": 4630
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 4630,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-16 10:02:08.703460",
+        "onset_clock": "10:02",
+        "onset_minutes_after_capture_start": 0.4,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-16 10:02:08.703460",
+            "end": "2011-08-16 12:10:15.643807",
+            "minutes": 128.1,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-16 10:09:58.055700",
+          "spam": "2011-08-16 10:10:00.385281",
+          "click_fraud": "2011-08-16 10:02:08.872739",
+          "dns": "2011-08-16 10:02:08.703460"
+        },
+        "activity_flow_counts": {
+          "spam": 4398,
+          "c2": 199,
+          "dns": 29,
+          "click_fraud": 2,
+          "other": 2
+        },
+        "escalation_onsets": {}
+      }
+    ],
+    "external_ips_with_botnet_label": 0,
+    "normal_hosts": [
+      "147.32.80.9",
+      "147.32.84.13",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.15",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.232",
+      "147.32.84.25",
+      "147.32.84.8",
+      "147.32.85.7",
+      "147.32.86.126",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.36"
+    ]
+  },
+  "7": {
+    "file": "scenario_07_botnet_48.binetflow.gz",
+    "capture_start": "2011-08-16 13:51:24.049047",
+    "capture_end": "2011-08-16 14:12:41.499668",
+    "capture_hours": 0.35,
+    "flows": 114077,
+    "label_families": {
+      "Background": 112337,
+      "Normal": 1677,
+      "Botnet": 63
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 63,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-16 13:53:16.575831",
+        "onset_clock": "13:53",
+        "onset_minutes_after_capture_start": 1.9,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 4,
+        "inbound_history_minutes": 1.9,
+        "episodes": [
+          {
+            "start": "2011-08-16 13:53:16.575831",
+            "end": "2011-08-16 14:00:22.621874",
+            "minutes": 7.1,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-16 13:56:28.638195",
+          "click_fraud": "2011-08-16 13:58:17.481704",
+          "dns": "2011-08-16 13:53:16.575831"
+        },
+        "activity_flow_counts": {
+          "c2": 26,
+          "dns": 21,
+          "other": 15,
+          "click_fraud": 1
+        },
+        "escalation_onsets": {}
+      }
+    ],
+    "external_ips_with_botnet_label": 0,
+    "normal_hosts": [
+      "147.32.80.9",
+      "147.32.84.13",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.15",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.232",
+      "147.32.84.25",
+      "147.32.84.8",
+      "147.32.86.96",
+      "147.32.87.212",
+      "147.32.87.36"
+    ]
+  },
+  "8": {
+    "file": "scenario_08_botnet_49.binetflow.gz",
+    "capture_start": "2011-08-16 14:18:55.889839",
+    "capture_end": "2011-08-17 09:47:11.231725",
+    "capture_hours": 19.47,
+    "flows": 2954230,
+    "label_families": {
+      "Background": 2875281,
+      "Normal": 72822,
+      "Botnet": 6127
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 6127,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-16 14:19:01.438016",
+        "onset_clock": "14:19",
+        "onset_minutes_after_capture_start": 0.1,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-16 14:19:01.438016",
+            "end": "2011-08-16 18:51:29.180616",
+            "minutes": 272.5,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-16 19:24:08.673291",
+            "end": "2011-08-17 09:46:41.947106",
+            "minutes": 862.6,
+            "quiet_minutes_before": 32.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-16 14:24:57.952971",
+          "click_fraud": "2011-08-16 14:19:02.439762",
+          "icmp": "2011-08-16 15:24:53.879838",
+          "dns": "2011-08-16 14:19:01.438016"
+        },
+        "activity_flow_counts": {
+          "other": 4979,
+          "c2": 1074,
+          "dns": 69,
+          "click_fraud": 4,
+          "icmp": 1
+        },
+        "escalation_onsets": {
+          "icmp": {
+            "at": "2011-08-16 15:24:53.879838",
+            "minutes_of_prior_botnet_traffic": 65.9
+          }
+        }
+      }
+    ],
+    "external_ips_with_botnet_label": 0,
+    "normal_hosts": [
+      "147.32.1.20",
+      "147.32.80.9",
+      "147.32.84.13",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.138",
+      "147.32.84.15",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.186",
+      "147.32.84.232",
+      "147.32.84.25",
+      "147.32.84.59",
+      "147.32.84.8",
+      "147.32.84.9",
+      "147.32.85.109",
+      "147.32.85.60",
+      "147.32.85.76",
+      "147.32.86.65",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.36"
+    ]
+  },
+  "9": {
+    "file": "scenario_09_botnet_50.binetflow.gz",
+    "capture_start": "2011-08-17 11:34:49.436881",
+    "capture_end": "2011-08-17 17:12:13.867435",
+    "capture_hours": 5.62,
+    "flows": 2087508,
+    "label_families": {
+      "Background": 1872554,
+      "Botnet": 184987,
+      "Normal": 29967
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 22792,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-17 12:28:41.718300",
+        "onset_clock": "12:28",
+        "onset_minutes_after_capture_start": 53.9,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 13.8,
+        "episodes": [
+          {
+            "start": "2011-08-17 12:28:41.718300",
+            "end": "2011-08-17 12:28:46.982548",
+            "minutes": 0.1,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:04:41.011165",
+            "end": "2011-08-17 13:04:41.011165",
+            "minutes": 0.0,
+            "quiet_minutes_before": 35.9,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:43:21.470590",
+            "end": "2011-08-17 13:43:21.470590",
+            "minutes": 0.0,
+            "quiet_minutes_before": 38.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 14:24:20.083239",
+            "end": "2011-08-17 17:07:12.801296",
+            "minutes": 162.9,
+            "quiet_minutes_before": 41.0,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-17 14:24:42.241124",
+          "spam": "2011-08-17 14:26:49.428506",
+          "click_fraud": "2011-08-17 14:24:54.782333",
+          "icmp": "2011-08-17 14:36:49.373069",
+          "dns": "2011-08-17 12:28:41.718300"
+        },
+        "activity_flow_counts": {
+          "dns": 15126,
+          "spam": 5277,
+          "other": 1348,
+          "click_fraud": 737,
+          "c2": 299,
+          "icmp": 5
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-17 14:26:49.428506",
+            "minutes_of_prior_botnet_traffic": 118.1
+          },
+          "click_fraud": {
+            "at": "2011-08-17 14:24:54.782333",
+            "minutes_of_prior_botnet_traffic": 116.2
+          },
+          "icmp": {
+            "at": "2011-08-17 14:36:49.373069",
+            "minutes_of_prior_botnet_traffic": 128.1
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.191",
+        "botnet_src_flows": 18774,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-17 12:30:07.610705",
+        "onset_clock": "12:30",
+        "onset_minutes_after_capture_start": 55.3,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 3,
+        "inbound_history_minutes": 23.5,
+        "episodes": [
+          {
+            "start": "2011-08-17 12:30:07.610705",
+            "end": "2011-08-17 12:30:12.601470",
+            "minutes": 0.1,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:04:41.020534",
+            "end": "2011-08-17 13:04:41.020534",
+            "minutes": 0.0,
+            "quiet_minutes_before": 34.5,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:43:21.470530",
+            "end": "2011-08-17 13:43:21.470530",
+            "minutes": 0.0,
+            "quiet_minutes_before": 38.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 14:43:28.241109",
+            "end": "2011-08-17 17:06:50.768194",
+            "minutes": 143.4,
+            "quiet_minutes_before": 60.1,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-17 14:43:43.080040",
+          "spam": "2011-08-17 14:43:43.868227",
+          "click_fraud": "2011-08-17 14:44:10.259667",
+          "icmp": "2011-08-17 16:07:17.383481",
+          "dns": "2011-08-17 12:30:07.610705"
+        },
+        "activity_flow_counts": {
+          "dns": 10970,
+          "spam": 5198,
+          "other": 1634,
+          "click_fraud": 637,
+          "c2": 331,
+          "icmp": 4
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-17 14:43:43.868227",
+            "minutes_of_prior_botnet_traffic": 133.6
+          },
+          "click_fraud": {
+            "at": "2011-08-17 14:44:10.259667",
+            "minutes_of_prior_botnet_traffic": 134.0
+          },
+          "icmp": {
+            "at": "2011-08-17 16:07:17.383481",
+            "minutes_of_prior_botnet_traffic": 217.2
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.192",
+        "botnet_src_flows": 20305,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-17 12:31:29.770631",
+        "onset_clock": "12:31",
+        "onset_minutes_after_capture_start": 56.7,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 2.5,
+        "episodes": [
+          {
+            "start": "2011-08-17 12:31:29.770631",
+            "end": "2011-08-17 12:31:34.802102",
+            "minutes": 0.1,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:04:40.993446",
+            "end": "2011-08-17 13:04:40.993446",
+            "minutes": 0.0,
+            "quiet_minutes_before": 33.1,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:43:21.473228",
+            "end": "2011-08-17 13:43:21.473228",
+            "minutes": 0.0,
+            "quiet_minutes_before": 38.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 14:48:32.968607",
+            "end": "2011-08-17 17:07:25.032312",
+            "minutes": 138.9,
+            "quiet_minutes_before": 65.2,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-17 14:48:56.705363",
+          "spam": "2011-08-17 14:54:50.751605",
+          "click_fraud": "2011-08-17 14:49:12.957885",
+          "dns": "2011-08-17 12:31:29.770631"
+        },
+        "activity_flow_counts": {
+          "dns": 11441,
+          "spam": 4652,
+          "other": 3210,
+          "click_fraud": 698,
+          "c2": 304
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-17 14:54:50.751605",
+            "minutes_of_prior_botnet_traffic": 143.3
+          },
+          "click_fraud": {
+            "at": "2011-08-17 14:49:12.957885",
+            "minutes_of_prior_botnet_traffic": 137.7
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.193",
+        "botnet_src_flows": 17961,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-17 12:32:48.798049",
+        "onset_clock": "12:32",
+        "onset_minutes_after_capture_start": 58.0,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 3.9,
+        "episodes": [
+          {
+            "start": "2011-08-17 12:32:48.798049",
+            "end": "2011-08-17 12:32:53.972180",
+            "minutes": 0.1,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:04:41.002987",
+            "end": "2011-08-17 13:04:41.002987",
+            "minutes": 0.0,
+            "quiet_minutes_before": 31.8,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:43:21.467650",
+            "end": "2011-08-17 13:43:21.467650",
+            "minutes": 0.0,
+            "quiet_minutes_before": 38.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 14:50:37.248862",
+            "end": "2011-08-17 17:08:41.368743",
+            "minutes": 138.1,
+            "quiet_minutes_before": 67.3,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-17 14:55:12.764738",
+          "spam": "2011-08-17 14:55:31.420601",
+          "click_fraud": "2011-08-17 14:55:24.979301",
+          "dns": "2011-08-17 12:32:48.798049"
+        },
+        "activity_flow_counts": {
+          "dns": 10718,
+          "spam": 4643,
+          "other": 1545,
+          "click_fraud": 750,
+          "c2": 305
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-17 14:55:31.420601",
+            "minutes_of_prior_botnet_traffic": 142.7
+          },
+          "click_fraud": {
+            "at": "2011-08-17 14:55:24.979301",
+            "minutes_of_prior_botnet_traffic": 142.6
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.204",
+        "botnet_src_flows": 18783,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-17 12:34:11.100907",
+        "onset_clock": "12:34",
+        "onset_minutes_after_capture_start": 59.4,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 5.2,
+        "episodes": [
+          {
+            "start": "2011-08-17 12:34:11.100907",
+            "end": "2011-08-17 12:34:16.170337",
+            "minutes": 0.1,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:04:41.017458",
+            "end": "2011-08-17 13:04:41.017458",
+            "minutes": 0.0,
+            "quiet_minutes_before": 30.4,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:43:21.469891",
+            "end": "2011-08-17 13:43:21.469891",
+            "minutes": 0.0,
+            "quiet_minutes_before": 38.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 14:50:37.262375",
+            "end": "2011-08-17 17:08:55.966870",
+            "minutes": 138.3,
+            "quiet_minutes_before": 67.3,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-17 14:56:43.563405",
+          "spam": "2011-08-17 15:00:21.573929",
+          "click_fraud": "2011-08-17 14:56:54.694789",
+          "dns": "2011-08-17 12:34:11.100907"
+        },
+        "activity_flow_counts": {
+          "dns": 10418,
+          "spam": 4317,
+          "other": 3092,
+          "click_fraud": 680,
+          "c2": 276
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-17 15:00:21.573929",
+            "minutes_of_prior_botnet_traffic": 146.2
+          },
+          "click_fraud": {
+            "at": "2011-08-17 14:56:54.694789",
+            "minutes_of_prior_botnet_traffic": 142.7
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.205",
+        "botnet_src_flows": 17535,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-17 12:35:37.442455",
+        "onset_clock": "12:35",
+        "onset_minutes_after_capture_start": 60.8,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 6.7,
+        "episodes": [
+          {
+            "start": "2011-08-17 12:35:37.442455",
+            "end": "2011-08-17 13:04:40.996679",
+            "minutes": 29.1,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:43:21.469057",
+            "end": "2011-08-17 13:43:21.469057",
+            "minutes": 0.0,
+            "quiet_minutes_before": 38.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 14:50:37.260637",
+            "end": "2011-08-17 17:09:29.938996",
+            "minutes": 138.9,
+            "quiet_minutes_before": 67.3,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-17 14:58:27.704616",
+          "spam": "2011-08-17 15:01:11.385396",
+          "click_fraud": "2011-08-17 14:58:38.723334",
+          "icmp": "2011-08-17 16:12:42.816401",
+          "dns": "2011-08-17 12:35:37.442455"
+        },
+        "activity_flow_counts": {
+          "dns": 10353,
+          "spam": 4533,
+          "other": 1610,
+          "click_fraud": 740,
+          "c2": 297,
+          "icmp": 2
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-17 15:01:11.385396",
+            "minutes_of_prior_botnet_traffic": 145.6
+          },
+          "click_fraud": {
+            "at": "2011-08-17 14:58:38.723334",
+            "minutes_of_prior_botnet_traffic": 143.0
+          },
+          "icmp": {
+            "at": "2011-08-17 16:12:42.816401",
+            "minutes_of_prior_botnet_traffic": 217.1
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.206",
+        "botnet_src_flows": 18553,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-17 12:38:18.662006",
+        "onset_clock": "12:38",
+        "onset_minutes_after_capture_start": 63.5,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 9.4,
+        "episodes": [
+          {
+            "start": "2011-08-17 12:38:18.662006",
+            "end": "2011-08-17 13:04:41.000661",
+            "minutes": 26.4,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:43:21.472881",
+            "end": "2011-08-17 13:43:21.472881",
+            "minutes": 0.0,
+            "quiet_minutes_before": 38.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 14:50:37.265007",
+            "end": "2011-08-17 17:10:17.301136",
+            "minutes": 139.7,
+            "quiet_minutes_before": 67.3,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-17 15:01:09.757206",
+          "spam": "2011-08-17 15:02:52.976412",
+          "click_fraud": "2011-08-17 15:01:56.725195",
+          "icmp": "2011-08-17 16:05:59.401543",
+          "dns": "2011-08-17 12:38:18.662006"
+        },
+        "activity_flow_counts": {
+          "dns": 12594,
+          "spam": 4098,
+          "other": 1125,
+          "click_fraud": 474,
+          "c2": 261,
+          "icmp": 1
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-17 15:02:52.976412",
+            "minutes_of_prior_botnet_traffic": 144.6
+          },
+          "click_fraud": {
+            "at": "2011-08-17 15:01:56.725195",
+            "minutes_of_prior_botnet_traffic": 143.6
+          },
+          "icmp": {
+            "at": "2011-08-17 16:05:59.401543",
+            "minutes_of_prior_botnet_traffic": 207.7
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.207",
+        "botnet_src_flows": 15999,
+        "non_botnet_src_flows_total": 3,
+        "onset": "2011-08-17 12:39:48.058550",
+        "onset_clock": "12:39",
+        "onset_minutes_after_capture_start": 65.0,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 10.8,
+        "episodes": [
+          {
+            "start": "2011-08-17 12:39:48.058550",
+            "end": "2011-08-17 13:04:40.996519",
+            "minutes": 24.9,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:43:21.469729",
+            "end": "2011-08-17 13:43:21.469729",
+            "minutes": 0.0,
+            "quiet_minutes_before": 38.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 14:50:37.261045",
+            "end": "2011-08-17 17:09:29.575732",
+            "minutes": 138.9,
+            "quiet_minutes_before": 67.3,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-17 15:02:20.909271",
+          "spam": "2011-08-17 15:02:33.543237",
+          "click_fraud": "2011-08-17 15:02:37.626948",
+          "dns": "2011-08-17 12:39:48.058550"
+        },
+        "activity_flow_counts": {
+          "dns": 9526,
+          "spam": 4380,
+          "other": 1427,
+          "click_fraud": 388,
+          "c2": 278
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-17 15:02:33.543237",
+            "minutes_of_prior_botnet_traffic": 142.8
+          },
+          "click_fraud": {
+            "at": "2011-08-17 15:02:37.626948",
+            "minutes_of_prior_botnet_traffic": 142.8
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.208",
+        "botnet_src_flows": 17909,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-17 12:41:21.256037",
+        "onset_clock": "12:41",
+        "onset_minutes_after_capture_start": 66.5,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 12.4,
+        "episodes": [
+          {
+            "start": "2011-08-17 12:41:21.256037",
+            "end": "2011-08-17 13:04:40.997576",
+            "minutes": 23.3,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:43:21.470449",
+            "end": "2011-08-17 14:13:18.885115",
+            "minutes": 30.0,
+            "quiet_minutes_before": 38.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 14:50:37.262957",
+            "end": "2011-08-17 17:10:02.510420",
+            "minutes": 139.4,
+            "quiet_minutes_before": 37.3,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-17 15:03:54.703289",
+          "spam": "2011-08-17 15:06:39.010681",
+          "click_fraud": "2011-08-17 15:04:08.228867",
+          "icmp": "2011-08-17 12:55:39.500812",
+          "dns": "2011-08-17 12:41:21.256037"
+        },
+        "activity_flow_counts": {
+          "dns": 9981,
+          "spam": 4136,
+          "other": 3123,
+          "click_fraud": 414,
+          "c2": 252,
+          "icmp": 3
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-17 15:06:39.010681",
+            "minutes_of_prior_botnet_traffic": 145.3
+          },
+          "click_fraud": {
+            "at": "2011-08-17 15:04:08.228867",
+            "minutes_of_prior_botnet_traffic": 142.8
+          },
+          "icmp": {
+            "at": "2011-08-17 12:55:39.500812",
+            "minutes_of_prior_botnet_traffic": 14.3
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.209",
+        "botnet_src_flows": 16376,
+        "non_botnet_src_flows_total": 3,
+        "onset": "2011-08-17 12:42:45.164650",
+        "onset_clock": "12:42",
+        "onset_minutes_after_capture_start": 67.9,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 13.8,
+        "episodes": [
+          {
+            "start": "2011-08-17 12:42:45.164650",
+            "end": "2011-08-17 13:04:40.995666",
+            "minutes": 21.9,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 13:43:21.468472",
+            "end": "2011-08-17 13:43:21.468472",
+            "minutes": 0.0,
+            "quiet_minutes_before": 38.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-17 14:50:37.241196",
+            "end": "2011-08-17 17:09:53.462181",
+            "minutes": 139.3,
+            "quiet_minutes_before": 67.3,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-17 15:05:32.813340",
+          "spam": "2011-08-17 15:08:12.994910",
+          "click_fraud": "2011-08-17 15:05:43.738079",
+          "dns": "2011-08-17 12:42:45.164650"
+        },
+        "activity_flow_counts": {
+          "dns": 6659,
+          "spam": 4974,
+          "other": 3673,
+          "click_fraud": 700,
+          "c2": 370
+        },
+        "escalation_onsets": {
+          "spam": {
+            "at": "2011-08-17 15:08:12.994910",
+            "minutes_of_prior_botnet_traffic": 145.5
+          },
+          "click_fraud": {
+            "at": "2011-08-17 15:05:43.738079",
+            "minutes_of_prior_botnet_traffic": 143.0
+          }
+        }
+      }
+    ],
+    "external_ips_with_botnet_label": 0,
+    "normal_hosts": [
+      "147.32.1.20",
+      "147.32.80.9",
+      "147.32.84.118",
+      "147.32.84.13",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.138",
+      "147.32.84.15",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.186",
+      "147.32.84.232",
+      "147.32.84.25",
+      "147.32.84.59",
+      "147.32.84.8",
+      "147.32.84.9",
+      "147.32.85.124",
+      "147.32.85.60",
+      "147.32.86.176",
+      "147.32.86.179",
+      "147.32.86.194",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.36"
+    ]
+  },
+  "10": {
+    "file": "scenario_10_botnet_51.binetflow.gz",
+    "capture_start": "2011-08-18 09:56:29.146156",
+    "capture_end": "2011-08-18 15:04:59.744388",
+    "capture_hours": 5.14,
+    "flows": 1309791,
+    "label_families": {
+      "Background": 1187592,
+      "Botnet": 106352,
+      "Normal": 15847
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 9579,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-18 10:37:58.448307",
+        "onset_clock": "10:37",
+        "onset_minutes_after_capture_start": 41.5,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-18 10:37:58.448307",
+            "end": "2011-08-18 11:06:25.673167",
+            "minutes": 28.5,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 11:53:11.680746",
+            "end": "2011-08-18 12:35:14.728435",
+            "minutes": 42.1,
+            "quiet_minutes_before": 46.8,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 13:47:09.666113",
+            "end": "2011-08-18 15:04:54.494449",
+            "minutes": 77.7,
+            "quiet_minutes_before": 71.9,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 11:06:25.673167",
+          "icmp": "2011-08-18 12:18:30.803580",
+          "dns": "2011-08-18 10:37:58.448307"
+        },
+        "activity_flow_counts": {
+          "icmp": 9537,
+          "other": 20,
+          "dns": 18,
+          "c2": 4
+        },
+        "escalation_onsets": {
+          "icmp": {
+            "at": "2011-08-18 12:18:30.803580",
+            "minutes_of_prior_botnet_traffic": 100.5
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.191",
+        "botnet_src_flows": 10454,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-18 10:43:13.001890",
+        "onset_clock": "10:43",
+        "onset_minutes_after_capture_start": 46.7,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-18 10:43:13.001890",
+            "end": "2011-08-18 12:35:12.556781",
+            "minutes": 112.0,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 13:48:10.376793",
+            "end": "2011-08-18 15:04:59.710810",
+            "minutes": 76.8,
+            "quiet_minutes_before": 73.0,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 13:48:11.437289",
+          "icmp": "2011-08-18 12:18:31.071612",
+          "dns": "2011-08-18 10:43:13.001890"
+        },
+        "activity_flow_counts": {
+          "icmp": 10415,
+          "other": 20,
+          "dns": 17,
+          "c2": 2
+        },
+        "escalation_onsets": {
+          "icmp": {
+            "at": "2011-08-18 12:18:31.071612",
+            "minutes_of_prior_botnet_traffic": 95.3
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.192",
+        "botnet_src_flows": 10397,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-18 10:55:03.872662",
+        "onset_clock": "10:55",
+        "onset_minutes_after_capture_start": 58.6,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-18 10:55:03.872662",
+            "end": "2011-08-18 12:35:14.064504",
+            "minutes": 100.2,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 13:48:44.247999",
+            "end": "2011-08-18 15:04:59.738400",
+            "minutes": 76.3,
+            "quiet_minutes_before": 73.5,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 11:05:56.458300",
+          "click_fraud": "2011-08-18 11:23:14.113483",
+          "icmp": "2011-08-18 12:18:30.782984",
+          "dns": "2011-08-18 10:55:03.872662"
+        },
+        "activity_flow_counts": {
+          "icmp": 10363,
+          "other": 16,
+          "dns": 14,
+          "c2": 3,
+          "click_fraud": 1
+        },
+        "escalation_onsets": {
+          "click_fraud": {
+            "at": "2011-08-18 11:23:14.113483",
+            "minutes_of_prior_botnet_traffic": 28.2
+          },
+          "icmp": {
+            "at": "2011-08-18 12:18:30.782984",
+            "minutes_of_prior_botnet_traffic": 83.4
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.193",
+        "botnet_src_flows": 10009,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-18 10:55:56.975808",
+        "onset_clock": "10:55",
+        "onset_minutes_after_capture_start": 59.5,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-18 10:55:56.975808",
+            "end": "2011-08-18 12:35:13.179317",
+            "minutes": 99.3,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 13:49:43.587286",
+            "end": "2011-08-18 15:03:21.141772",
+            "minutes": 73.6,
+            "quiet_minutes_before": 74.5,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 13:49:43.825550",
+          "click_fraud": "2011-08-18 11:23:54.790890",
+          "icmp": "2011-08-18 12:18:30.882060",
+          "dns": "2011-08-18 10:55:56.975808"
+        },
+        "activity_flow_counts": {
+          "icmp": 9970,
+          "other": 20,
+          "dns": 15,
+          "c2": 3,
+          "click_fraud": 1
+        },
+        "escalation_onsets": {
+          "click_fraud": {
+            "at": "2011-08-18 11:23:54.790890",
+            "minutes_of_prior_botnet_traffic": 28.0
+          },
+          "icmp": {
+            "at": "2011-08-18 12:18:30.882060",
+            "minutes_of_prior_botnet_traffic": 82.6
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.204",
+        "botnet_src_flows": 11159,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-18 10:56:56.682311",
+        "onset_clock": "10:56",
+        "onset_minutes_after_capture_start": 60.5,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-18 10:56:56.682311",
+            "end": "2011-08-18 11:22:12.702917",
+            "minutes": 25.3,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 11:53:11.663546",
+            "end": "2011-08-18 12:35:13.034008",
+            "minutes": 42.0,
+            "quiet_minutes_before": 31.0,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 13:49:52.930605",
+            "end": "2011-08-18 15:04:43.327065",
+            "minutes": 74.8,
+            "quiet_minutes_before": 74.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 11:05:31.446879",
+          "click_fraud": "2011-08-18 11:22:12.702917",
+          "icmp": "2011-08-18 12:08:15.562031",
+          "dns": "2011-08-18 10:56:56.682311"
+        },
+        "activity_flow_counts": {
+          "icmp": 11125,
+          "other": 16,
+          "dns": 14,
+          "c2": 3,
+          "click_fraud": 1
+        },
+        "escalation_onsets": {
+          "click_fraud": {
+            "at": "2011-08-18 11:22:12.702917",
+            "minutes_of_prior_botnet_traffic": 25.3
+          },
+          "icmp": {
+            "at": "2011-08-18 12:08:15.562031",
+            "minutes_of_prior_botnet_traffic": 71.3
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.205",
+        "botnet_src_flows": 11874,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-18 10:57:54.820892",
+        "onset_clock": "10:57",
+        "onset_minutes_after_capture_start": 61.4,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-18 10:57:54.820892",
+            "end": "2011-08-18 12:35:14.187173",
+            "minutes": 97.3,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 13:51:44.635115",
+            "end": "2011-08-18 15:04:59.744388",
+            "minutes": 73.3,
+            "quiet_minutes_before": 76.5,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 11:07:30.871223",
+          "icmp": "2011-08-18 12:18:31.115836",
+          "dns": "2011-08-18 10:57:54.820892"
+        },
+        "activity_flow_counts": {
+          "icmp": 11836,
+          "other": 20,
+          "dns": 14,
+          "c2": 4
+        },
+        "escalation_onsets": {
+          "icmp": {
+            "at": "2011-08-18 12:18:31.115836",
+            "minutes_of_prior_botnet_traffic": 80.6
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.206",
+        "botnet_src_flows": 11287,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-18 10:59:35.578081",
+        "onset_clock": "10:59",
+        "onset_minutes_after_capture_start": 63.1,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-18 10:59:35.578081",
+            "end": "2011-08-18 11:22:03.809663",
+            "minutes": 22.5,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 11:53:11.689670",
+            "end": "2011-08-18 12:35:13.015892",
+            "minutes": 42.0,
+            "quiet_minutes_before": 31.1,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 13:51:55.359263",
+            "end": "2011-08-18 15:02:24.962985",
+            "minutes": 70.5,
+            "quiet_minutes_before": 76.7,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 11:05:01.907435",
+          "icmp": "2011-08-18 12:18:30.804833",
+          "dns": "2011-08-18 10:59:35.578081"
+        },
+        "activity_flow_counts": {
+          "icmp": 11252,
+          "other": 17,
+          "dns": 14,
+          "c2": 4
+        },
+        "escalation_onsets": {
+          "icmp": {
+            "at": "2011-08-18 12:18:30.804833",
+            "minutes_of_prior_botnet_traffic": 78.9
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.207",
+        "botnet_src_flows": 10581,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-18 11:00:27.003141",
+        "onset_clock": "11:00",
+        "onset_minutes_after_capture_start": 64.0,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-18 11:00:27.003141",
+            "end": "2011-08-18 11:21:16.830915",
+            "minutes": 20.8,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 11:53:12.065942",
+            "end": "2011-08-18 12:34:38.161006",
+            "minutes": 41.4,
+            "quiet_minutes_before": 31.9,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 13:52:15.184457",
+            "end": "2011-08-18 15:03:59.933342",
+            "minutes": 71.7,
+            "quiet_minutes_before": 77.6,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 11:04:35.393931",
+          "icmp": "2011-08-18 12:18:31.116085",
+          "dns": "2011-08-18 11:00:27.003141"
+        },
+        "activity_flow_counts": {
+          "icmp": 10541,
+          "other": 20,
+          "dns": 17,
+          "c2": 3
+        },
+        "escalation_onsets": {
+          "icmp": {
+            "at": "2011-08-18 12:18:31.116085",
+            "minutes_of_prior_botnet_traffic": 78.1
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.208",
+        "botnet_src_flows": 11118,
+        "non_botnet_src_flows_total": 1,
+        "onset": "2011-08-18 11:01:02.018002",
+        "onset_clock": "11:01",
+        "onset_minutes_after_capture_start": 64.5,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 40.4,
+        "episodes": [
+          {
+            "start": "2011-08-18 11:01:02.018002",
+            "end": "2011-08-18 11:20:47.338048",
+            "minutes": 19.8,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 11:53:11.705050",
+            "end": "2011-08-18 12:34:25.201606",
+            "minutes": 41.2,
+            "quiet_minutes_before": 32.4,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 13:52:32.956446",
+            "end": "2011-08-18 15:04:59.741823",
+            "minutes": 72.4,
+            "quiet_minutes_before": 78.1,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 11:04:04.942692",
+          "click_fraud": "2011-08-18 11:20:47.338048",
+          "icmp": "2011-08-18 12:18:30.834848",
+          "dns": "2011-08-18 11:01:02.018002"
+        },
+        "activity_flow_counts": {
+          "icmp": 11081,
+          "other": 19,
+          "dns": 14,
+          "c2": 3,
+          "click_fraud": 1
+        },
+        "escalation_onsets": {
+          "click_fraud": {
+            "at": "2011-08-18 11:20:47.338048",
+            "minutes_of_prior_botnet_traffic": 19.8
+          },
+          "icmp": {
+            "at": "2011-08-18 12:18:30.834848",
+            "minutes_of_prior_botnet_traffic": 77.5
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.209",
+        "botnet_src_flows": 9894,
+        "non_botnet_src_flows_total": 5,
+        "onset": "2011-08-18 11:01:39.314035",
+        "onset_clock": "11:01",
+        "onset_minutes_after_capture_start": 65.2,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 23.2,
+        "episodes": [
+          {
+            "start": "2011-08-18 11:01:39.314035",
+            "end": "2011-08-18 11:19:59.552998",
+            "minutes": 18.3,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 11:53:11.708062",
+            "end": "2011-08-18 12:33:25.243139",
+            "minutes": 40.2,
+            "quiet_minutes_before": 33.2,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          },
+          {
+            "start": "2011-08-18 13:52:41.145307",
+            "end": "2011-08-18 15:03:28.059759",
+            "minutes": 70.8,
+            "quiet_minutes_before": 79.3,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 11:03:20.187298",
+          "icmp": "2011-08-18 12:18:30.827387",
+          "dns": "2011-08-18 11:01:39.314035"
+        },
+        "activity_flow_counts": {
+          "icmp": 9857,
+          "other": 17,
+          "dns": 16,
+          "c2": 4
+        },
+        "escalation_onsets": {
+          "icmp": {
+            "at": "2011-08-18 12:18:30.827387",
+            "minutes_of_prior_botnet_traffic": 76.9
+          }
+        }
+      }
+    ],
+    "external_ips_with_botnet_label": 0,
+    "normal_hosts": [
+      "147.32.1.20",
+      "147.32.80.9",
+      "147.32.84.13",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.232",
+      "147.32.84.25",
+      "147.32.84.59",
+      "147.32.84.8",
+      "147.32.86.135",
+      "147.32.86.194",
+      "147.32.86.223",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.36"
+    ]
+  },
+  "11": {
+    "file": "scenario_11_botnet_52.binetflow.gz",
+    "capture_start": "2011-08-18 15:39:35.087798",
+    "capture_end": "2011-08-18 15:55:46.379941",
+    "capture_hours": 0.27,
+    "flows": 107251,
+    "label_families": {
+      "Background": 96369,
+      "Botnet": 8164,
+      "Normal": 2718
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 4151,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-18 15:47:57.983212",
+        "onset_clock": "15:47",
+        "onset_minutes_after_capture_start": 8.4,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 8.1,
+        "episodes": [
+          {
+            "start": "2011-08-18 15:47:57.983212",
+            "end": "2011-08-18 15:54:55.600191",
+            "minutes": 7.0,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "icmp": "2011-08-18 15:53:14.601089",
+          "dns": "2011-08-18 15:47:57.983212"
+        },
+        "activity_flow_counts": {
+          "icmp": 4144,
+          "dns": 4,
+          "other": 3
+        },
+        "escalation_onsets": {}
+      },
+      {
+        "ip": "147.32.84.191",
+        "botnet_src_flows": 4006,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-18 15:48:04.212893",
+        "onset_clock": "15:48",
+        "onset_minutes_after_capture_start": 8.5,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 1,
+        "inbound_history_minutes": 8.1,
+        "episodes": [
+          {
+            "start": "2011-08-18 15:48:04.212893",
+            "end": "2011-08-18 15:54:36.106393",
+            "minutes": 6.5,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 15:49:23.599103",
+          "icmp": "2011-08-18 15:52:55.096282",
+          "dns": "2011-08-18 15:48:04.212893"
+        },
+        "activity_flow_counts": {
+          "icmp": 3999,
+          "dns": 4,
+          "other": 2,
+          "c2": 1
+        },
+        "escalation_onsets": {}
+      },
+      {
+        "ip": "147.32.84.192",
+        "botnet_src_flows": 7,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-18 15:48:07.547082",
+        "onset_clock": "15:48",
+        "onset_minutes_after_capture_start": 8.5,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 3,
+        "inbound_history_minutes": 8.4,
+        "episodes": [
+          {
+            "start": "2011-08-18 15:48:07.547082",
+            "end": "2011-08-18 15:48:43.345012",
+            "minutes": 0.6,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-18 15:48:43.345012",
+          "dns": "2011-08-18 15:48:07.547082"
+        },
+        "activity_flow_counts": {
+          "dns": 4,
+          "other": 2,
+          "c2": 1
+        },
+        "escalation_onsets": {}
+      }
+    ],
+    "external_ips_with_botnet_label": 0,
+    "normal_hosts": [
+      "147.32.80.9",
+      "147.32.84.118",
+      "147.32.84.13",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.232",
+      "147.32.84.25",
+      "147.32.84.59",
+      "147.32.84.8",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.36"
+    ]
+  },
+  "12": {
+    "file": "scenario_12_botnet_53.binetflow.gz",
+    "capture_start": "2011-08-19 10:02:43.748728",
+    "capture_end": "2011-08-19 11:45:43.647861",
+    "capture_hours": 1.72,
+    "flows": 325471,
+    "label_families": {
+      "Background": 315675,
+      "Normal": 7628,
+      "Botnet": 2168
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 807,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-19 10:42:24.940312",
+        "onset_clock": "10:42",
+        "onset_minutes_after_capture_start": 39.7,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 51,
+        "inbound_history_minutes": 10.2,
+        "episodes": [
+          {
+            "start": "2011-08-19 10:42:24.940312",
+            "end": "2011-08-19 11:44:48.381741",
+            "minutes": 62.4,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "click_fraud": "2011-08-19 10:43:30.032402",
+          "icmp": "2011-08-19 10:42:34.547635",
+          "dns": "2011-08-19 10:42:24.940312"
+        },
+        "activity_flow_counts": {
+          "other": 721,
+          "dns": 68,
+          "icmp": 16,
+          "click_fraud": 2
+        },
+        "escalation_onsets": {}
+      },
+      {
+        "ip": "147.32.84.191",
+        "botnet_src_flows": 766,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-19 10:47:11.404349",
+        "onset_clock": "10:47",
+        "onset_minutes_after_capture_start": 44.5,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-19 10:47:11.404349",
+            "end": "2011-08-19 11:44:34.604709",
+            "minutes": 57.4,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "click_fraud": "2011-08-19 11:05:55.601372",
+          "dns": "2011-08-19 10:47:11.404349"
+        },
+        "activity_flow_counts": {
+          "other": 694,
+          "dns": 71,
+          "click_fraud": 1
+        },
+        "escalation_onsets": {
+          "click_fraud": {
+            "at": "2011-08-19 11:05:55.601372",
+            "minutes_of_prior_botnet_traffic": 18.7
+          }
+        }
+      },
+      {
+        "ip": "147.32.84.192",
+        "botnet_src_flows": 570,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-19 10:49:45.093730",
+        "onset_clock": "10:49",
+        "onset_minutes_after_capture_start": 47.0,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 0,
+        "inbound_history_minutes": 0.0,
+        "episodes": [
+          {
+            "start": "2011-08-19 10:49:45.093730",
+            "end": "2011-08-19 11:43:16.961404",
+            "minutes": 53.5,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "click_fraud": "2011-08-19 10:51:24.996843",
+          "dns": "2011-08-19 10:49:45.093730"
+        },
+        "activity_flow_counts": {
+          "other": 497,
+          "dns": 71,
+          "click_fraud": 2
+        },
+        "escalation_onsets": {}
+      }
+    ],
+    "external_ips_with_botnet_label": 6,
+    "normal_hosts": [
+      "147.32.80.9",
+      "147.32.84.13",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.232",
+      "147.32.84.25",
+      "147.32.84.59",
+      "147.32.84.8",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.36"
+    ]
+  },
+  "13": {
+    "file": "scenario_13_botnet_54.binetflow.gz",
+    "capture_start": "2011-08-15 17:13:40.449530",
+    "capture_end": "2011-08-16 09:36:00.806547",
+    "capture_hours": 16.37,
+    "flows": 1925149,
+    "label_families": {
+      "Background": 1853207,
+      "Botnet": 40003,
+      "Normal": 31939
+    },
+    "infected_hosts": [
+      {
+        "ip": "147.32.84.165",
+        "botnet_src_flows": 40003,
+        "non_botnet_src_flows_total": 0,
+        "onset": "2011-08-15 17:16:48.558133",
+        "onset_clock": "17:16",
+        "onset_minutes_after_capture_start": 3.1,
+        "non_botnet_own_flows_before_onset": 0,
+        "inbound_flows_before_onset": 4,
+        "inbound_history_minutes": 2.9,
+        "episodes": [
+          {
+            "start": "2011-08-15 17:16:48.558133",
+            "end": "2011-08-16 09:34:57.834124",
+            "minutes": 978.2,
+            "quiet_minutes_before": null,
+            "own_flows_in_10min_before": 0,
+            "non_botnet_own_flows_in_10min_before": 0
+          }
+        ],
+        "activity_first_seen": {
+          "c2": "2011-08-15 17:20:28.548532",
+          "spam": "2011-08-15 17:22:05.410017",
+          "click_fraud": "2011-08-15 17:21:59.352146",
+          "icmp": "2011-08-15 17:29:51.362276",
+          "dns": "2011-08-15 17:16:48.558133"
+        },
+        "activity_flow_counts": {
+          "other": 23401,
+          "dns": 7523,
+          "spam": 7422,
+          "click_fraud": 1111,
+          "c2": 536,
+          "icmp": 10
+        },
+        "escalation_onsets": {
+          "icmp": {
+            "at": "2011-08-15 17:29:51.362276",
+            "minutes_of_prior_botnet_traffic": 13.0
+          }
+        }
+      }
+    ],
+    "external_ips_with_botnet_label": 0,
+    "normal_hosts": [
+      "147.32.80.9",
+      "147.32.84.118",
+      "147.32.84.13",
+      "147.32.84.134",
+      "147.32.84.137",
+      "147.32.84.15",
+      "147.32.84.164",
+      "147.32.84.170",
+      "147.32.84.232",
+      "147.32.84.25",
+      "147.32.84.59",
+      "147.32.84.8",
+      "147.32.84.9",
+      "147.32.85.109",
+      "147.32.85.7",
+      "147.32.86.126",
+      "147.32.86.96",
+      "147.32.87.11",
+      "147.32.87.212",
+      "147.32.87.214",
+      "147.32.87.36"
+    ]
+  }
+}
