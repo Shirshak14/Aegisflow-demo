@@ -170,7 +170,9 @@ def folds(A: dict, h: int) -> list[dict]:
     scen = [s for s in sorted(set(A["scenario"].tolist())) if A["y"][h][A["scenario"] == s].sum() > 0]
     out = []
     for i, s in enumerate(scen):
-        v = scen[(i + 1) % len(scen)]
+        # validation = next scenario in the list that has negative anchors (the 1% FPR threshold needs them)
+        order = [scen[(i + j) % len(scen)] for j in range(1, len(scen))]
+        v = next(x for x in order if (A["y"][h][A["scenario"] == x] == 0).any())
         out.append(dict(test=int(s), val=int(v), test_i=np.flatnonzero(A["scenario"] == s),
                         val_i=np.flatnonzero(A["scenario"] == v),
                         train_i=np.flatnonzero((A["scenario"] != s) & (A["scenario"] != v))))
@@ -209,9 +211,12 @@ def evaluate_fold(A, f, h, score_test, score_val, rng) -> dict:
         if a is not None:
             null.append(a)
     null = np.asarray(null)
-    res["pseudo_null_median"] = float(np.median(null))
-    res["pseudo_null_p95"] = float(np.quantile(null, 0.95))
-    res["pseudo_p"] = float((1 + (null >= res["auc"]).sum()) / (1 + len(null)))
+    if len(null):
+        res["pseudo_null_median"] = float(np.median(null))
+        res["pseudo_null_p95"] = float(np.quantile(null, 0.95))
+        res["pseudo_p"] = float((1 + (null >= res["auc"]).sum()) / (1 + len(null)))
+    else:  # too few negative anchors to place a pseudo-onset: no null, fold cannot count for E2
+        res["pseudo_p"] = None
     yv = A["y"][h][f["val_i"]]
     thr = float(np.quantile(score_val[yv == 0], 1 - BARS["e4_val_fpr"]))
     res["test_fpr"] = float((score_test[y == 0] >= thr).mean())
@@ -227,7 +232,7 @@ def summarise(per_fold: list[dict]) -> dict:
     if not scored:
         return dict(folds_scored=0)
     return dict(folds_scored=len(scored), median_auc=float(np.median([r["auc"] for r in scored])),
-                folds_p_lt_05=int(sum(r["pseudo_p"] < BARS["e2_alpha"] for r in scored)),
+                folds_p_lt_05=int(sum(r["pseudo_p"] is not None and r["pseudo_p"] < BARS["e2_alpha"] for r in scored)),
                 episodes=int(sum(r["episodes"] for r in scored)),
                 episodes_alerted=int(sum(r["episodes_alerted"] for r in scored)),
                 max_test_fpr=float(max(r["test_fpr"] for r in scored)))
