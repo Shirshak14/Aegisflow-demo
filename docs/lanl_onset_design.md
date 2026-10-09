@@ -66,3 +66,7 @@ Metric: per fold, ROC-AUC over all test anchors of that burst (pooled across its
 - **own** and **own+inbound** should sit near chance: a victim's own traffic has no reason to change before an attacker picks it. If they pass, suspect a time or burst artefact first.
 - **context** can only help the victims where earlier-compromised computers or the red-team sources talk to the victim beforehand; the feasibility census found attacker contact before onset for only 35 victims, all within the last hour. So any pass is likely at H = 30 to 60 minutes and driven by a minority of victims. The report will break results down by whether attacker contact was visible.
 - Whatever the outcome, it is one red team in one network.
+
+## 8. Deviations recorded before results
+
+- Training negatives are subsampled to 25% for every model (positives all kept; test and validation never subsampled), as in the CIC onset study's recorded deviation. Reason: about 400,000 anchors per fold over 23 to 35 folds and 26 model fits per fold. Recorded before the first training run.
