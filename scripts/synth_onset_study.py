@@ -205,8 +205,7 @@ def run(condition, seed, out):
                 s_te, s_va = fit_score(mod, X[f["train"]], y[f["train"]], [X[f["test"]], X[f["val"]]], rng)
                 met = fold_metrics(D, f, m, s_te, s_va, rng)
                 if fs != "time":
-                    ys = shifted(D, y, f["train"], rng) if False else None
-                    y_sh = y.copy(); y_sh[f["train"]] = shifted(D, y, f["train"], rng)
+                    y_sh = shifted(D, y, f["train"], rng)
                     s_sh, = fit_score(mod, X[f["train"]], y_sh[f["train"]], [X[f["test"]]], rng)
                     met["shift_auc"] = auc(y[f["test"]], s_sh)
                 folds.append(met)

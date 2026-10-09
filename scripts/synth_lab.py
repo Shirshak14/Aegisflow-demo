@@ -38,6 +38,9 @@ CONDITIONS = {
     "B1": (0.25, False, False),
     "B2": (0.5, False, False),
     "B3": (1.0, False, False),
+    # exploratory, added after the pre-registered conditions had been run (docs/synthetic_onset_report.md)
+    "B4": (2.0, False, False),
+    "B5": (4.0, False, False),
     "C": (0.0, True, False),
     "D": (0.0, False, True),
 }
