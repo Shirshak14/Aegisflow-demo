@@ -76,4 +76,9 @@ Features: **own**, **own+net** (as before), **time** (hour and day of week; cont
 
 ## 11. Deviations
 
-None recorded yet. Any change after this commit is listed here with the reason, dated, and states whether results had been seen.
+Recorded 2026-10-09, before the full runs and before any fold-level result was read. One timing smoke test of a single fold (condition B3, H = 5 min, fold 0) was run to size the compute; its AUCs (about 0.65 logistic, 0.59 gradient boosting) were seen and nothing was changed because of them.
+
+1. Gradient boosting trains on 10% of negatives (logistic keeps 30%), 60 trees, depth 4, to keep the run to minutes. Test anchors are never subsampled.
+2. Network features are four aggregates computed from the host windows themselves (summed flows, summed bytes, mean destination ports, summed destination IPs), last and mean over the 10 windows, because the simulator has a fixed host population.
+3. The grouped-by-run re-split, the host-identity classifier and the detector sanity run from section 7 are run once on condition B3 only, not on every condition.
+4. S6 (second seed) is run for every condition, so a pass or fail in any condition is checked on seed 12.
