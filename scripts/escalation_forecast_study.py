@@ -11,6 +11,8 @@ Parts:
   diagnose  -- escalation episodes and how many have eligible anchors before them.
   classical -- logistic regression and gradient boosting, plus the time-only control,
                the pseudo-onset null and the shifted-label retraining control.
+  normalised -- round 2: the same models on inputs relative to each host's own causal median,
+               scored with a per-scenario rank threshold (docs/escalation_forecasting_round2_design.md).
 
 Writes reports/escalation_forecast_study.json. Nothing here is read by the backend.
 Run: .venv/Scripts/python.exe scripts/escalation_forecast_study.py [part ...]
@@ -52,6 +54,7 @@ SEED = 42
 ESCALATION = r"SPAM|SMTP|HTTP-Ad|ICMP"     # spam, click fraud, ICMP flooding (fine CTU label)
 LOST = {"packet_size_std_mean", "inter_arrival_mean", "tcp_window_size_mean"}  # absent in CTU-13
 FEATURES = [f for f in MODEL_FEATURES if f not in LOST]
+RANK_ALERT = 0.01                          # round 2: alert share per held-out scenario
 BARS = dict(e1_median_auc=0.70, e2_min_folds=5, e2_alpha=0.05, e3_vs_time=0.10, e3_vs_shift=0.15,
             e4_val_fpr=0.01, e4_max_test_fpr=0.02)
 
@@ -143,6 +146,22 @@ def build_anchors(w: pd.DataFrame) -> dict:
     return A
 
 
+def host_baseline_inputs(A: dict, w: pd.DataFrame) -> np.ndarray:
+    """Round 2: each anchor's 10 input windows in log space minus the per-feature median of all of
+    that host's windows that ended at or before the anchor time t (causal; always >= 10 windows).
+    Removes the bot family's / capture's own level, so only change relative to the host remains."""
+    names = list(FEATURES) + ["log_gap_s"]
+    x = SequencePreprocessor(names)._log(A["own"].astype(np.float64))
+    ends = w.window_end.to_numpy()
+    out = np.zeros((len(A["t"]), L, x.shape[1]), np.float32)
+    host_rows = {h: g.index.to_numpy() for h, g in w.groupby("host_id", sort=False)}
+    for i, (hst, t) in enumerate(zip(A["host"], A["t"])):
+        rows = host_rows[hst]
+        base = np.median(x[rows[ends[rows] <= t]], axis=0)
+        out[i] = x[A["win"][i]] - base
+    return out
+
+
 def escalation_episodes(w: pd.DataFrame) -> pd.DataFrame:
     a = w[w.attack_present == 1].sort_values(["host_id", "window_start"])
     new = (a.host_id != a.host_id.shift()) | (a.window_start.diff() > EPISODE_GAP)
@@ -224,6 +243,12 @@ def evaluate_fold(A, f, h, score_test, score_val, rng) -> dict:
     key = pd.Series(list(zip(hosts[pos], A["next_esc"][ti][pos])))
     hit = pd.Series(score_test[pos] >= thr).groupby(key).any()
     res["episodes"] = int(len(hit)); res["episodes_alerted"] = int(hit.sum())
+    # Round 2: label-free per-scenario rank threshold, alert on the top RANK_ALERT share of the
+    # held-out scenario's own anchor scores (uses that capture's unlabelled scores, not causal).
+    thr_r = float(np.quantile(score_test, 1 - RANK_ALERT))
+    res["rank_test_fpr"] = float((score_test[y == 0] >= thr_r).mean())
+    hit_r = pd.Series(score_test[pos] >= thr_r).groupby(key).any()
+    res["rank_episodes_alerted"] = int(hit_r.sum())
     return res
 
 
@@ -235,10 +260,12 @@ def summarise(per_fold: list[dict]) -> dict:
                 folds_p_lt_05=int(sum(r["pseudo_p"] is not None and r["pseudo_p"] < BARS["e2_alpha"] for r in scored)),
                 episodes=int(sum(r["episodes"] for r in scored)),
                 episodes_alerted=int(sum(r["episodes_alerted"] for r in scored)),
-                max_test_fpr=float(max(r["test_fpr"] for r in scored)))
+                max_test_fpr=float(max(r["test_fpr"] for r in scored)),
+                rank_episodes_alerted=int(sum(r["rank_episodes_alerted"] for r in scored)),
+                rank_max_test_fpr=float(max(r["rank_test_fpr"] for r in scored)))
 
 
-def bars(s: dict, time_auc: float | None, shift_auc: float | None) -> dict:
+def bars(s: dict, time_auc: float | None, shift_auc: float | None, rank: bool = False) -> dict:
     if not s.get("folds_scored"):
         return dict(all=False)
     b = dict(E1=s["median_auc"] >= BARS["e1_median_auc"],
@@ -246,6 +273,8 @@ def bars(s: dict, time_auc: float | None, shift_auc: float | None) -> dict:
              E3=(time_auc is not None and s["median_auc"] - time_auc >= BARS["e3_vs_time"])
                 and (shift_auc is None or s["median_auc"] - shift_auc >= BARS["e3_vs_shift"]),
              E4=s["episodes_alerted"] * 2 >= s["episodes"] and s["max_test_fpr"] <= BARS["e4_max_test_fpr"])
+    if rank:  # round 2: E4 uses the per-scenario rank threshold
+        b["E4"] = s["rank_episodes_alerted"] * 2 >= s["episodes"] and s["rank_max_test_fpr"] <= BARS["e4_max_test_fpr"]
     b["all"] = all(b.values())
     return b
 
@@ -258,6 +287,9 @@ def summary_features(X: np.ndarray) -> np.ndarray:
 def fit_classical(kind, A, f, features, y_train, seed):
     if features == "time":
         Xtr, Xv, Xte = (A["time"][f[k]] for k in ("train_i", "val_i", "test_i"))
+    elif features == "rel":
+        Xs = [A["rel"][f[k]] for k in ("train_i", "val_i", "test_i")]
+        Xtr, Xv, Xte = ((x.reshape(len(x), -1) for x in Xs) if kind == "logistic" else (summary_features(x) for x in Xs))
     else:
         names = list(FEATURES) + ["log_gap_s"]
         Xs = [A["own"][A["win"][f[k]]] for k in ("train_i", "val_i", "test_i")]
@@ -275,9 +307,9 @@ def fit_classical(kind, A, f, features, y_train, seed):
     return m.predict_proba(Xte)[:, 1], m.predict_proba(Xv)[:, 1]
 
 
-def classical_part(A, rng) -> dict:
+def classical_part(A, rng, variants=(("logistic", "own"), ("gboost", "own"), ("gboost", "time")),
+                   rank: bool = False) -> dict:
     out = {}
-    variants = [("logistic", "own"), ("gboost", "own"), ("gboost", "time")]
     for h in HORIZONS_MIN:
         fl = folds(A, h)
         for kind, features in variants:
@@ -305,7 +337,7 @@ def classical_part(A, rng) -> dict:
         for kind, features in variants:
             if features != "time":
                 key = f"{kind}|{features}|H{h}"
-                out[key]["bars"] = bars(out[key]["summary"], time_auc, out[key]["shifted_label_median_auc"])
+                out[key]["bars"] = bars(out[key]["summary"], time_auc, out[key]["shifted_label_median_auc"], rank)
     return out
 
 
@@ -321,6 +353,10 @@ def run(parts) -> dict:
         print(json.dumps(report["diagnose"], indent=1))
     if "classical" in parts:
         report["classical"] = classical_part(A, rng)
+    if "normalised" in parts:  # round 2 (docs/escalation_forecasting_round2_design.md)
+        A["rel"] = host_baseline_inputs(A, w)
+        report["normalised"] = classical_part(A, np.random.default_rng(SEED),
+                                              (("logistic", "rel"), ("gboost", "rel"), ("gboost", "time")), rank=True)
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     return report
