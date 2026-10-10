@@ -84,6 +84,8 @@ class ReplayEngine:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self.events: pd.DataFrame | None = None
+        self._rows: list | None = None   # events as namedtuples, built once in _prepare for the hot loop
+        self._starts: list | None = None  # events.target_window_start as Timestamps, same order
         self._raw_X: np.ndarray | None = None
         self._explainer = None
         self._explainer_lock = threading.Lock()
@@ -150,6 +152,9 @@ class ReplayEngine:
         self._raw_X = data.X
         if self.stage_model_dir is not None:
             self.events["pred_stage"] = pred_stage.astype(str)
+        # The replay loop reads these per row; building them once avoids ev.iloc[i] (a Series per call).
+        self._rows = list(self.events.itertuples(index=False))
+        self._starts = [r.target_window_start for r in self._rows]
         self.model_version = model_version()
 
     def _row_stage(self, row) -> str:
@@ -302,19 +307,20 @@ class ReplayEngine:
 
     def _run(self) -> None:
         try:
-            ev = self.events
-            t0_sim = ev.target_window_start.iloc[0]
+            rows, starts = self._rows, self._starts
+            n = len(rows)
+            t0_sim = starts[0]
             t0_wall = time.monotonic()
-            while self.cursor < len(ev) and not self._stop.is_set():
+            while self.cursor < n and not self._stop.is_set():
                 sim_now = t0_sim + pd.Timedelta(seconds=(time.monotonic() - t0_wall) * self.speed)
-                while self.cursor < len(ev) and ev.target_window_start.iloc[self.cursor] <= sim_now:
-                    self._process(ev.iloc[self.cursor])
+                while self.cursor < n and starts[self.cursor] <= sim_now:
+                    self._process(rows[self.cursor])
                     self.cursor += 1
                 with self._lock:
-                    self.sim_time = min(sim_now, ev.target_window_start.iloc[-1])
+                    self.sim_time = min(sim_now, starts[-1])
                 time.sleep(0.05)
             with self._lock:
-                if self.cursor >= len(ev):
+                if self.cursor >= n:
                     self.state = "finished"
                     self.finished_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         except Exception as exc:  # surface to /replay/status instead of dying silently
