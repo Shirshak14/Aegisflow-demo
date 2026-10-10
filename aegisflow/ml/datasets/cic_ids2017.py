@@ -76,6 +76,21 @@ _TIMESTAMP_FORMATS = ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%m/%d/%Y %H:%M:%S"
 # hours 8-12 are already correct (12:xx is noon).
 _FIRST_MORNING_HOUR = 8
 
+# Rows parsed per read_csv chunk. The chunks of one file are concatenated once, so this bounds the parser's
+# working set, not the result; the result is limited to the columns below.
+_CSV_CHUNK_ROWS = 250_000
+
+# The only raw columns _to_canonical reads (everything in _COLUMN_MAP that maps to a canonical column) --
+# the other ~60 of CICFlowMeter's ~85 columns are never parsed.
+_USED_HEADERS = frozenset(k for k, v in _COLUMN_MAP.items() if v)
+
+# Columns read as text. Whole-file inference made these strings; per-chunk inference would infer float64 for a
+# chunk that is entirely empty in one of them (trailing blank rows in Thursday-Morning-WebAttacks). The output
+# is identical either way today (checked against golden files), so this is a guard that keeps the dtype
+# independent of chunk contents, not a fix for an observed difference. `protocol` is deliberately NOT here: it
+# is inferred (int64) so it stringifies as "6", exactly as before.
+_TEXT_HEADERS = frozenset({"source ip", "src ip", "destination ip", "dst ip", "timestamp", "label"})
+
 
 def _count_data_rows(path: Path) -> int:
     """Count data lines (excluding the header) without parsing the CSV."""
@@ -113,6 +128,30 @@ def spread_sample_plan(row_counts: list[int], sample_size: int, seed: int) -> li
 
 def _normalize_header(col: str) -> str:
     return col.strip().lower()
+
+
+def _read_used_columns(fpath: Path, skip) -> pd.DataFrame:
+    """Read one CSV, parsing only the columns _to_canonical uses, in chunks, and concatenate once.
+
+    Header spelling is normalised exactly as before (strip + lower). Row selection (``skip``) is the same
+    callable the whole-file read used; it indexes file lines, which chunking does not change.
+    """
+    raw_header = pd.read_csv(fpath, nrows=0, encoding="cp1252").columns
+    text_cols = {c: "str" for c in raw_header if _normalize_header(c) in _TEXT_HEADERS}
+    chunks = pd.read_csv(
+        fpath,
+        low_memory=False,
+        skiprows=skip,
+        encoding="cp1252",
+        usecols=lambda c: _normalize_header(c) in _USED_HEADERS,
+        dtype=text_cols,
+        chunksize=_CSV_CHUNK_ROWS,
+    )
+    parts = []
+    for chunk in chunks:
+        chunk.columns = [_normalize_header(c) for c in chunk.columns]
+        parts.append(chunk)
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=sorted(_USED_HEADERS))
 
 
 @register("cic_ids2017")
@@ -189,13 +228,7 @@ Citation (cite this if you publish results):
             if rows is not None:
                 keep = set((rows + 1).tolist())  # file line 0 is the header
                 skip = lambda i, keep=keep: i != 0 and i not in keep  # noqa: E731
-            df = pd.read_csv(
-    fpath,
-    low_memory=False,
-    skiprows=skip,
-    encoding="cp1252",
-)
-            df.columns = [_normalize_header(c) for c in df.columns]
+            df = _read_used_columns(fpath, skip)
             # CICFlowMeter CSVs sometimes contain re-embedded header rows
             # (a data row whose 'label' literally reads "Label"); drop them.
             if "label" in df.columns:
