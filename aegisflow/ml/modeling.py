@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (average_precision_score, confusion_matrix, f1_score,
+from sklearn.metrics import (average_precision_score, confusion_matrix, f1_score, precision_recall_curve,
                              precision_score, recall_score, roc_auc_score)
 from sklearn.preprocessing import RobustScaler
 import joblib
@@ -177,12 +177,34 @@ def metrics_at(y: np.ndarray, p: np.ndarray, threshold: float) -> dict[str, Any]
             "actual_negatives": int(np.sum(y == 0))}
 
 
+_THRESHOLD_GRID = (0.01, 0.05, 0.1, 0.2, 0.3, 0.5)
+
+
 def select_threshold(y: np.ndarray, p: np.ndarray) -> tuple[float, str]:
+    """Pick the validation threshold that maximises F1 (prediction rule: ``p >= t``).
+
+    Candidates are the fixed grid plus every distinct validation probability. Ties in F1 resolve to the
+    lowest candidate, as in the original loop over ``sorted(candidates)``. F1 for all candidates comes from one
+    ``precision_recall_curve`` call: its thresholds are the distinct probabilities, and a grid value ``t`` that is
+    not one of them predicts exactly what the smallest curve threshold >= ``t`` predicts (none if ``t`` is above
+    every probability, which scores 0).
+    """
     if len(y) == 0 or not np.any(y == 1):
         return 0.5, "validation set has no positive targets; default 0.5 retained"
-    candidates = sorted(set([0.01, 0.05, 0.1, 0.2, 0.3, 0.5] + list(map(float, p))))
-    scores = [(f1_score(y, p >= t, zero_division=0), t) for t in candidates]
-    return float(max(scores, key=lambda z: (z[0], -z[1]))[1]), "validation F1 maximization"
+    y = np.asarray(y)
+    p = np.asarray(p)
+    n_pos = int((y == 1).sum())
+    precision, recall, thr = precision_recall_curve(y, p)
+    thr = thr.astype(float)
+    precision, recall = precision[:-1], recall[:-1]  # drop the final (precision=1, recall=0) point; it has no threshold
+    # Rebuild exact integer counts so F1 = 2TP / (predicted + positives) is computed without float drift.
+    tp = np.rint(recall * n_pos)
+    predicted = np.where(tp > 0, np.rint(tp / np.where(precision > 0, precision, 1.0)), 0.0)
+    f1_at_thr = np.where(tp > 0, 2 * tp / (predicted + n_pos), 0.0)
+    candidates = np.unique(np.concatenate([np.asarray(_THRESHOLD_GRID), p.astype(float)]))  # ascending, distinct
+    idx = np.searchsorted(thr, candidates, side="left")
+    f1 = np.where(idx < len(thr), f1_at_thr[np.minimum(idx, len(thr) - 1)], 0.0)
+    return float(candidates[int(np.argmax(f1))]), "validation F1 maximization"  # argmax -> first = lowest threshold
 
 
 class LSTMForecaster:
