@@ -162,3 +162,58 @@ def test_post_alert_rejects_out_of_range_values(tmp_path):
     assert client.get("/health").json()["alerts_in_ledger"] == 0
     ok = {**_alert(1), "lstm_probability": 1.0, "confidence": 0.0, "risk_score": 100, "lr_flag": 1}
     assert client.post("/alerts", headers=AUTH, json=ok).status_code == 201
+
+
+# ---- transient Windows "Access is denied" on the head-anchor file (seen killing a 1000x replay) ----
+def _flaky(real, failures: int):
+    """Wrap ``real`` so its first ``failures`` calls raise PermissionError, as Windows does for a briefly locked file."""
+    calls = {"n": 0}
+
+    def wrapper(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] <= failures:
+            raise PermissionError(13, "Access is denied")
+        return real(*args, **kwargs)
+
+    return wrapper, calls
+
+
+def test_anchor_write_retries_a_transient_permission_error(tmp_path, monkeypatch):
+    from backend.app import audit
+
+    led = Ledger(tmp_path / "a.db")
+    monkeypatch.setattr(audit.time, "sleep", lambda s: None)
+    flaky, calls = _flaky(audit.os.replace, failures=5)
+    monkeypatch.setattr(audit.os, "replace", flaky)
+    led.append(_alert(1))  # would raise PermissionError without the retry
+    assert calls["n"] == 6
+    monkeypatch.undo()
+    assert led.verify()["status"] == "VERIFIED"
+
+
+def test_anchor_write_still_raises_a_persistent_permission_error(tmp_path, monkeypatch):
+    import pytest
+
+    from backend.app import audit
+
+    led = Ledger(tmp_path / "a.db")
+    monkeypatch.setattr(audit.time, "sleep", lambda s: None)
+    flaky, calls = _flaky(audit.os.replace, failures=10**6)
+    monkeypatch.setattr(audit.os, "replace", flaky)
+    with pytest.raises(PermissionError):
+        led.append(_alert(1))
+    assert calls["n"] == 20  # bounded: gives up after 20 attempts
+
+
+def test_anchor_read_retries_a_transient_permission_error(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from backend.app import audit
+
+    led = Ledger(tmp_path / "a.db")
+    rec = led.append(_alert(1))
+    monkeypatch.setattr(audit.time, "sleep", lambda s: None)
+    flaky, calls = _flaky(Path.read_text, failures=3)
+    monkeypatch.setattr(Path, "read_text", flaky)
+    anchor = led._read_anchor()
+    assert anchor["head_hash"] == rec["hash"] and calls["n"] == 4
