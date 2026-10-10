@@ -401,66 +401,45 @@ def load_model(model_dir: Path, map_location: str = "cpu"):
     return net, meta
 
 
-def train_experiment(
-    data: ForecastDataset,
+def fit_lstm(
+    model_type: str,
+    Xt: np.ndarray,
+    yt: np.ndarray,
+    Xv: np.ndarray,
+    yv: np.ndarray,
     output: Path,
     *,
-    seed=42,
-    epochs=8,
-    batch_size=256,
-    learning_rate=0.001,
-    hidden_size=16,
-    dropout=0.2,
-    patience=3,
-    model_type: str = "lstm",
-) -> dict[str, Any]:
-    """Train the baselines and write artifacts to ``output``.
+    feature_count: int,
+    pos_weight: float,
+    seed: int,
+    epochs: int,
+    batch_size: int,
+    learning_rate: float,
+    hidden_size: int,
+    dropout: float,
+    patience: int,
+):
+    """Train the neural model with early stopping on validation loss.
 
-    Defaults equal configs/config.yaml `model:` (the committed demo model). Side effect: this seeds
-    the Python/NumPy/torch RNGs and turns on torch deterministic algorithms for the whole process.
+    Writes ``best.pt`` (lowest validation BCEWithLogitsLoss) and ``last.pt`` to ``output``. Returns
+    ``(model, device, history, best_epoch)`` with the best checkpoint loaded and the model in eval mode.
     """
     import torch
     from torch.utils.data import DataLoader, TensorDataset
 
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-    torch.use_deterministic_algorithms(True, warn_only=True)
-    train_i, val_i, test_i = (data.indices(s) for s in ("train", "val", "test"))
-    prep = SequencePreprocessor(data.feature_names, prelogged=data.host_relative).fit(data.X[train_i])
-    Xt = prep.transform(data.X[train_i])
-    Xv = prep.transform(data.X[val_i])
-    Xq = prep.transform(data.X[test_i])
-    output.mkdir(parents=True, exist_ok=True)
-    prep.save(output / "preprocessor.joblib")
-    # Classical baseline uses flattened normalized historical windows.
-    flat_train, flat_val, flat_test = (x.reshape(len(x), -1) for x in (Xt, Xv, Xq))
-    prior = float(np.mean(data.attack[train_i])) if len(train_i) else 0.0
-    prior_probs = np.full(len(test_i), prior)
-    classical = LogisticRegression(max_iter=2000, class_weight="balanced", random_state=seed)
-    classical.fit(flat_train, data.attack[train_i])
-    cp = classical.predict_proba(flat_test)[:, 1]
-    threshold, threshold_reason = select_threshold(
-        data.attack[val_i], classical.predict_proba(flat_val)[:, 1] if len(val_i) else np.array([])
-    )
-    # For common model comparison, validation threshold is chosen for LSTM as well.
-    counts = positive_class_weight(data.attack[train_i])
-    pos_weight = counts[0]
-    model = build_model(model_type, data.X.shape[-1], hidden_size, dropout)
+    model = build_model(model_type, feature_count, hidden_size, dropout)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight], dtype=torch.float32, device=device))
     loader = DataLoader(
-        TensorDataset(torch.tensor(Xt), torch.tensor(data.attack[train_i], dtype=torch.float32)),
+        TensorDataset(torch.tensor(Xt), torch.tensor(yt, dtype=torch.float32)),
         batch_size=batch_size,
         shuffle=True,
         generator=torch.Generator().manual_seed(seed),
     )
     vx = torch.tensor(Xv, device=device)
-    vy = torch.tensor(data.attack[val_i], dtype=torch.float32, device=device)
+    vy = torch.tensor(yv, dtype=torch.float32, device=device)
     best_loss, best_epoch, stale, history = float("inf"), 0, 0, []
     for epoch in range(epochs):
         model.train()
@@ -474,7 +453,7 @@ def train_experiment(
             losses.append(float(loss.item()))
         model.eval()
         with torch.no_grad():
-            val_loss = float(loss_fn(model(vx), vy).item()) if len(val_i) else float(np.mean(losses))
+            val_loss = float(loss_fn(model(vx), vy).item()) if len(yv) else float(np.mean(losses))
         history.append({"epoch": epoch + 1, "train_loss": float(np.mean(losses)), "val_loss": val_loss})
         if val_loss < best_loss:
             best_loss, best_epoch, stale = val_loss, epoch + 1, 0
@@ -486,35 +465,49 @@ def train_experiment(
     torch.save(model.state_dict(), output / "last.pt")
     model.load_state_dict(torch.load(output / "best.pt", map_location=device, weights_only=True))
     model.eval()
+    return model, device, history, best_epoch
+
+
+def evaluate(
+    model,
+    device,
+    data: ForecastDataset,
+    Xv: np.ndarray,
+    Xq: np.ndarray,
+    *,
+    indices: tuple[np.ndarray, np.ndarray, np.ndarray],
+    model_type: str,
+    baseline: dict[str, Any],
+    pos_weight: float,
+    class_counts: dict[str, Any],
+    training: dict[str, Any],
+    history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Score validation and test with the trained model, pick its threshold on validation, build the metrics dict.
+
+    ``baseline`` holds the classical model's test probabilities (``probs``), its validation-selected
+    ``threshold`` and the ``prior_probs`` of the majority baseline. Returns the content of ``metrics.json``.
+    """
+    import torch
+
+    train_i, val_i, test_i = indices
     with torch.no_grad():
         lp = torch.sigmoid(model(torch.tensor(Xq, device=device))).cpu().numpy()
-        lv = torch.sigmoid(model(vx)).cpu().numpy() if len(val_i) else np.array([])
+        lv = torch.sigmoid(model(torch.tensor(Xv, device=device))).cpu().numpy() if len(val_i) else np.array([])
     lstm_threshold, lstm_reason = select_threshold(data.attack[val_i], lv)
     results = {
         "dataset": "cic_ids2017",
         "splits": {},
         "positive_class_weight": pos_weight,
-        "train_class_counts": counts[1],
+        "train_class_counts": class_counts,
         "threshold_selection": lstm_reason,
         "threshold": lstm_threshold,
         "models": {
-            "majority": metrics_at(data.attack[test_i], prior_probs, 0.5),
-            "logistic_regression": metrics_at(data.attack[test_i], cp, threshold),
+            "majority": metrics_at(data.attack[test_i], baseline["prior_probs"], 0.5),
+            "logistic_regression": metrics_at(data.attack[test_i], baseline["probs"], baseline["threshold"]),
             model_type: metrics_at(data.attack[test_i], lp, lstm_threshold),
         },
-        "training": {
-            "seed": seed,
-            "epochs_requested": epochs,
-            "epochs_run": len(history),
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "hidden_size": hidden_size,
-            "dropout": dropout,
-            "patience": patience,
-            "device": str(device),
-            "best_checkpoint_epoch": best_epoch,
-            "checkpoint_selection": "minimum validation BCEWithLogitsLoss",
-        },
+        "training": training,
         "history": history,
     }
     if model_type != "lstm":  # the default LSTM's metadata stays byte-for-byte what it was
@@ -545,18 +538,119 @@ def train_experiment(
     results["future_network_state"] = {
         "status": "Not trained in Phase 3; sparse attack targets and primary binary objective prioritized."
     }
+    return results
+
+
+def save_artifacts(output: Path, data: ForecastDataset, results: dict[str, Any], classical, class_counts) -> None:
+    """Write ``metadata.json``, ``metrics.json`` and ``logistic.joblib`` next to the already-saved checkpoints."""
     metadata = {
         "feature_names": data.feature_names,
         "input_shape": list(data.X.shape[1:]),
         "label_mapping": {"benign": 0, "attack": 1},
         "host_relative": data.host_relative,
-        "threshold": lstm_threshold,
-        "class_counts": counts[1],
+        "threshold": results["threshold"],
+        "class_counts": class_counts,
         "training_config": results["training"],
     }
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     (output / "metrics.json").write_text(json.dumps(results, indent=2, default=str), encoding="utf-8")
     joblib.dump(classical, output / "logistic.joblib")
+
+
+def train_experiment(
+    data: ForecastDataset,
+    output: Path,
+    *,
+    seed=42,
+    epochs=8,
+    batch_size=256,
+    learning_rate=0.001,
+    hidden_size=16,
+    dropout=0.2,
+    patience=3,
+    model_type: str = "lstm",
+) -> dict[str, Any]:
+    """Train the baselines and write artifacts to ``output``.
+
+    Defaults equal configs/config.yaml `model:` (the committed demo model). Side effect: this seeds
+    the Python/NumPy/torch RNGs and turns on torch deterministic algorithms for the whole process.
+    """
+    import torch
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    train_i, val_i, test_i = (data.indices(s) for s in ("train", "val", "test"))
+    prep = SequencePreprocessor(data.feature_names, prelogged=data.host_relative).fit(data.X[train_i])
+    Xt = prep.transform(data.X[train_i])
+    Xv = prep.transform(data.X[val_i])
+    Xq = prep.transform(data.X[test_i])
+    output.mkdir(parents=True, exist_ok=True)
+    prep.save(output / "preprocessor.joblib")
+    # Classical baseline uses flattened normalized historical windows.
+    flat_train, flat_val, flat_test = (x.reshape(len(x), -1) for x in (Xt, Xv, Xq))
+    prior = float(np.mean(data.attack[train_i])) if len(train_i) else 0.0
+    classical = LogisticRegression(max_iter=2000, class_weight="balanced", random_state=seed)
+    classical.fit(flat_train, data.attack[train_i])
+    threshold, _ = select_threshold(
+        data.attack[val_i], classical.predict_proba(flat_val)[:, 1] if len(val_i) else np.array([])
+    )
+    baseline = {
+        "probs": classical.predict_proba(flat_test)[:, 1],
+        "threshold": threshold,
+        "prior_probs": np.full(len(test_i), prior),
+    }
+    # For common model comparison, validation threshold is chosen for LSTM as well.
+    counts = positive_class_weight(data.attack[train_i])
+    pos_weight = counts[0]
+    model, device, history, best_epoch = fit_lstm(
+        model_type,
+        Xt,
+        data.attack[train_i],
+        Xv,
+        data.attack[val_i],
+        output,
+        feature_count=data.X.shape[-1],
+        pos_weight=pos_weight,
+        seed=seed,
+        epochs=epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        hidden_size=hidden_size,
+        dropout=dropout,
+        patience=patience,
+    )
+    training = {
+        "seed": seed,
+        "epochs_requested": epochs,
+        "epochs_run": len(history),
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "hidden_size": hidden_size,
+        "dropout": dropout,
+        "patience": patience,
+        "device": str(device),
+        "best_checkpoint_epoch": best_epoch,
+        "checkpoint_selection": "minimum validation BCEWithLogitsLoss",
+    }
+    results = evaluate(
+        model,
+        device,
+        data,
+        Xv,
+        Xq,
+        indices=(train_i, val_i, test_i),
+        model_type=model_type,
+        baseline=baseline,
+        pos_weight=pos_weight,
+        class_counts=counts[1],
+        training=training,
+        history=history,
+    )
+    save_artifacts(output, data, results, classical, counts[1])
     return results
 
 
