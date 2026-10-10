@@ -49,3 +49,34 @@ ctu_13:
   expected_files_glob: "**/*.binetflow[.gz]"
   # scenarios: [11, 12]   # optional: load only these CTU-13 scenarios (1-13)
   status: "opt-in prototype"   # never the active_dataset by default; see docs/combined_datasets_feasibility.md
+
+optc:
+  display_name: "DARPA OpTC (corrected)"
+  adapter: "optc"
+  raw_dir: "data/raw/optc/flows"
+  labels_dir: "data/raw/optc/labels"
+  format: "ecar-json"   # one gzip JSON-lines file per host and day; FLOW events only are used
+  official_url: "https://doi.org/10.57745/UXCWOC"
+  citation: >
+    DARPA OpTC (Five Directions, 2019), https://github.com/FiveDirections/OpTC-data;
+    corrected release and labels: Majorczyk, F., Pilastre, B., Dijoud, T. (2025). A New Hope
+    for DARPA OpTC. ACSAC 2025 Workshops. doi:10.57745/UXCWOC
+  expected_files_glob: "**/*ecar-YYYY-MM-DD-sysclientNNNN[.flows].json.gz"
+  # hosts: [201, 402]      # optional: load only these sysclient numbers
+  # keep_telemetry: false  # sensor -> Kafka (port 9092) flows are dropped by default
+  status: "opt-in prototype"   # never the active_dataset by default; see docs/optc_lanl_feasibility.md
+
+lanl_2015:
+  display_name: "LANL Comprehensive Multi-Source Cyber-Security Events (2015)"
+  adapter: "lanl_2015"
+  raw_dir: "data/raw/lanl"
+  format: "csv.gz"   # flows.txt.gz (router flows) + redteam.txt.gz (red-team authentications)
+  official_url: "https://csr.lanl.gov/data/cyber1/"
+  citation: >
+    Kent, A.D. (2015). Comprehensive, Multi-Source Cyber-Security Events. Los Alamos
+    National Laboratory. doi:10.17021/1179829
+  expected_files_glob: "flows.txt.gz"
+  # computers: [C17693, C1003]   # optional: keep only flows touching these computers
+  # time_range_s: [150000, 250000]
+  # contact_slack_s: 3600        # RedTeam = red-team source -> victim flows from first red-team auth minus this
+  status: "opt-in prototype"   # never the active_dataset by default; see docs/optc_lanl_feasibility.md
