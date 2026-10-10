@@ -37,7 +37,7 @@ import pandas as pd
 
 from aegisflow.config import load_config
 from aegisflow.ml.calibration import CALIBRATION_FILE, load_calibrator
-from aegisflow.ml.modeling import ForecastDataset, LSTMForecaster
+from aegisflow.ml.modeling import ForecastDataset, LSTMForecaster, score_batched
 from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES
 
 from .audit import Ledger
@@ -124,8 +124,7 @@ class ReplayEngine:
         net.load_state_dict(torch.load(MODEL_DIR / "best.pt", map_location="cpu", weights_only=True))
         net.eval()
         x = prep.transform(data.X)
-        with torch.no_grad():
-            lstm_p = torch.sigmoid(net(torch.tensor(x))).numpy().astype(float)
+        lstm_p = score_batched(lambda t: torch.sigmoid(net(t)), x).astype(float)
         lr_p = lr.predict_proba(x.reshape(len(x), -1))[:, 1].astype(float)
         # `python -m aegisflow calibrate` writes calibration.json; without it confidence is the raw probability
         calibrator = load_calibrator(MODEL_DIR)

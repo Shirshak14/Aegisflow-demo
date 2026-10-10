@@ -297,6 +297,22 @@ def build_model(model_type: str, feature_count: int, hidden_size: int = 32, drop
     raise ValueError(f"unknown model type {model_type!r}; choose from {MODEL_TYPES}")
 
 
+SCORE_BATCH_SIZE = 4096
+
+
+def score_batched(fn, x: np.ndarray, device=None, batch_size: int = SCORE_BATCH_SIZE) -> np.ndarray:
+    """Apply ``fn`` (tensor -> tensor, e.g. ``lambda t: torch.sigmoid(model(t))``) to ``x`` in batches under
+    ``torch.no_grad()`` and concatenate the results on the CPU, so memory stays bounded for large splits."""
+    import torch
+    if len(x) == 0:
+        return np.array([], dtype=np.float32)
+    out = []
+    with torch.no_grad():
+        for i in range(0, len(x), batch_size):
+            out.append(fn(torch.tensor(x[i:i + batch_size], device=device)).cpu().numpy())
+    return np.concatenate(out)
+
+
 def load_model(model_dir: Path, map_location: str = "cpu"):
     """Load ``best.pt`` from ``model_dir`` with the architecture recorded in metadata.json (default lstm)."""
     import torch
@@ -372,9 +388,8 @@ def train_experiment(data: ForecastDataset, output: Path, *, seed=42, epochs=8, 
                 break
     torch.save(model.state_dict(), output / "last.pt")
     model.load_state_dict(torch.load(output / "best.pt", map_location=device, weights_only=True)); model.eval()
-    with torch.no_grad():
-        lp=torch.sigmoid(model(torch.tensor(Xq,device=device))).cpu().numpy()
-        lv=torch.sigmoid(model(vx)).cpu().numpy() if len(val_i) else np.array([])
+    lp=score_batched(lambda t: torch.sigmoid(model(t)), Xq, device)
+    lv=score_batched(lambda t: torch.sigmoid(model(t)), Xv, device) if len(val_i) else np.array([])
     lstm_threshold, lstm_reason = select_threshold(data.attack[val_i], lv)
     results={"dataset":"cic_ids2017", "splits":{}, "positive_class_weight":pos_weight,
              "train_class_counts":counts[1], "threshold_selection":lstm_reason,
@@ -414,9 +429,8 @@ def predict_sequences(path: Path, model_dir: Path, threshold: float | None = Non
     data=ForecastDataset.from_parquet(path, host_relative=bool(meta.get("host_relative", False)))
     prep=joblib.load(model_dir/"preprocessor.joblib"); x=prep.transform(data.X)
     model_type=meta["training_config"].get("model_type","lstm")
-    with torch.no_grad():
-        xt=torch.tensor(x); probs=torch.sigmoid(model(xt)).numpy()
-        attn=model.attention(xt).numpy() if hasattr(model,"attention") else None
+    probs=score_batched(lambda t: torch.sigmoid(model(t)), x)
+    attn=score_batched(model.attention, x) if hasattr(model,"attention") else None
     t=float(meta["threshold"] if threshold is None else threshold)
     name="cic_ids2017-lstm-phase3" if model_type=="lstm" else f"cic_ids2017-{model_type}"
     rows=[{"sequence_id":str(data.frame.iloc[i].get("sequence_id","")),"attack_probability":float(probs[i]),
