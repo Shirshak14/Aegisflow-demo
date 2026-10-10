@@ -43,6 +43,10 @@ from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES
 from .audit import Ledger
 from .info import DATA_DIR, MODEL_DIR, ROOT, model_version
 
+_PREPARE_COLUMNS = ("sequence_id", "host_id", "seq_end_time", "target_window_start", "target_window_end",
+                    "sequence_features", "target_features", "target_attack_present", "target_dominant_class",
+                    "target_dominant_stage", "split")
+
 HISTORY_WINDOW = pd.Timedelta(minutes=10)
 
 RISK_COMPONENTS = ("attack_probability", "stage_severity", "prediction_confidence",
@@ -112,8 +116,10 @@ class ReplayEngine:
 
     def _prepare(self) -> None:
         import torch
-        frame = pd.read_parquet(DATA_DIR / "sequences.parquet")
-        frame = frame[frame["split"] == "test"].sort_values(["target_window_start", "host_id"]).reset_index(drop=True)
+        # Only the test rows and the columns used below; the rest of the ~32 MB file is never materialised.
+        frame = pd.read_parquet(DATA_DIR / "sequences.parquet", columns=list(_PREPARE_COLUMNS),
+                                filters=[("split", "==", "test")])
+        frame = frame.sort_values(["target_window_start", "host_id"]).reset_index(drop=True)
         data = ForecastDataset.from_frame(frame)
         meta = json.loads((MODEL_DIR / "metadata.json").read_text(encoding="utf-8"))
         metrics = json.loads((MODEL_DIR / "metrics.json").read_text(encoding="utf-8"))
