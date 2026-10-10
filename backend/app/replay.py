@@ -47,6 +47,8 @@ _PREPARE_COLUMNS = ("sequence_id", "host_id", "seq_end_time", "target_window_sta
                     "sequence_features", "target_features", "target_attack_present", "target_dominant_class",
                     "target_dominant_stage", "split")
 
+# Per-host risk timeline keeps only the most recent points, so memory and /hosts/{id} stay bounded on long runs.
+TIMELINE_MAX_POINTS = 500
 HISTORY_WINDOW = pd.Timedelta(minutes=10)
 
 RISK_COMPONENTS = ("attack_probability", "stage_severity", "prediction_confidence",
@@ -358,7 +360,8 @@ class ReplayEngine:
             recent.append(row.target_window_start)
         with self._lock:
             h = self.hosts.setdefault(row.host_id, {"host_id": row.host_id, "sequences": 0, "alerts": 0,
-                                                    "max_risk": 0.0, "timeline": []})
+                                                    "max_risk": 0.0,
+                                                    "timeline": deque(maxlen=TIMELINE_MAX_POINTS)})
             h["sequences"] += 1
             h["alerts"] += int(alerted)
             h["latest_risk"], h["latest_lstm_p"] = risk, round(float(row.lstm_p), 4)
