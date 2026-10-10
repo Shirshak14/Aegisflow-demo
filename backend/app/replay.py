@@ -37,12 +37,18 @@ import pandas as pd
 
 from aegisflow.config import load_config
 from aegisflow.ml.calibration import CALIBRATION_FILE, load_calibrator
-from aegisflow.ml.modeling import ForecastDataset, LSTMForecaster
+from aegisflow.ml.modeling import ForecastDataset, LSTMForecaster, score_batched
 from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES
 
 from .audit import Ledger
 from .info import DATA_DIR, MODEL_DIR, ROOT, model_version
 
+_PREPARE_COLUMNS = ("sequence_id", "host_id", "seq_end_time", "target_window_start", "target_window_end",
+                    "sequence_features", "target_features", "target_attack_present", "target_dominant_class",
+                    "target_dominant_stage", "split")
+
+# Per-host risk timeline keeps only the most recent points, so memory and /hosts/{id} stay bounded on long runs.
+TIMELINE_MAX_POINTS = 500
 HISTORY_WINDOW = pd.Timedelta(minutes=10)
 
 RISK_COMPONENTS = ("attack_probability", "stage_severity", "prediction_confidence",
@@ -84,6 +90,8 @@ class ReplayEngine:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self.events: pd.DataFrame | None = None
+        self._rows: list | None = None   # events as namedtuples, built once in _prepare for the hot loop
+        self._starts: list | None = None  # events.target_window_start as Timestamps, same order
         self._raw_X: np.ndarray | None = None
         self._explainer = None
         self._explainer_lock = threading.Lock()
@@ -110,8 +118,10 @@ class ReplayEngine:
 
     def _prepare(self) -> None:
         import torch
-        frame = pd.read_parquet(DATA_DIR / "sequences.parquet")
-        frame = frame[frame["split"] == "test"].sort_values(["target_window_start", "host_id"]).reset_index(drop=True)
+        # Only the test rows and the columns used below; the rest of the ~32 MB file is never materialised.
+        frame = pd.read_parquet(DATA_DIR / "sequences.parquet", columns=list(_PREPARE_COLUMNS),
+                                filters=[("split", "==", "test")])
+        frame = frame.sort_values(["target_window_start", "host_id"]).reset_index(drop=True)
         data = ForecastDataset.from_frame(frame)
         meta = json.loads((MODEL_DIR / "metadata.json").read_text(encoding="utf-8"))
         metrics = json.loads((MODEL_DIR / "metrics.json").read_text(encoding="utf-8"))
@@ -122,8 +132,7 @@ class ReplayEngine:
         net.load_state_dict(torch.load(MODEL_DIR / "best.pt", map_location="cpu", weights_only=True))
         net.eval()
         x = prep.transform(data.X)
-        with torch.no_grad():
-            lstm_p = torch.sigmoid(net(torch.tensor(x))).numpy().astype(float)
+        lstm_p = score_batched(lambda t: torch.sigmoid(net(t)), x).astype(float)
         lr_p = lr.predict_proba(x.reshape(len(x), -1))[:, 1].astype(float)
         # `python -m aegisflow calibrate` writes calibration.json; without it confidence is the raw probability
         calibrator = load_calibrator(MODEL_DIR)
@@ -150,6 +159,9 @@ class ReplayEngine:
         self._raw_X = data.X
         if self.stage_model_dir is not None:
             self.events["pred_stage"] = pred_stage.astype(str)
+        # The replay loop reads these per row; building them once avoids ev.iloc[i] (a Series per call).
+        self._rows = list(self.events.itertuples(index=False))
+        self._starts = [r.target_window_start for r in self._rows]
         self.model_version = model_version()
 
     def _row_stage(self, row) -> str:
@@ -302,19 +314,20 @@ class ReplayEngine:
 
     def _run(self) -> None:
         try:
-            ev = self.events
-            t0_sim = ev.target_window_start.iloc[0]
+            rows, starts = self._rows, self._starts
+            n = len(rows)
+            t0_sim = starts[0]
             t0_wall = time.monotonic()
-            while self.cursor < len(ev) and not self._stop.is_set():
+            while self.cursor < n and not self._stop.is_set():
                 sim_now = t0_sim + pd.Timedelta(seconds=(time.monotonic() - t0_wall) * self.speed)
-                while self.cursor < len(ev) and ev.target_window_start.iloc[self.cursor] <= sim_now:
-                    self._process(ev.iloc[self.cursor])
+                while self.cursor < n and starts[self.cursor] <= sim_now:
+                    self._process(rows[self.cursor])
                     self.cursor += 1
                 with self._lock:
-                    self.sim_time = min(sim_now, ev.target_window_start.iloc[-1])
+                    self.sim_time = min(sim_now, starts[-1])
                 time.sleep(0.05)
             with self._lock:
-                if self.cursor >= len(ev):
+                if self.cursor >= n:
                     self.state = "finished"
                     self.finished_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         except Exception as exc:  # surface to /replay/status instead of dying silently
@@ -347,7 +360,8 @@ class ReplayEngine:
             recent.append(row.target_window_start)
         with self._lock:
             h = self.hosts.setdefault(row.host_id, {"host_id": row.host_id, "sequences": 0, "alerts": 0,
-                                                    "max_risk": 0.0, "timeline": []})
+                                                    "max_risk": 0.0,
+                                                    "timeline": deque(maxlen=TIMELINE_MAX_POINTS)})
             h["sequences"] += 1
             h["alerts"] += int(alerted)
             h["latest_risk"], h["latest_lstm_p"] = risk, round(float(row.lstm_p), 4)
