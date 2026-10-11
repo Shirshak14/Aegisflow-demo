@@ -5,7 +5,7 @@ import socket
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.tests.conftest import AUTH
+from tests.api.conftest import AUTH
 from backend.app.audit import Ledger
 from backend.app.main import create_app
 from backend.app.siem import alerts_since, render, send_syslog_udp, severity, to_cef, to_jsonl, to_syslog

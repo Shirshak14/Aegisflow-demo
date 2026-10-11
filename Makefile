@@ -28,7 +28,7 @@ train:
 serve:
 	uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 
-# plain pytest uses testpaths from pyproject.toml (tests/ and backend/tests/)
+# plain pytest uses testpaths from pyproject.toml (tests/)
 test:
 	pytest
 

@@ -2,7 +2,7 @@ import sqlite3
 
 from fastapi.testclient import TestClient
 
-from backend.tests.conftest import AUTH
+from tests.api.conftest import AUTH
 from backend.app.audit import GENESIS, Ledger
 from backend.app.main import create_app
 

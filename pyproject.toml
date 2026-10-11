@@ -15,7 +15,7 @@ dependencies = { file = ["requirements.txt"] }
 line-length = 120
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "backend/tests"]
+testpaths = ["tests"]
 # Plain `pytest` (as CI runs it) does not put the repo root on sys.path; `python -m pytest` does.
 pythonpath = ["."]
 addopts = "-v"

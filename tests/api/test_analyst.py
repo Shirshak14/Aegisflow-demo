@@ -4,7 +4,7 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.tests.conftest import AUTH
+from tests.api.conftest import AUTH
 from backend.app.analyst import ActionError, AnalystLog
 from backend.app.audit import Ledger
 from backend.app.main import create_app

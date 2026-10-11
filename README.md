@@ -226,14 +226,13 @@ Aegisflow-demo/
 +-- backend/
 |   +-- app/                    FastAPI service (main, replay, audit, analyst, siem, live, info)
 |   |   +-- static/             React dashboard (index.html, app.js/css, fonts/, vendor/)
-|   +-- tests/                  API and replay tests
 |
 +-- configs/                    config.yaml, datasets.yaml, stages.yaml, mitre_mapping.yaml
 +-- scripts/
 |   +-- setup/                  download_data.py, prepare_data.py
 |   +-- evaluation/             audit_phase3, phase3_baselines, lodo_pilot, hostrel_eval
 |   +-- ingest/                 golden_ingest, optc_remote, optc_onset_census
-+-- tests/                      core-library tests and fixtures
++-- tests/                      pytest suite: core library, tests/api/ (backend), fixtures/
 +-- docs/                       architecture, api, model, data pipeline, walkthrough, demo
 +-- reports/                    committed evaluation reports (phase3 audits, LODO, host-relative)
 +-- data/                       raw/ interim/ processed/ (gitignored contents)
