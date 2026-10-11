@@ -190,6 +190,14 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
             raise HTTPException(404, "no anomaly baseline report; run scripts/evaluation/anomaly_eval.py")
         return out
 
+    @app.get("/evaluation/robustness")
+    def robustness_evaluation() -> dict[str, Any]:
+        """Threshold sweep, per-day results and noisy/missing-input tests from reports/robustness_eval.json."""
+        out = info.robustness()
+        if out is None:
+            raise HTTPException(404, "no robustness report; run scripts/evaluation/robustness_eval.py")
+        return out
+
     @app.post("/replay/start")
     def replay_start(req: ReplayStart | None = None) -> dict[str, Any]:
         req = req or ReplayStart()
