@@ -48,7 +48,7 @@ ctu_13:
     botnet detection methods. Computers & Security 45, 100-123.
   expected_files_glob: "**/*.binetflow[.gz]"
   # scenarios: [11, 12]   # optional: load only these CTU-13 scenarios (1-13)
-  status: "opt-in prototype"   # never the active_dataset by default; see docs/combined_datasets_feasibility.md
+  status: "opt-in prototype"   # never the active_dataset by default
 
 optc:
   display_name: "DARPA OpTC (corrected)"
@@ -64,7 +64,7 @@ optc:
   expected_files_glob: "**/*ecar-YYYY-MM-DD-sysclientNNNN[.flows].json.gz"
   # hosts: [201, 402]      # optional: load only these sysclient numbers
   # keep_telemetry: false  # sensor -> Kafka (port 9092) flows are dropped by default
-  status: "opt-in prototype"   # never the active_dataset by default; see docs/optc_lanl_feasibility.md
+  status: "opt-in prototype"   # never the active_dataset by default
 
 lanl_2015:
   display_name: "LANL Comprehensive Multi-Source Cyber-Security Events (2015)"
@@ -79,4 +79,4 @@ lanl_2015:
   # computers: [C17693, C1003]   # optional: keep only flows touching these computers
   # time_range_s: [150000, 250000]
   # contact_slack_s: 3600        # RedTeam = red-team source -> victim flows from first red-team auth minus this
-  status: "opt-in prototype"   # never the active_dataset by default; see docs/optc_lanl_feasibility.md
+  status: "opt-in prototype"   # never the active_dataset by default

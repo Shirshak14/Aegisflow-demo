@@ -1,7 +1,7 @@
 """
 Onset census for DARPA OpTC (corrected release): can it support attack-onset forecasting?
 
-Same questions as scripts/ctu13_onset_census.py, for every host the red team reached:
+Per-host onset census for every host the red team reached:
 
   * onset: start of the host's first red-team process (corrected host ground truth);
   * episodes: red-team process lifetimes merged with the onset study's 30-minute gap rule;
