@@ -84,6 +84,11 @@ replay:
   # probability >= confidence.stage_prediction_threshold, else uncertain_label), so the
   # stage_severity risk term and the MITRE lookup apply to live alerts. null = demo behaviour.
   stage_model_dir: null
+  # Opt-in: directory of a `python -m aegisflow train-anomaly` model (benign-only isolation forest).
+  # When set, each alert shows whether this label-free model also flags the sequence, and the dashboard
+  # can filter to alerts both models agree on. Second opinion only: the LSTM alone decides which alerts
+  # fire, so alert counts, risk scores and the ledger are unchanged. null = demo behaviour.
+  anomaly_model_dir: null
 
 # Streaming telemetry API (POST /stream/flows). Opt-in: nothing happens until flows are pushed.
 stream:

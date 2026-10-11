@@ -17,6 +17,9 @@ Risk score (0-100) = 100 * sum(weight_k * component_k), weights from config.yaml
   abnormality_score      share of the 28 inputs in the last window beyond 3 robust-scaled
                          units (scaler fitted on training data only); label-free
   recent_attack_history  min(1, this host's alerts in the previous 10 simulated minutes / 5)
+Opt-in second opinion (replay.anomaly_model_dir): a benign-only isolation forest scores every test
+sequence once in ``prepare``. It never raises or suppresses an alert and is not written to the ledger
+(so the hash chain and its schema are unchanged); ``anomaly_for`` attaches its verdict to alerts at read time.
 Alert ``confidence`` is the Platt-calibrated LSTM probability when ``calibration.json`` exists in the
 model directory (``python -m aegisflow calibrate``), else the raw probability. Calibration is monotone,
 so it never changes which alerts fire; the risk score above still uses the raw probability.
@@ -83,6 +86,11 @@ class ReplayEngine:
         self.predicted_stage = self.uncertain
         stage_dir = cfg.replay.get("stage_model_dir")
         self.stage_model_dir = (ROOT / stage_dir) if stage_dir else None
+        anomaly_dir = cfg.replay.get("anomaly_model_dir")
+        self.anomaly_model_dir = (ROOT / anomaly_dir) if anomaly_dir else None
+        self.anomaly_threshold: float | None = None
+        self.anomaly_rule: str | None = None
+        self._anomaly: dict[str, tuple[float, bool]] = {}
         self.allowed_speeds = [int(s) for s in cfg.replay.allowed_speeds]
         self.default_speed = int(cfg.replay.default_speed)
         self._lock = threading.RLock()
@@ -143,6 +151,13 @@ class ReplayEngine:
             from aegisflow.ml.multitask import MultiTaskPredictor
             sp = MultiTaskPredictor(self.stage_model_dir).predict(data.X)
             pred_stage = np.where(sp["stage_probability"] >= self.conf_threshold, sp["stage"], self.uncertain)
+        if self.anomaly_model_dir is not None:
+            from aegisflow.ml.anomaly import AnomalyScorer
+            scorer = AnomalyScorer(self.anomaly_model_dir)
+            anom = scorer.score(data.X).astype(float)
+            self.anomaly_threshold, self.anomaly_rule = scorer.threshold, scorer.meta.get("threshold_rule")
+            self._anomaly = {sid: (round(float(v), 6), bool(f))
+                             for sid, v, f in zip(frame.sequence_id.astype(str), anom, scorer.flag(anom))}
         self.lstm_threshold = float(metrics["threshold"])
         self.lr_threshold = float(metrics["models"]["logistic_regression"]["threshold"])
         self.events = pd.DataFrame({
@@ -163,6 +178,19 @@ class ReplayEngine:
         self._rows = list(self.events.itertuples(index=False))
         self._starts = [r.target_window_start for r in self._rows]
         self.model_version = model_version()
+
+    def anomaly_for(self, sequence_id: str) -> dict[str, Any] | None:
+        """The anomaly model's verdict on one replayed sequence; None when not configured or not in the replay."""
+        hit = self._anomaly.get(str(sequence_id))
+        if hit is None:
+            return None
+        return {"anomaly_score": hit[0], "anomaly_threshold": self.anomaly_threshold, "anomaly_flag": hit[1]}
+
+    def with_anomaly(self, alerts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Copies of ledger alerts with the anomaly verdict added (not part of the hashed record)."""
+        if not self._anomaly:
+            return alerts
+        return [a | (self.anomaly_for(a.get("sequence_id")) or {}) for a in alerts]
 
     def _row_stage(self, row) -> str:
         return str(getattr(row, "pred_stage", self.predicted_stage))
@@ -281,6 +309,7 @@ class ReplayEngine:
     def _reset_state(self) -> None:
         self.state, self.speed, self.session_id = "idle", self.default_speed, None
         self.cursor, self.alerts_emitted, self.alerts_attack_label, self.sim_time = 0, 0, 0, None
+        self.alerts_anomaly_agree, self.alerts_anomaly_agree_attack_label = 0, 0
         self.started_at = self.finished_at = self.error = None
         self.hosts: dict[str, dict[str, Any]] = {}
         self._recent: dict[str, deque] = {}
@@ -372,6 +401,10 @@ class ReplayEngine:
             if alerted:
                 self.alerts_emitted += 1
                 self.alerts_attack_label += int(row.truth_attack)
+                verdict = self._anomaly.get(row.sequence_id)
+                if verdict is not None and verdict[1]:
+                    self.alerts_anomaly_agree += 1
+                    self.alerts_anomaly_agree_attack_label += int(row.truth_attack)
 
     # ------------------------------------------------------------------ views
     def status(self) -> dict[str, Any]:
@@ -386,7 +419,11 @@ class ReplayEngine:
                     "replay_window": None if self.events is None else
                     [self.events.target_window_start.iloc[0].isoformat(), self.events.target_window_start.iloc[-1].isoformat()],
                     "started_at": self.started_at, "finished_at": self.finished_at, "error": self.error,
-                    "lstm_threshold": getattr(self, "lstm_threshold", None)}
+                    "lstm_threshold": getattr(self, "lstm_threshold", None),
+                    "anomaly": None if self.anomaly_model_dir is None else {
+                        "threshold": self.anomaly_threshold, "threshold_rule": self.anomaly_rule,
+                        "alerts_both_models": self.alerts_anomaly_agree,
+                        "alerts_both_models_matching_attack_label": self.alerts_anomaly_agree_attack_label}}
 
     def host_list(self) -> list[dict[str, Any]]:
         with self._lock:
