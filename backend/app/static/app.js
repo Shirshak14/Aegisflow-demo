@@ -453,6 +453,7 @@ const ICONS = {
   alerts: "M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6zM10 19a2 2 0 0 0 4 0",
   hosts: "M4 5h16v5H4zM4 14h16v5H4zM7.5 7.5h.01M7.5 16.5h.01",
   models: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  robustness: "M3 12h4l3-8 4 16 3-8h4",
   audit: "M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6zM8.5 12l2.5 2.5 4.5-5",
   capture: "M12 16V4M7 9l5-5 5 5M4 16v4h16v-4",
   about: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v6M12 7.5h.01",
@@ -462,7 +463,7 @@ function Icon({ name }) {
 }
 const PAGES = [
   { id: "overview", label: "Overview" }, { id: "alerts", label: "Alerts" }, { id: "hosts", label: "Hosts" },
-  { id: "models", label: "Models and evaluation" }, { id: "audit", label: "Audit ledger" },
+  { id: "models", label: "Models and evaluation" }, { id: "robustness", label: "Robustness" }, { id: "audit", label: "Audit ledger" },
   { id: "capture", label: "Capture and export" }, { id: "about", label: "How it works" },
 ];
 
@@ -851,6 +852,171 @@ function ModelsPage({ ctx }) {
   </main>`;
 }
 
+// ------------------------------------------------------------------ robustness page
+const SWEEP_SERIES = [
+  { key: "f1", label: "F1", color: "#3987e5" },
+  { key: "precision", label: "Precision", color: "#d95926" },
+  { key: "recall", label: "Recall", color: "#199e70" },
+];
+// Precision, recall and F1 against the alert threshold; precision has no value where nothing is flagged.
+function SweepChart({ rows, t0 }) {
+  const [hover, setHover] = useState(null);
+  const W = 960, H = 300, L = 44, R = 96, T = 14, B = 40, iw = W - L - R, ih = H - T - B;
+  const xMax = Math.max(...rows.map(r => r.threshold)), x = v => L + v / xMax * iw, y = v => T + (1 - v) * ih;
+  const val = (r, k) => k === "precision" && !r.alerts ? null : r[k];
+  const path = k => {
+    let d = "", pen = false;
+    for (const r of rows) { const v = val(r, k); if (v == null) { pen = false; continue; } d += `${pen ? "L" : "M"}${x(r.threshold).toFixed(1)},${y(v).toFixed(1)}`; pen = true; }
+    return d;
+  };
+  const move = e => {
+    const box = e.currentTarget.getBoundingClientRect(), vx = (e.clientX - box.left) / box.width * W;
+    let best = rows[0];
+    for (const r of rows) if (Math.abs(x(r.threshold) - vx) < Math.abs(x(best.threshold) - vx)) best = r;
+    setHover(best);
+  };
+  const lastOf = k => [...rows].reverse().find(r => val(r, k) != null);
+  // direct labels at the right edge, nudged apart so they never overlap
+  const ends = SWEEP_SERIES.map(s => ({ ...s, x: x(lastOf(s.key).threshold), y: y(val(lastOf(s.key), s.key)) })).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 15);
+  return html`<div class="sweep">
+    <div class="legend small">${SWEEP_SERIES.map(s => html`<span key=${s.key}><i style=${{ background: s.color }}></i>${s.label}</span>`)}
+      <span><i class="dash"></i>alert threshold ${fmt(t0, 4)}</span></div>
+    <div class="sweep-plot">
+      <svg viewBox=${`0 0 ${W} ${H}`} role="img" aria-label="Precision, recall and F1 against the alert threshold" onMouseMove=${move} onMouseLeave=${() => setHover(null)}>
+        ${[0, .25, .5, .75, 1].map(g => html`<g key=${g}><line x1=${L} x2=${L + iw} y1=${y(g)} y2=${y(g)} class="grid"/>
+          <text x=${L - 8} y=${y(g) + 4} text-anchor="end" class="axis">${g.toFixed(2)}</text></g>`)}
+        ${[.1, .2, .3, .4, .5, .6, .7, .8, .9].filter(v => v <= xMax).map(v => html`<text key=${v} x=${x(v)} y=${H - 18} text-anchor="middle" class="axis">${v.toFixed(1)}</text>`)}
+        <text x=${L + iw / 2} y=${H - 1} text-anchor="middle" class="axis">alert threshold on the LSTM probability</text>
+        <line x1=${x(t0)} x2=${x(t0)} y1=${T} y2=${T + ih} class="ref"/>
+        ${SWEEP_SERIES.map(s => html`<path key=${s.key} d=${path(s.key)} fill="none" stroke=${s.color} stroke-width="2" stroke-linejoin="round"/>`)}
+        ${ends.map(s => html`<text key=${s.key} x=${s.x + 18} y=${s.y + 4} class="lab">${s.label}</text>`)}
+        ${hover && html`<g><line x1=${x(hover.threshold)} x2=${x(hover.threshold)} y1=${T} y2=${T + ih} class="cross"/>
+          ${SWEEP_SERIES.map(s => val(hover, s.key) != null && html`<circle key=${s.key} cx=${x(hover.threshold)} cy=${y(val(hover, s.key))} r="4" fill=${s.color} stroke="var(--panel)" stroke-width="2"/>`)}</g>`}
+        <rect x=${L} y=${T} width=${iw} height=${ih} fill="transparent"/>
+      </svg>
+      ${hover && html`<div class="tip" style=${{ left: Math.min(x(hover.threshold) / W * 100, 70) + "%" }}>
+        <div class="mono"><b>threshold ${fmt(hover.threshold, 4)}</b>${hover.threshold === t0 ? " (current)" : ""}</div>
+        ${SWEEP_SERIES.map(s => html`<div key=${s.key}><i style=${{ background: s.color }}></i>${s.label} <b>${val(hover, s.key) == null ? "no alerts" : fmt(val(hover, s.key), 3)}</b></div>`)}
+        <div class="muted">${hover.alerts} alerts · ${hover.tp} true · FPR ${fmt(hover.false_positive_rate * 100, 2)}%</div></div>`}
+    </div>
+  </div>`;
+}
+
+// "detected / total" with a thin bar, for attack targets in one host group
+function Detected({ n, of }) {
+  if (!of) return html`<td class="num muted">–</td>`;
+  return html`<td><div class="det"><div class="track"><div class="fill" style=${{ width: n / of * 100 + "%" }}></div></div><span class="num">${n} / ${of}</span></div></td>`;
+}
+
+const range = m => m.min === m.max ? fmt(m.mean, 3) : html`${fmt(m.mean, 3)} <span class="muted small">(${fmt(m.min, 3)}–${fmt(m.max, 3)})</span>`;
+
+function PerturbationCard({ p }) {
+  if (!p) return html`<section class="card span12"><h2>Noisy and missing inputs</h2>
+    <${Empty}>Not computed yet. These tests re-score the test split, so they need the processed sequence table: run <span class="mono">python scripts/evaluation/robustness_eval.py</span> on a machine that has <span class="mono">data/processed/cic_ids2017/sequences.parquet</span>.<//></section>`;
+  const c = p.clean;
+  const rows = [
+    ...p.noise.map(r => ({ kind: "Noise on every value", level: `σ = ${r.sigma} (×${fmt(Math.exp(-r.sigma), 2)} to ×${fmt(Math.exp(r.sigma), 2)} for one σ)`, r })),
+    ...p.missing_cells.map(r => ({ kind: "Values missing at random", level: `${Math.round(r.rate * 100)}% of values`, r })),
+    ...p.missing_windows.map(r => ({ kind: "Whole windows missing", level: `${r.windows} of 10 windows`, r })),
+  ];
+  const groups = p.missing_group, feats = p.missing_feature.slice(0, 6);
+  const delta = v => { const d = v - c.roc_auc; return html`<span class=${d < -0.02 ? "neg-t" : "muted"}>${d >= 0 ? "+" : ""}${fmt(d, 3)}</span>`; };
+  return html`<${React.Fragment}>
+    <section class="card span12"><h2>Noisy and missing inputs</h2>
+      <p class="small muted lead">The ${c.n.toLocaleString()} test sequences re-scored by the same model with corrupted raw features, alert threshold unchanged. Missing values are filled
+        with the model's own train medians, as an unseen gap would be in deployment. Each random test is repeated with ${p.seeds} seeds; the range is shown in brackets.</p>
+      <div class="stats" style=${{ marginBottom: "12px" }}>
+        <${Stat} label="Clean F1" value=${fmt(c.f1, 3)} sub=${`${c.tp} of ${c.positives} attack targets, ${c.alerts} alerts`}/>
+        <${Stat} label="Clean ROC-AUC" value=${fmt(c.roc_auc, 3)} sub=${`hosts other than 172.16.0.1: ${fmt(c.roc_auc_hosts_other_than_172_16_0_1, 3)}`}/>
+        <${Stat} label="Scores reproduced" value=${p.max_abs_diff_vs_audit_predictions < 1e-4 ? "yes" : "no"} sub=${`max difference vs audit file ${p.max_abs_diff_vs_audit_predictions.toExponential(1)}`}/>
+      </div>
+      <div class="scroll" data-lenis-prevent><table>
+        <thead><tr><th>Corruption</th><th>Level</th><th class="num">F1</th><th class="num">ROC-AUC</th><th class="num">Recall</th><th class="num">FPR</th><th class="num">Alerts</th><th class="num">Alerts flipped vs clean</th></tr></thead>
+        <tbody>
+          <tr style=${{ cursor: "default" }}><td>None</td><td class="muted">clean inputs</td><td class="num">${fmt(c.f1)}</td><td class="num">${fmt(c.roc_auc)}</td><td class="num">${fmt(c.recall)}</td>
+            <td class="num">${fmt(c.false_positive_rate * 100, 2)}%</td><td class="num">${c.alerts}</td><td class="num">0</td></tr>
+          ${rows.map(({ kind, level, r }) => html`<tr key=${kind + level} style=${{ cursor: "default" }}><td>${kind}</td><td class="small">${level}</td>
+            <td class="num">${range(r.f1)}</td><td class="num">${range(r.roc_auc)}</td><td class="num">${fmt(r.recall.mean)}</td>
+            <td class="num">${fmt(r.false_positive_rate.mean * 100, 2)}%</td><td class="num">${fmt(r.alerts.mean, 0)}</td><td class="num">${fmt(r.alerts_changed_vs_clean.mean, 0)}</td></tr>`)}
+          <tr style=${{ cursor: "default" }}><td>Latest window missing</td><td class="small">window 10 of 10</td><td class="num">${fmt(p.missing_last_window.f1)}</td><td class="num">${fmt(p.missing_last_window.roc_auc)}</td>
+            <td class="num">${fmt(p.missing_last_window.recall)}</td><td class="num">${fmt(p.missing_last_window.false_positive_rate * 100, 2)}%</td><td class="num">${p.missing_last_window.alerts}</td><td class="num">${p.missing_last_window.alerts_changed_vs_clean}</td></tr>
+        </tbody></table></div>
+    </section>
+    <section class="card span6"><h2>A whole feature group missing</h2>
+      <table><thead><tr><th>Group</th><th class="num">F1</th><th class="num">ROC-AUC</th><th class="num">Δ ROC-AUC</th><th class="num">Alerts flipped</th></tr></thead>
+        <tbody>${groups.map(g => html`<tr key=${g.group} style=${{ cursor: "default" }} title=${g.features.join(", ")}><td>${g.group.replace(/_/g, " ")} <span class="muted small">(${g.features.length})</span></td>
+          <td class="num">${fmt(g.f1)}</td><td class="num">${fmt(g.roc_auc)}</td><td class="num">${delta(g.roc_auc)}</td><td class="num">${g.alerts_changed_vs_clean}</td></tr>`)}</tbody></table>
+    </section>
+    <section class="card span6"><h2>Single features the model leans on most</h2>
+      <table><thead><tr><th>Feature missing</th><th class="num">F1</th><th class="num">ROC-AUC</th><th class="num">Δ ROC-AUC</th><th class="num">Alerts flipped</th></tr></thead>
+        <tbody>${feats.map(f => html`<tr key=${f.feature} style=${{ cursor: "default" }}><td class="mono small">${f.feature}</td>
+          <td class="num">${fmt(f.f1)}</td><td class="num">${fmt(f.roc_auc)}</td><td class="num">${delta(f.roc_auc)}</td><td class="num">${f.alerts_changed_vs_clean}</td></tr>`)}</tbody></table>
+      <div class="small muted" style=${{ marginTop: "8px" }}>The ${feats.length} of ${p.missing_feature.length} features whose absence lowers test ROC-AUC the most.</div>
+    </section>
+  <//>`;
+}
+
+function RobustnessPage() {
+  const rb = useLoad(() => api("/evaluation/robustness"), []);
+  const [split, setSplit] = useState("test");
+  const head = html`<${PageHead} title="Robustness" desc="How the replayed model's numbers move with the alert threshold, across capture days and hours, and when inputs are noisy or missing. Nothing is retrained and the live threshold is unchanged."/>`;
+  if (rb.error) return html`<main class="page">${head}<section class="card span12"><div class="small muted">${rb.error.message}</div></section></main>`;
+  if (!rb.data) return html`<main class="page">${head}<section class="card span12"><div class="skel" style=${{ height: "160px" }}></div></section></main>`;
+  const d = rb.data, th = d.thresholds, t0 = th.committed_threshold, sw = th.splits[split];
+  const at = r => r.threshold === t0, cur = th.splits.test.rows.find(at), ci = th.test_bootstrap_95ci;
+  const testHours = d.by_day.test_hours, h172 = testHours.reduce((a, h) => [a[0] + h.tp_on_172_16_0_1, a[1] + h.positives_from_172_16_0_1], [0, 0]);
+  const hOther = testHours.reduce((a, h) => [a[0] + h.tp - h.tp_on_172_16_0_1, a[1] + h.positives - h.positives_from_172_16_0_1], [0, 0]);
+  return html`<main class="page">${head}
+    <section class="card span12"><h2>Alert threshold</h2>
+      <div class="stats">
+        <${Stat} label="Current threshold" value=${fmt(t0, 4)} sub="chosen on validation (max F1); not changed here"/>
+        <${Stat} label="Test F1 at it" value=${fmt(cur.f1, 3)} sub=${`95% bootstrap ${fmt(ci.f1[0], 3)}–${fmt(ci.f1[1], 3)}`}/>
+        <${Stat} label="Test precision / recall" value=${`${fmt(cur.precision, 2)} / ${fmt(cur.recall, 2)}`} sub=${`${cur.alerts} alerts, FPR ${fmt(cur.false_positive_rate * 100, 1)}%`}/>
+        <${Stat} label="Best test F1, any threshold" value=${fmt(th.splits.test.best_f1, 3)} sub=${`at ${th.splits.test.best_f1_threshold}; picked with hindsight on test`}/>
+      </div>
+      <div class="row tabs" style=${{ margin: "14px 0 6px" }}><span class="small muted">Split:</span>
+        <button class=${split === "test" ? "on" : ""} onClick=${() => setSplit("test")}>test (Fri 7 Jul)</button>
+        <button class=${split === "val" ? "on" : ""} onClick=${() => setSplit("val")}>validation (Thu 6 Jul)</button></div>
+      <${SweepChart} key=${split} rows=${sw.rows} t0=${t0}/>
+      <details class="small" style=${{ marginTop: "8px" }}><summary class="muted">Table view</summary><div class="scroll" data-lenis-prevent><table>
+        <thead><tr><th class="num">Threshold</th><th class="num">Alerts</th><th class="num">True</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">FPR</th></tr></thead>
+        <tbody>${sw.rows.map(r => html`<tr key=${r.threshold} class=${at(r) ? "hl" : ""} style=${{ cursor: "default" }}><td class="num mono">${fmt(r.threshold, at(r) ? 4 : 2)}</td>
+          <td class="num">${r.alerts}</td><td class="num">${r.tp}</td><td class="num">${r.alerts ? fmt(r.precision) : "–"}</td><td class="num">${fmt(r.recall)}</td>
+          <td class="num">${fmt(r.f1)}</td><td class="num">${fmt(r.false_positive_rate * 100, 2)}%</td></tr>`)}</tbody></table></div></details>
+      <div class="note" style=${{ marginTop: "12px" }}><b>Reading:</b> raising the threshold trades recall for precision; F1 stays low everywhere on test
+        (at most ${fmt(th.splits.test.best_f1, 2)}), so no threshold rescues the model. A higher threshold would have scored a little better on test, but choosing it from test
+        results would be hindsight, so the validation-chosen ${fmt(t0, 4)} stays. ${th.bootstrap_note}</div>
+    </section>
+
+    <section class="card span12"><h2>Results by capture day</h2>
+      <div class="scroll" data-lenis-prevent><table>
+        <thead><tr><th>Day</th><th>Split</th><th class="num">Sequences</th><th class="num">Attack targets</th><th class="num">Alerts</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">FPR</th><th class="num">ROC-AUC</th></tr></thead>
+        <tbody>${d.by_day.days.map(r => html`<tr key=${r.day + r.split} style=${{ cursor: "default" }} class=${r.in_sample ? "dim" : ""}>
+          <td class="mono">${r.weekday} ${r.day.slice(5)}</td><td>${r.split}${r.in_sample ? html`<span class="badge">in-sample</span>` : ""}</td>
+          <td class="num">${r.n.toLocaleString()}</td><td class="num">${r.positives}</td><td class="num">${r.alerts}</td>
+          <td class="num">${r.alerts ? fmt(r.precision) : "–"}</td><td class="num">${r.positives ? fmt(r.recall) : "–"}</td><td class="num">${r.positives ? fmt(r.f1) : "–"}</td>
+          <td class="num">${fmt(r.false_positive_rate * 100, 2)}%</td><td class="num">${fmt(r.roc_auc)}</td></tr>`)}</tbody></table></div>
+      <div class="small muted" style=${{ marginTop: "8px" }}>${d.by_day.note} At threshold ${fmt(t0, 4)}.</div>
+    </section>
+
+    <section class="card span12"><h2>Test day hour by hour: who gets detected</h2>
+      <div class="scroll" data-lenis-prevent><table class="hours">
+        <thead><tr><th>Hour</th><th class="num">Sequences</th><th>Attacks detected, other hosts</th><th>Attacks detected, 172.16.0.1</th><th class="num">Alerts</th><th class="num">False alarms</th></tr></thead>
+        <tbody>${testHours.map(h => html`<tr key=${h.hour} style=${{ cursor: "default" }}><td class="mono">${String(h.hour).padStart(2, "0")}:00</td><td class="num">${h.n.toLocaleString()}</td>
+          <${Detected} n=${h.tp - h.tp_on_172_16_0_1} of=${h.positives - h.positives_from_172_16_0_1}/><${Detected} n=${h.tp_on_172_16_0_1} of=${h.positives_from_172_16_0_1}/>
+          <td class="num">${h.alerts}</td><td class="num">${h.fp}</td></tr>`)}</tbody></table></div>
+      <div class="note" style=${{ marginTop: "12px" }}><b>Reading:</b> on the test day the model detects ${h172[0]} of ${h172[1]} attack targets on 172.16.0.1, the attacker host
+        behind nearly every attack class in training, but only ${hOther[0]} of ${hOther[1]} on the other hosts (the morning attacks there are Botnet, a class whose traffic does not come from 172.16.0.1).
+        That is the attacker-host shortcut seen elsewhere in the evaluation, now visible hour by hour.</div>
+    </section>
+
+    <${PerturbationCard} p=${d.perturbation}/>
+    <section class="card span12"><div class="small muted">Source: ${d.source}, written by <span class="mono">scripts/evaluation/robustness_eval.py</span> from the committed model
+      (${d.model_dir}) on ${t(d.generated_at)}${d.perturbation_generated_at && d.perturbation_generated_at !== d.generated_at ? `; noisy and missing input tests from ${t(d.perturbation_generated_at)}` : ""}.</div></section>
+  </main>`;
+}
+
 function AuditPage({ ctx }) {
   const sessions = useLoad(() => api("/audit/sessions"), [ctx.live.st && ctx.live.st.session_id, ctx.alerts.length]);
   return html`<main class="page">
@@ -988,6 +1154,7 @@ function App() {
   else if (page === "alerts") body = arg ? html`<${AlertPage} key=${arg} ctx=${ctx} id=${arg}/>` : html`<${AlertsPage} ctx=${ctx}/>`;
   else if (page === "hosts") body = arg ? html`<${HostPage} key=${arg} ctx=${ctx} id=${arg}/>` : html`<${HostsPage} ctx=${ctx}/>`;
   else if (page === "models") body = html`<${ModelsPage} ctx=${ctx}/>`;
+  else if (page === "robustness") body = html`<${RobustnessPage} ctx=${ctx}/>`;
   else if (page === "audit") body = html`<${AuditPage} ctx=${ctx}/>`;
   else if (page === "capture") body = html`<${CapturePage} ctx=${ctx}/>`;
   else if (page === "about") body = html`<${AboutPage} ctx=${ctx}/>`;

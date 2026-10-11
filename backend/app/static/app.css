@@ -354,3 +354,25 @@
   .alert-detail > .section:first-child { border-top: 0; padding-top: 0; }
   .card.span5 .evalbox-body { grid-template-columns: 1fr; }
   @media (max-width: 900px) { .shell { background: none; } .side { background: rgba(12,18,25,.96); } }
+
+  /* robustness page */
+  .sweep .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 6px; color: var(--muted); }
+  .sweep .legend span, .sweep .tip div { display: inline-flex; align-items: center; gap: 6px; }
+  .sweep .legend i, .sweep .tip i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+  .sweep .legend i.dash { border-top: 2px dashed var(--muted); height: 0; background: none; }
+  .sweep-plot { position: relative; max-width: 960px; }
+  .sweep svg { width: 100%; max-width: 960px; height: auto; display: block; }
+  .sweep .grid { stroke: var(--line); stroke-width: 1; }
+  .sweep .axis { fill: var(--muted); font-size: 11px; }
+  .sweep .lab { fill: var(--text); font-size: 13px; }
+  .sweep .ref { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 4; }
+  .sweep .cross { stroke: var(--muted); stroke-width: 1; opacity: .6; }
+  .sweep .tip { position: absolute; top: 8px; transform: translateX(12px); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 9px; font-size: 12px; pointer-events: none; display: flex; flex-direction: column; gap: 2px; min-width: 170px; }
+  tr.hl td { background: var(--panel2); }
+  tr.dim td { color: var(--muted); }
+  .neg-t { color: var(--bad); }
+  .det { display: grid; grid-template-columns: minmax(60px, 140px) auto; gap: 8px; align-items: center; }
+  .det .track { position: relative; height: 8px; background: var(--panel2); border-radius: 4px; }
+  .det .fill { position: absolute; left: 0; top: 0; bottom: 0; background: #3987e5; border-radius: 4px; }
+  @media (max-width: 640px) { .sweep-plot { overflow-x: auto; } .sweep svg { min-width: 620px; } }

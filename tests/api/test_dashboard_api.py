@@ -130,3 +130,16 @@ def test_anomaly_baseline_copies_the_committed_report(client):
     assert lstm["roc_auc"] == raw["lstm_committed"]["test"]["roc_auc"]
     assert forest["roc_auc"] == raw["models"]["isolation_forest"]["test_roc_auc"]
     assert forest["at_lstm_fpr"]["recall"] == raw["models"]["isolation_forest"]["test_at_lstm_fpr"]["recall"]
+
+
+def test_robustness_report_is_served_as_committed(client):
+    r = client.get("/evaluation/robustness")
+    assert r.status_code == 200
+    body = r.json()
+    raw = json.loads((Path(__file__).resolve().parents[2] / "reports/robustness_eval.json").read_text())
+    assert body["thresholds"] == raw["thresholds"] and body["by_day"] == raw["by_day"]
+    assert "notes" not in body
+    test = next(d for d in body["by_day"]["days"] if d["split"] == "test")
+    at = next(x for x in body["thresholds"]["splits"]["test"]["rows"]
+              if x["threshold"] == body["thresholds"]["committed_threshold"])
+    assert (test["alerts"], test["tp"]) == (at["alerts"], at["tp"])  # one source, two views

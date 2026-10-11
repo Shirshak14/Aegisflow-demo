@@ -181,6 +181,19 @@ def evaluation() -> dict[str, Any]:
     }
 
 
+def robustness() -> dict[str, Any] | None:
+    """Robustness report (reports/robustness_eval.json) for the committed model; None if not run.
+
+    Copied as written by scripts/evaluation/robustness_eval.py; nothing is recomputed.
+    """
+    path = REPORTS / "robustness_eval.json"
+    if not path.exists():
+        return None
+    r = _read(path)
+    r.pop("notes", None)
+    return {"source": "reports/robustness_eval.json", **r}
+
+
 def anomaly_baseline() -> dict[str, Any] | None:
     """Benign-only anomaly baseline (reports/anomaly_eval.json) beside the committed LSTM; None if not run.
 
