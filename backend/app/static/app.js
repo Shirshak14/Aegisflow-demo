@@ -1,7 +1,7 @@
 // AegisFlow dashboard (React 18 + htm, no build step). Every number shown comes from the backend API;
 // risk weights, level bands, speeds and the stage list are read from it, never hard-coded here.
 "use strict";
-const { useState, useEffect, useCallback, useRef } = React;
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
 const html = htm.bind(React.createElement);
 
 // ------------------------------------------------------------------ helpers
@@ -65,7 +65,7 @@ function StepBars({ values, signed, title }) {
 }
 function Sparkline({ tl, cfg }) {
   if (!tl || !tl.length || !cfg) return null;
-  const W = 640, H = 150, P = 24, n = tl.length, top = cfg.max_reachable_risk || 100;
+  const W = 1200, H = 230, P = 30, n = tl.length, top = cfg.max_reachable_risk || 100;
   const x = i => P + (n === 1 ? 0 : i * (W - 2 * P) / (n - 1)), y = r => H - P - r / top * (H - 2 * P);
   const path = tl.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.risk).toFixed(1)}`).join("");
   return html`<svg viewBox=${`0 0 ${W} ${H}`} width="100%" role="img" aria-label="risk timeline">
@@ -280,105 +280,6 @@ function RiskBreakdown({ comp, cfg }) {
   </div>`;
 }
 
-function AlertDetail({ id, cfg, feats, models, onChange }) {
-  const al = useLoad(() => api(`/alerts/${id}`), [id]);
-  const a = al.data;
-  const mitre = useLoad(() => a ? api(`/mitre/${encodeURIComponent(a.truth_stage)}`).catch(() => null) : Promise.resolve(null), [a && a.truth_stage]);
-  if (al.loading) return html`<div class="muted">Loading alert…</div>`;
-  if (al.error) return html`<div class="err">${al.error.message}</div>`;
-  const comp = JSON.parse(a.risk_components || "{}"), lvl = levelOf(a.risk_score, cfg), m = mitre.data;
-  const stageModel = feats.stage_model.available, uncertain = cfg.uncertain_label;
-  const lstmMax = Math.max(a.lstm_probability, a.lstm_threshold, 1e-9);
-  const hasLr = a.lr_probability !== null && a.lr_probability !== undefined;
-  const hasRule = a.reference_rule_flag !== null && a.reference_rule_flag !== undefined;
-  return html`<div class="alert-detail">
-    <div class="hero">
-      <div class="hero-score">
-        <div class=${"score lvl-" + lvl}>${fmt(a.risk_score, 1)}<span class="of">/ 100</span></div>
-        <span class=${"sev sev-" + lvl}>${LEVEL_LABEL[lvl] || lvl} risk</span>
-      </div>
-      <div class="hero-gauge">
-        <${RiskGauge} score=${a.risk_score} cfg=${cfg}/>
-        <div class="small muted">Max reachable ${fmt(cfg.max_reachable_risk, 0)}${stageModel ? "" : ": no stage model, so the stage term is 0"}.</div>
-      </div>
-    </div>
-
-    <div class="tags">
-      <${Chip} label="Confidence" value=${a.confidence_label} tone=${a.confidence_label === uncertain ? "warn" : "ok"}
-        title=${`${cfg.confidence_calibrated ? "Calibrated probability" : "Probability"} ${a.confidence_label === uncertain ? `below ${cfg.confidence_threshold}: the alert fired on the lower validation-selected threshold` : `≥ ${cfg.confidence_threshold}`}`}/>
-      <${Chip} label="Stage" value=${a.predicted_stage || "–"} tone=${a.predicted_stage === uncertain ? "dim" : "acc"}
-        title=${stageModel ? "From the multi-task stage head" : "No stage model configured: binary attack detector only"}/>
-      ${hasLr && html`<${Chip} label="Logistic regression" value=${a.lr_flag ? "also flags" : "does not flag"} tone=${a.lr_flag ? "bad" : "dim"}
-        title=${`p = ${fmt(a.lr_probability, 4)}, threshold ${fmt(a.lr_threshold, 5)}`}/>`}
-      ${hasRule && html`<${Chip} label="Reference rule" value=${a.reference_rule_flag ? "under attack" : "not under attack"} tone="dim"
-        title="Last input window per dataset labels; comparison only"/>`}
-    </div>
-
-    <div class="facts">
-      <div class="fact"><div class="fact-k">LSTM attack probability</div>
-        <div class="fact-v">${fmt(a.lstm_probability, 4)} <span class="muted small">threshold ${fmt(a.lstm_threshold, 4)}</span></div>
-        <div class="pbar"><div style=${{ width: (a.lstm_probability / lstmMax * 100) + "%" }}></div>
-          <span class="thr" style=${{ left: (a.lstm_threshold / lstmMax * 100) + "%" }} title=${"threshold " + fmt(a.lstm_threshold, 4)}></span></div></div>
-      <div class="fact"><div class="fact-k">Forecast made at</div>
-        <div class="fact-v mono">${t(a.predicted_at)}</div><div class="small muted">end of 10 input windows</div></div>
-      <div class="fact"><div class="fact-k">Target window</div>
-        <div class="fact-v mono">${t(a.target_window_start)} → ${hm(a.target_window_end)}</div><div class="small muted">window being forecast</div></div>
-      ${hasLr && html`<div class="fact"><div class="fact-k">Logistic regression p</div>
-        <div class="fact-v">${fmt(a.lr_probability, 4)} <span class="muted small">threshold ${fmt(a.lr_threshold, 5)}</span></div></div>`}
-    </div>
-
-    <div class="section"><h3>How the score is built</h3><${RiskBreakdown} comp=${comp} cfg=${cfg}/></div>
-
-    <${ExplanationSection} seqId=${a.sequence_id} feats=${feats}/>
-    <${AttentionSection} seqId=${a.sequence_id} models=${models}/>
-    <${StageSection} seqId=${a.sequence_id} feats=${feats}/>
-    <${AnalystSection} alertId=${a.id} stages=${feats.stages} onChange=${onChange}/>
-
-    <div class="evalbox">
-      <div class="evalbox-h"><span class="evalbox-tag">Evaluation only</span><span class="small muted">dataset ground truth, never shown to the model</span></div>
-      <div class="evalbox-body">
-        <div class=${"outcome " + (a.truth_attack === 1 ? "tp" : "fp")}>
-          <div class="outcome-v">${a.truth_attack === 1 ? "True positive" : "False positive"}</div>
-          <div class="small">${a.truth_attack === 1 ? "alert fired and the window is labelled attack" : "alert fired but the window is labelled benign"}</div>
-        </div>
-        <div class="kv small">
-          <div>Dataset label</div><div>${a.truth_class} <span class="muted">· stage</span> ${a.truth_stage}</div>
-          <div>MITRE ATT&CK</div><div>${m && m.tactic_id ? html`${m.tactic_id} ${m.tactic_name}<div class="muted">${m.techniques.map(x => `${x.id} ${x.name}`).join(", ")}</div>` : "none (benign)"}</div>
-          <div></div><div class="muted">MITRE is a static lookup from configs/mitre_mapping.yaml for the label, not a model output.</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section"><h3>Ledger record</h3>
-      <div class="kv small prov">
-        <div>Ledger hash</div><div><${Hash} value=${a.hash}/></div>
-        <div>Previous hash</div><div><${Hash} value=${a.prev_hash}/></div>
-        <div>Sequence</div><div><${Hash} value=${a.sequence_id} head=${24} tail=${8}/></div>
-        <div>Model</div><div><${Hash} value=${a.model_version} head=${28} tail=${12}/></div>
-      </div>
-    </div>
-  </div>`;
-}
-
-function HostDetail({ id, cfg, tick, onAlert }) {
-  const h = useLoad(() => api(`/hosts/${encodeURIComponent(id)}`), [id, tick]);
-  if (!h.data) return h.error ? html`<div class="err">${h.error.message}</div>` : html`<div class="muted">Loading host…</div>`;
-  const d = h.data;
-  return html`<div>
-    <div class="kv"><div>Sequences replayed</div><div>${d.sequences}</div><div>Alerts</div><div>${d.alerts}</div>
-      <div>Latest / max risk</div><div><span class=${"lvl-" + levelOf(d.latest_risk, cfg)}>${fmt(d.latest_risk, 1)}</span> / <span class=${"lvl-" + levelOf(d.max_risk, cfg)}>${fmt(d.max_risk, 1)}</span></div>
-      <div>Last seen</div><div class="mono">${t(d.last_seen)}</div></div>
-    <div style=${{ marginTop: "10px" }}><${Sparkline} tl=${d.timeline} cfg=${cfg}/></div>
-    <div class="small muted">Risk over replay time; red dots are alerts.</div>
-    <div class="scroll" style=${{ maxHeight: "230px", marginTop: "8px" }}><table>
-      <thead><tr><th>#</th><th>Target window</th><th class="num">Risk</th><th class="num">LSTM p</th><th>Stage</th><th>Dataset label</th></tr></thead>
-      <tbody>${d.alerts_list.length ? d.alerts_list.map(a => html`<tr key=${a.id} onClick=${() => onAlert(a.id)}><td>${a.id}</td>
-        <td class="mono">${hm(a.target_window_start)}</td><td class=${"num lvl-" + levelOf(a.risk_score, cfg)}>${fmt(a.risk_score, 1)}</td>
-        <td class="num">${fmt(a.lstm_probability)}</td><td>${a.predicted_stage}</td><td class=${a.truth_attack ? "ok" : "bad"}>${a.truth_class}</td></tr>`)
-        : html`<tr><td colspan="6" class="muted">No alerts for this host.</td></tr>`}</tbody></table></div>
-  </div>`;
-}
-
 // ------------------------------------------------------------------ cards
 function AuditCard({ alerts }) {
   const [v, setV] = useState(null), [va, setVa] = useState(null), [busy, setBusy] = useState(false);
@@ -399,7 +300,7 @@ function AuditCard({ alerts }) {
       : html`<div class="chain-v"><span class="chain-s">${r.status === "VERIFIED" ? "✓ " : "✗ "}${r.status}</span>
         <span class="small muted">${detail(r, what, unit)}</span></div>`}
   </div>`;
-  return html`<section class="card span5 audit"><h2>Audit ledger (SHA-256 hash chains)</h2>
+  return html`<section class="card span12 audit"><h2>Verify the chains</h2>
     <div class="row" style=${{ marginBottom: "10px" }}><button class="primary" disabled=${busy} onClick=${check}>${busy ? "Verifying…" : "Verify chains"}</button>
       <span class="small muted">Recomputes every hash from the stored fields.</span></div>
     <div class="chains">${line(v, "records_checked", "record", "Alerts chain")}${line(va, "actions_checked", "action", "Analyst actions")}</div>
@@ -529,19 +430,521 @@ function EvaluationCard({ ev, model, feats }) {
   </section>`;
 }
 
-// ------------------------------------------------------------------ app
+
+// ------------------------------------------------------------------ routing (hash based, so the server needs no new routes)
+function parseRoute() {
+  const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+  return { page: parts[0] || "overview", arg: parts[1] ?? null };
+}
+function useRoute() {
+  const [route, setRoute] = useState(parseRoute);
+  useEffect(() => {
+    const on = () => { setRoute(parseRoute()); FX.lenis ? FX.lenis.scrollTo(0, { immediate: true }) : window.scrollTo(0, 0); };
+    addEventListener("hashchange", on);
+    return () => removeEventListener("hashchange", on);
+  }, []);
+  return route;
+}
+const href = (...p) => "#/" + p.map(x => encodeURIComponent(String(x))).join("/");
+const go = (...p) => { location.hash = href(...p); };
+
+const ICONS = {
+  overview: "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z",
+  alerts: "M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6zM10 19a2 2 0 0 0 4 0",
+  hosts: "M4 5h16v5H4zM4 14h16v5H4zM7.5 7.5h.01M7.5 16.5h.01",
+  models: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  audit: "M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6zM8.5 12l2.5 2.5 4.5-5",
+  capture: "M12 16V4M7 9l5-5 5 5M4 16v4h16v-4",
+  about: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v6M12 7.5h.01",
+};
+function Icon({ name }) {
+  return html`<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d=${ICONS[name]}/></svg>`;
+}
+const PAGES = [
+  { id: "overview", label: "Overview" }, { id: "alerts", label: "Alerts" }, { id: "hosts", label: "Hosts" },
+  { id: "models", label: "Models and evaluation" }, { id: "audit", label: "Audit ledger" },
+  { id: "capture", label: "Capture and export" }, { id: "about", label: "How it works" },
+];
+
+// ------------------------------------------------------------------ shared bits
+function PageHead({ title, desc, children }) {
+  return html`<div class="page-head"><div><h2>${title}</h2>${desc && html`<p class="muted">${desc}</p>`}</div>
+    ${children && html`<div class="row">${children}</div>`}</div>`;
+}
+function Stat({ label, value, sub, tone }) {
+  return html`<div class="stat"><div class="stat-k">${label}</div><div class=${"stat-v " + (tone || "")}>${value}</div>${sub && html`<div class="small muted">${sub}</div>`}</div>`;
+}
+function Empty({ children }) { return html`<div class="empty muted">${children}</div>`; }
+function RiskCell({ v, cfg }) {
+  const lvl = levelOf(v, cfg);
+  return html`<td class="num"><span class="riskcell"><span class="riskbar"><span class=${"lvl-bg-" + lvl} style=${{ width: Math.max(0, Math.min(100, v)) + "%" }}></span></span>
+    <span class=${"lvl-" + lvl}>${fmt(v, 1)}</span></span></td>`;
+}
+
+// Throttled fetch of every alert in the current session, refreshed when the live snapshot says something changed.
+function useSessionAlerts(key) {
+  const [rows, setRows] = useState([]);
+  const last = useRef(0), pending = useRef(null);
+  useEffect(() => {
+    let live = true;
+    const run = () => { last.current = Date.now(); pending.current = null;
+      api("/alerts?limit=1000").then(r => live && setRows(r)).catch(() => {}); };
+    const wait = 2000 - (Date.now() - last.current);
+    if (wait <= 0) run(); else if (!pending.current) pending.current = setTimeout(run, wait);
+    return () => { live = false; };
+  }, [key]);
+  useEffect(() => () => clearTimeout(pending.current), []);
+  return rows;
+}
+
+// ------------------------------------------------------------------ charts (dataviz: thin marks, 2px gaps, legend + hover)
+const SERIES = { attack: "#3987e5", benign: "#d95926" };  // categorical slots 1-2, validated for the dark surface
+
+function AlertTimeline({ alerts, window: win }) {
+  const [hover, setHover] = useState(null);
+  if (!win || !win[0]) return html`<${Empty}>Start the replay to see alerts over time.<//>`;
+  const t0 = Date.parse(win[0]), t1 = Date.parse(win[1]), N = 46, span = Math.max(1, t1 - t0) / N;
+  const bins = Array.from({ length: N }, (_, i) => ({ i, a: 0, b: 0, from: t0 + i * span }));
+  for (const a of alerts) {
+    const i = Math.min(N - 1, Math.max(0, Math.floor((Date.parse(a.target_window_start) - t0) / span)));
+    a.truth_attack === 1 ? bins[i].a++ : bins[i].b++;
+  }
+  const max = Math.max(4, ...bins.map(b => b.a + b.b));
+  const W = 760, H = 210, L = 34, R = 8, T = 10, B = 26, bw = (W - L - R) / N;
+  const y = v => H - B - v / max * (H - T - B);
+  const ticks = [0, Math.round(max / 2), max];
+  const clock = ms => new Date(ms).toISOString().slice(11, 16);
+  return html`<div class="chart">
+    <div class="legend small"><span><i style=${{ background: SERIES.attack }}></i>window labelled attack</span>
+      <span><i style=${{ background: SERIES.benign }}></i>window labelled benign (false alarm)</span>
+      <span class="muted">labels are evaluation-only; the model never sees them</span></div>
+    <div class="chart-box">
+      <svg viewBox=${`0 0 ${W} ${H}`} width="100%" role="img" aria-label="alerts per time bucket, split by dataset label" onMouseLeave=${() => setHover(null)}>
+        ${ticks.map(v => html`<g key=${v}><line x1=${L} x2=${W - R} y1=${y(v)} y2=${y(v)} class="grid"/><text x=${L - 6} y=${y(v) + 3} text-anchor="end">${v}</text></g>`)}
+        ${bins.map(b => { const x = L + b.i * bw + 1, w = Math.max(1, bw - 2), ya = y(b.a), yb = y(b.a + b.b);
+          return html`<g key=${b.i} onMouseEnter=${() => setHover(b)}>
+            <rect x=${L + b.i * bw} y=${T} width=${bw} height=${H - T - B} fill="transparent"/>
+            ${b.a > 0 && html`<rect x=${x} y=${ya} width=${w} height=${H - B - ya} rx="2" fill=${SERIES.attack}/>`}
+            ${b.b > 0 && html`<rect x=${x} y=${yb} width=${w} height=${Math.max(0, ya - yb - (b.a ? 2 : 0))} rx="2" fill=${SERIES.benign}/>`}
+            ${hover === b && html`<rect x=${L + b.i * bw} y=${T} width=${bw} height=${H - T - B} class="hoverband"/>`}</g>`; })}
+        ${[0, Math.floor(N / 2), N - 1].map(i => html`<text key=${i} x=${L + i * bw + bw / 2} y=${H - 8} text-anchor=${i === 0 ? "start" : i === N - 1 ? "end" : "middle"}>${clock(bins[i].from)}</text>`)}
+      </svg>
+      ${hover && html`<div class="tip" style=${{ left: `calc(${(L + (hover.i + .5) * bw) / W * 100}% )`, top: "4px" }}>
+        <div class="mono">${clock(hover.from)}–${clock(hover.from + span)}</div>
+        <div><i style=${{ background: SERIES.attack }}></i>${hover.a} labelled attack</div>
+        <div><i style=${{ background: SERIES.benign }}></i>${hover.b} labelled benign</div></div>`}
+    </div></div>`;
+}
+
+function LevelSplit({ hosts, cfg }) {
+  const n = { low: 0, medium: 0, high: 0 };
+  hosts.forEach(h => n[levelOf(h.latest_risk, cfg)]++);
+  const tot = Math.max(1, hosts.length);
+  return html`<div>
+    <div class="levelbar" role="img" aria-label="hosts per risk level">${["low", "medium", "high"].filter(k => n[k]).map(k =>
+      html`<div key=${k} class=${"lvl-bg-" + k} style=${{ flex: n[k] }} title=${`${n[k]} hosts at ${k} risk`}></div>`)}</div>
+    <div class="levels">${["high", "medium", "low"].map(k => html`<div key=${k} class="lvlrow">
+      <span class=${"sev sev-" + k}>${LEVEL_LABEL[k]}</span><b>${n[k]}</b><span class="muted small">${n[k] && n[k] / tot < .01 ? "<1" : fmt(n[k] / tot * 100, 0)}% of hosts</span></div>`)}</div>
+    <div class="small muted">Latest risk per host; bands at ${cfg.thresholds.low} and ${cfg.thresholds.medium}. With no stage model the score cannot exceed ${fmt(cfg.max_reachable_risk, 0)}.</div>
+  </div>`;
+}
+
+// Horizontal bars for one metric across models, with a reference line (chance level).
+function MetricBars({ rows, metric, refValue, refLabel, max = 1 }) {
+  return html`<div class="mbars">${rows.map(r => html`<div class="mbar" key=${r.model}>
+      <div class="mbar-k">${r.model}<span class="muted small">${r.labels_used ? " · supervised" : " · label-free"}</span></div>
+      <div class="mbar-t"><span class="mbar-f" style=${{ width: r[metric] / max * 100 + "%" }}></span>
+        ${refValue != null && html`<span class="mbar-ref" style=${{ left: refValue / max * 100 + "%" }} title=${refLabel}></span>`}</div>
+      <div class="mbar-v">${fmt(r[metric], 3)}</div></div>`)}
+    ${refValue != null && html`<div class="small muted mbar-note"><span class="refkey"></span>${refLabel}</div>`}</div>`;
+}
+
+// ------------------------------------------------------------------ alert detail page
+function AlertDetail({ id, cfg, feats, models, onChange }) {
+  const al = useLoad(() => api(`/alerts/${id}`), [id]);
+  const a = al.data;
+  const mitre = useLoad(() => a ? api(`/mitre/${encodeURIComponent(a.truth_stage)}`).catch(() => null) : Promise.resolve(null), [a && a.truth_stage]);
+  if (al.loading) return html`<div class="card span12"><div class="skel"></div><div class="skel" style=${{ height: "120px" }}></div></div>`;
+  if (al.error) return html`<div class="card span12"><div class="err">${al.error.message}</div></div>`;
+  const comp = JSON.parse(a.risk_components || "{}"), lvl = levelOf(a.risk_score, cfg), m = mitre.data;
+  const stageModel = feats.stage_model.available, uncertain = cfg.uncertain_label;
+  const lstmMax = Math.max(a.lstm_probability, a.lstm_threshold, 1e-9);
+  const hasLr = a.lr_probability !== null && a.lr_probability !== undefined;
+  const hasRule = a.reference_rule_flag !== null && a.reference_rule_flag !== undefined;
+  return html`<${React.Fragment}>
+    <section class="card span5 alert-detail">
+      <div class="hero">
+        <div class="hero-score">
+          <div class=${"score lvl-" + lvl}>${fmt(a.risk_score, 1)}<span class="of">/ 100</span></div>
+          <span class=${"sev sev-" + lvl}>${LEVEL_LABEL[lvl] || lvl} risk</span>
+        </div>
+        <div class="hero-gauge">
+          <${RiskGauge} score=${a.risk_score} cfg=${cfg}/>
+          <div class="small muted">Max reachable ${fmt(cfg.max_reachable_risk, 0)}${stageModel ? "" : ": no stage model, so the stage term is 0"}.</div>
+        </div>
+      </div>
+      <div class="tags">
+        <${Chip} label="Confidence" value=${a.confidence_label} tone=${a.confidence_label === uncertain ? "warn" : "ok"}
+          title=${`${cfg.confidence_calibrated ? "Calibrated probability" : "Probability"} ${a.confidence_label === uncertain ? `below ${cfg.confidence_threshold}: the alert fired on the lower validation-selected threshold` : `≥ ${cfg.confidence_threshold}`}`}/>
+        <${Chip} label="Stage" value=${a.predicted_stage || "–"} tone=${a.predicted_stage === uncertain ? "dim" : "acc"}
+          title=${stageModel ? "From the multi-task stage head" : "No stage model configured: binary attack detector only"}/>
+        ${hasLr && html`<${Chip} label="Logistic regression" value=${a.lr_flag ? "also flags" : "does not flag"} tone=${a.lr_flag ? "bad" : "dim"}
+          title=${`p = ${fmt(a.lr_probability, 4)}, threshold ${fmt(a.lr_threshold, 5)}`}/>`}
+        ${hasRule && html`<${Chip} label="Reference rule" value=${a.reference_rule_flag ? "under attack" : "not under attack"} tone="dim"
+          title="Last input window per dataset labels; comparison only"/>`}
+      </div>
+      <div class="facts">
+        <div class="fact"><div class="fact-k">LSTM attack probability</div>
+          <div class="fact-v">${fmt(a.lstm_probability, 4)} <span class="muted small">threshold ${fmt(a.lstm_threshold, 4)}</span></div>
+          <div class="pbar"><div style=${{ width: (a.lstm_probability / lstmMax * 100) + "%" }}></div>
+            <span class="thr" style=${{ left: (a.lstm_threshold / lstmMax * 100) + "%" }} title=${"threshold " + fmt(a.lstm_threshold, 4)}></span></div></div>
+        <div class="fact"><div class="fact-k">Forecast made at</div>
+          <div class="fact-v mono">${t(a.predicted_at)}</div><div class="small muted">end of 10 input windows</div></div>
+        <div class="fact"><div class="fact-k">Target window</div>
+          <div class="fact-v mono">${t(a.target_window_start)} → ${hm(a.target_window_end)}</div><div class="small muted">window being forecast</div></div>
+        ${hasLr && html`<div class="fact"><div class="fact-k">Logistic regression p</div>
+          <div class="fact-v">${fmt(a.lr_probability, 4)} <span class="muted small">threshold ${fmt(a.lr_threshold, 5)}</span></div></div>`}
+      </div>
+      <div class="section"><h3>How the score is built</h3><${RiskBreakdown} comp=${comp} cfg=${cfg}/></div>
+      <div class="evalbox">
+        <div class="evalbox-h"><span class="evalbox-tag">Evaluation only</span><span class="small muted">dataset ground truth, never shown to the model</span></div>
+        <div class="evalbox-body">
+          <div class=${"outcome " + (a.truth_attack === 1 ? "tp" : "fp")}>
+            <div class="outcome-v">${a.truth_attack === 1 ? "True positive" : "False positive"}</div>
+            <div class="small">${a.truth_attack === 1 ? "alert fired and the window is labelled attack" : "alert fired but the window is labelled benign"}</div>
+          </div>
+          <div class="kv small">
+            <div>Dataset label</div><div>${a.truth_class} <span class="muted">· stage</span> ${a.truth_stage}</div>
+            <div>MITRE ATT&CK</div><div>${m && m.tactic_id ? html`${m.tactic_id} ${m.tactic_name}<div class="muted">${m.techniques.map(x => `${x.id} ${x.name}`).join(", ")}</div>` : "none (benign)"}</div>
+            <div></div><div class="muted">MITRE is a static lookup from configs/mitre_mapping.yaml for the label, not a model output.</div>
+          </div>
+        </div>
+      </div>
+      <div class="section"><h3>Ledger record</h3>
+        <div class="kv small prov">
+          <div>Ledger hash</div><div><${Hash} value=${a.hash}/></div>
+          <div>Previous hash</div><div><${Hash} value=${a.prev_hash}/></div>
+          <div>Sequence</div><div><${Hash} value=${a.sequence_id} head=${24} tail=${8}/></div>
+          <div>Model</div><div><${Hash} value=${a.model_version} head=${28} tail=${12}/></div>
+        </div>
+      </div>
+    </section>
+    <section class="card span7 alert-detail">
+      <${ExplanationSection} seqId=${a.sequence_id} feats=${feats}/>
+      <${AttentionSection} seqId=${a.sequence_id} models=${models}/>
+      <${StageSection} seqId=${a.sequence_id} feats=${feats}/>
+      <${AnalystSection} alertId=${a.id} stages=${feats.stages} onChange=${onChange}/>
+    </section>
+  <//>`;
+}
+
+// ------------------------------------------------------------------ pages
+function ReplayControls({ ctx }) {
+  const { boot: { cfg, model }, live: { st } } = ctx;
+  const [speed, setSpeed] = useState(String(cfg.default_speed)), [starting, setStarting] = useState(false);
+  const start = async () => {
+    setStarting(true);
+    try { await post("/replay/start", { speed: +speed, reset: true }); } catch (e) { ctx.setLiveErr(e.message); }
+    setStarting(false);
+  };
+  return html`<section class="card span3"><h2>Replay controls</h2>
+    <div class="row"><label class="small muted" for="speed">Speed</label>
+      <select id="speed" value=${speed} onChange=${e => setSpeed(e.target.value)}>${cfg.allowed_speeds.map(s => html`<option key=${s} value=${s}>${s}×</option>`)}</select>
+      <button class="primary" disabled=${starting || (st && st.state === "running")} onClick=${start}>${starting ? "Starting…" : "Start"}</button>
+      <button class="danger" disabled=${!st || st.state !== "running"} onClick=${() => post("/replay/stop")}>Stop</button></div>
+    <div class="small muted" style=${{ marginTop: "8px" }}>Model <span class="mono">${model.version}</span><br/>alert when LSTM p ≥ ${fmt(model.lstm_threshold, 4)} (validation-selected)</div>
+  </section>`;
+}
+
+function OverviewPage({ ctx }) {
+  const { boot: { cfg, ds, model }, live: { st, hosts, triage }, liveErr, alerts } = ctx;
+  const pct = st ? Math.round(st.progress * 100) : 0, tp = st ? st.alerts_matching_attack_label : 0;
+  const triageLine = Object.entries(triage).filter(([, n]) => n).map(([k, n]) => `${n} ${STATUS_LABEL[k] || k}`).join(" · ");
+  const lstm = model.test_metrics.lstm || {};
+  const topHosts = hosts.slice().sort((a, b) => b.max_risk - a.max_risk).slice(0, 7);
+  return html`<main class="page">
+    <${PageHead} title="Overview" desc="Live replay of the held-out CIC-IDS2017 test period through the saved model. All scores are real model outputs."/>
+    <section class="card span3"><h2>Hosts monitored</h2><div class="big"><${FX.CountUp} value=${st ? st.hosts_seen : 0}/></div>
+      <div class="small muted">of ${ds.hosts.toLocaleString()} in dataset · test split ${ds.split.test_sequences.toLocaleString()} sequences</div></section>
+    <section class="card span3"><h2>Alerts this replay</h2><div class="big"><${FX.CountUp} value=${st ? st.alerts_emitted : 0}/></div>
+      <div class="small muted">${st && st.alerts_emitted ? `${tp} match an attack label, ${st.alerts_emitted - tp} benign` : " "}</div>
+      <div class="small muted">${triageLine}</div></section>
+    <section class="card span3"><h2>Replay</h2><div class="big"><${FX.CountUp} value=${pct}/>%</div>
+      <div class="bar"><div style=${{ width: pct + "%" }}></div></div>
+      <div class="small muted">${liveErr ? "backend: " + liveErr : st ? (st.model_ready ? `${st.processed.toLocaleString()} / ${st.total.toLocaleString()} test sequences` : "loading model and scoring test split…") + (st.error ? ` · ERROR ${st.error}` : "") : " "}</div></section>
+    <${ReplayControls} ctx=${ctx}/>
+
+    <section class="card span8"><h2>Alerts over the replay</h2><${AlertTimeline} alerts=${alerts} window=${st && st.replay_window}/></section>
+    <section class="card span4"><h2>Hosts by current risk</h2>${hosts.length ? html`<${LevelSplit} hosts=${hosts} cfg=${cfg}/>` : html`<${Empty}>No hosts yet.<//>`}</section>
+
+    <section class="card span6"><div class="card-h"><h2>Latest alerts</h2><a class="more" href="#/alerts">All alerts →</a></div>
+      ${alerts.length ? html`<div class="scroll"><table><thead><tr><th>#</th><th>Host</th><th>Target</th><th class="num">Risk</th><th>Status</th></tr></thead>
+        <tbody>${alerts.slice(0, 7).map(a => { const s = ctx.live.statuses[a.id] || "open"; return html`<tr key=${a.id} onClick=${() => go("alerts", a.id)}>
+          <td>${a.id}</td><td class="mono">${a.host_id}</td><td class="mono">${hm(a.target_window_start)}</td><${RiskCell} v=${a.risk_score} cfg=${cfg}/>
+          <td><span class=${"status " + s}>${STATUS_LABEL[s] || s}</span></td></tr>`; })}</tbody></table></div>` : html`<${Empty}>No alerts yet. Start the replay.<//>`}
+    </section>
+    <section class="card span6"><div class="card-h"><h2>Riskiest hosts</h2><a class="more" href="#/hosts">All hosts →</a></div>
+      ${topHosts.length ? html`<div class="scroll"><table><thead><tr><th>Host</th><th class="num">Alerts</th><th class="num">Max risk</th><th class="num">Latest risk</th></tr></thead>
+        <tbody>${topHosts.map(h => html`<tr key=${h.host_id} onClick=${() => go("hosts", h.host_id)}>
+          <td class="mono">${h.host_id}</td><td class="num">${h.alerts}</td><${RiskCell} v=${h.max_risk} cfg=${cfg}/><td class=${"num lvl-" + levelOf(h.latest_risk, cfg)}>${fmt(h.latest_risk, 1)}</td></tr>`)}</tbody></table></div>`
+        : html`<${Empty}>No hosts yet.<//>`}
+    </section>
+
+    <section class="card span12 honest"><div class="card-h"><h2>How good is the model? (held-out test split)</h2><a class="more" href="#/models">Models and evaluation →</a></div>
+      <div class="stats">
+        <${Stat} label="F1" value=${fmt(lstm.f1, 2)} sub=${`precision ${fmt(lstm.precision, 2)} · recall ${fmt(lstm.recall, 2)}`}/>
+        <${Stat} label="ROC-AUC" value=${fmt(lstm.roc_auc, 2)} sub="0.5 is chance"/>
+        <${Stat} label="PR-AUC" value=${fmt(lstm.pr_auc, 2)} sub=${lstm.actual_positives ? `base rate ${fmt(lstm.actual_positives / (lstm.actual_positives + lstm.actual_negatives), 3)}` : ""}/>
+        <${Stat} label="False positive rate" value=${fmt(lstm.false_positive_rate * 100, 1) + "%"} sub=${lstm.confusion_matrix ? `${lstm.confusion_matrix[0][1]} benign sequences flagged` : ""}/>
+      </div>
+      <div class="note" style=${{ marginTop: "12px" }}>${model.limitation}</div>
+    </section>
+  </main>`;
+}
+
+const LEVEL_FILTERS = ["all", "high", "medium", "low"];
+function AlertsPage({ ctx }) {
+  const { boot: { cfg }, live: { statuses }, alerts } = ctx;
+  const [lvl, setLvl] = useState("all"), [status, setStatus] = useState("all"), [q, setQ] = useState("");
+  const rows = alerts.filter(a => (lvl === "all" || levelOf(a.risk_score, cfg) === lvl)
+    && (status === "all" || (statuses[a.id] || "open") === status) && (!q || a.host_id.includes(q.trim())));
+  return html`<main class="page">
+    <${PageHead} title="Alerts" desc="Every alert in the current replay session, newest first. Open one to see why it fired and to review it."/>
+    <section class="card span12">
+      <div class="filters">
+        <div class="segctl" role="group" aria-label="risk level"><span class="segctl-k">Risk</span>${LEVEL_FILTERS.map(k =>
+          html`<button key=${k} class=${lvl === k ? "on" : ""} onClick=${() => setLvl(k)}>${k === "all" ? "All" : LEVEL_LABEL[k]}</button>`)}</div>
+        <select value=${status} onChange=${e => setStatus(e.target.value)} aria-label="status">
+          <option value="all">Any status</option>${Object.entries(STATUS_LABEL).map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}</select>
+        <input type="text" placeholder="Filter by host IP" value=${q} onInput=${e => setQ(e.target.value)} style=${{ width: "180px" }}/>
+        <span class="small muted">${rows.length} of ${alerts.length} alerts</span>
+      </div>
+      <div class="scroll tall" data-lenis-prevent><table>
+        <thead><tr><th>#</th><th>Host</th><th>Target window</th><th class="num">Risk</th><th class="num">LSTM p</th><th>Confidence</th><th>Stage</th><th>Status</th><th>Dataset label <span class="muted">(eval)</span></th></tr></thead>
+        <tbody>${rows.length ? rows.map(a => { const s = statuses[a.id] || "open"; return html`<tr key=${a.id} onClick=${() => go("alerts", a.id)}>
+          <td>${a.id}</td><td class="mono">${a.host_id}</td><td class="mono">${t(a.target_window_start).slice(5)}</td>
+          <${RiskCell} v=${a.risk_score} cfg=${cfg}/><td class="num">${fmt(a.lstm_probability)}</td>
+          <td class=${a.confidence_label === cfg.uncertain_label ? "muted" : ""}>${a.confidence_label}</td><td>${a.predicted_stage}</td>
+          <td><span class=${"status " + s}>${STATUS_LABEL[s] || s}</span></td>
+          <td><span class=${"lbl " + (a.truth_attack ? "atk" : "ben")}>${a.truth_class}</span></td></tr>`; })
+          : html`<tr><td colspan="9" class="muted">${alerts.length ? "No alerts match these filters." : "No alerts yet. Start the replay on the Overview page."}</td></tr>`}</tbody></table></div>
+    </section>
+  </main>`;
+}
+
+function AlertPage({ ctx, id }) {
+  const { boot: { cfg, feats, models }, alerts, poll } = ctx;
+  const n = +id, i = alerts.findIndex(a => a.id === n);
+  const newer = i > 0 ? alerts[i - 1].id : null, older = i >= 0 && i < alerts.length - 1 ? alerts[i + 1].id : null;
+  const a = alerts[i];
+  return html`<main class="page">
+    <div class="crumbs span12"><a href="#/alerts">← Alerts</a></div>
+    <${PageHead} title=${`Alert #${id}`} desc=${a ? html`Host <a class="mono" href=${href("hosts", a.host_id)}>${a.host_id}</a> · target window ${t(a.target_window_start)}` : null}>
+      <button disabled=${!newer} onClick=${() => go("alerts", newer)}>← Newer</button>
+      <button disabled=${!older} onClick=${() => go("alerts", older)}>Older →</button>
+    <//>
+    <${AlertDetail} key=${id} id=${n} cfg=${cfg} feats=${feats} models=${models} onChange=${poll}/>
+  </main>`;
+}
+
+function HostsPage({ ctx }) {
+  const { boot: { cfg }, live: { hosts } } = ctx;
+  const [q, setQ] = useState(""), [sort, setSort] = useState("max_risk");
+  const rows = hosts.filter(h => !q || h.host_id.includes(q.trim())).sort((a, b) => (b[sort] ?? 0) - (a[sort] ?? 0));
+  return html`<main class="page">
+    <${PageHead} title="Hosts" desc="Every source host seen in the replay so far. Open one for its risk timeline and alerts."/>
+    <section class="card span12">
+      <div class="filters">
+        <input type="text" placeholder="Filter by host IP" value=${q} onInput=${e => setQ(e.target.value)} style=${{ width: "180px" }}/>
+        <div class="segctl" role="group" aria-label="sort"><span class="segctl-k">Sort by</span>
+          ${[["max_risk", "Max risk"], ["latest_risk", "Latest risk"], ["alerts", "Alerts"], ["sequences", "Sequences"]].map(([k, v]) =>
+            html`<button key=${k} class=${sort === k ? "on" : ""} onClick=${() => setSort(k)}>${v}</button>`)}</div>
+        <span class="small muted">${rows.length} of ${hosts.length} hosts</span>
+      </div>
+      <div class="scroll tall" data-lenis-prevent><table>
+        <thead><tr><th>Host</th><th class="num">Sequences</th><th class="num">Alerts</th><th class="num">Max risk</th><th class="num">Latest risk</th><th class="num">Latest LSTM p</th><th>Last seen</th></tr></thead>
+        <tbody>${rows.length ? rows.map(h => html`<tr key=${h.host_id} onClick=${() => go("hosts", h.host_id)}>
+          <td class="mono">${h.host_id}</td><td class="num">${h.sequences}</td><td class="num">${h.alerts}</td><${RiskCell} v=${h.max_risk} cfg=${cfg}/>
+          <td class=${"num lvl-" + levelOf(h.latest_risk, cfg)}>${fmt(h.latest_risk, 1)}</td><td class="num">${fmt(h.latest_lstm_p)}</td><td class="mono">${hm(h.last_seen)}</td></tr>`)
+          : html`<tr><td colspan="7" class="muted">${hosts.length ? "No hosts match." : "Start the replay on the Overview page to see hosts."}</td></tr>`}</tbody></table></div>
+    </section>
+  </main>`;
+}
+
+function HostPage({ ctx, id }) {
+  const { boot: { cfg }, tick } = ctx;
+  const h = useLoad(() => api(`/hosts/${encodeURIComponent(id)}`), [id, Math.floor(tick / 3)]);
+  const d = h.data;
+  return html`<main class="page">
+    <div class="crumbs span12"><a href="#/hosts">← Hosts</a></div>
+    <${PageHead} title=${html`Host <span class="mono">${id}</span>`} desc="Risk for every sequence this host produced in the replay, and the alerts it raised."/>
+    ${!d ? html`<section class="card span12">${h.error ? (h.error.status === 404 ? html`<${Empty}>This host has not appeared in the current replay yet. The page fills in once it does.<//>` : html`<div class="err">${h.error.message}</div>`) : html`<div class="skel"></div>`}</section>` : html`<${React.Fragment}>
+      <section class="card span12"><div class="stats">
+        <${Stat} label="Sequences replayed" value=${d.sequences}/>
+        <${Stat} label="Alerts" value=${d.alerts}/>
+        <${Stat} label="Max risk" value=${fmt(d.max_risk, 1)} tone=${"lvl-" + levelOf(d.max_risk, cfg)}/>
+        <${Stat} label="Latest risk" value=${fmt(d.latest_risk, 1)} tone=${"lvl-" + levelOf(d.latest_risk, cfg)} sub=${"last seen " + hm(d.last_seen)}/>
+      </div></section>
+      <section class="card span12"><h2>Risk over replay time</h2><${Sparkline} tl=${d.timeline} cfg=${cfg}/>
+        <div class="small muted">Red dots are alerts; grid lines mark the level bands.</div></section>
+      <section class="card span12"><h2>Alerts for this host</h2><div class="scroll" data-lenis-prevent><table>
+        <thead><tr><th>#</th><th>Target window</th><th class="num">Risk</th><th class="num">LSTM p</th><th>Stage</th><th>Dataset label <span class="muted">(eval)</span></th></tr></thead>
+        <tbody>${d.alerts_list.length ? d.alerts_list.map(a => html`<tr key=${a.id} onClick=${() => go("alerts", a.id)}><td>${a.id}</td>
+          <td class="mono">${t(a.target_window_start).slice(5)}</td><${RiskCell} v=${a.risk_score} cfg=${cfg}/>
+          <td class="num">${fmt(a.lstm_probability)}</td><td>${a.predicted_stage}</td><td><span class=${"lbl " + (a.truth_attack ? "atk" : "ben")}>${a.truth_class}</span></td></tr>`)
+          : html`<tr><td colspan="6" class="muted">No alerts for this host.</td></tr>`}</tbody></table></div></section>
+    <//>`}
+  </main>`;
+}
+
+function AnomalyCard() {
+  const an = useLoad(() => api("/evaluation/anomaly"), []);
+  if (an.error) return html`<section class="card span12"><h2>Label-free anomaly baseline</h2><div class="small muted">${an.error.message}</div></section>`;
+  if (!an.data) return html`<section class="card span12"><div class="skel"></div></section>`;
+  const d = an.data, base = d.test_counts.positive / (d.test_counts.positive + d.test_counts.negative);
+  const host = r => r.host_check || {}, bot = r => (r.per_class || {}).Botnet || {};
+  return html`<section class="card span12"><h2>Label-free anomaly baseline vs the LSTM</h2>
+    <p class="small muted lead">Can a model that never sees an attack label find attacks? Isolation forest and autoencoder are fit on${" "}
+      ${d.fit_sequences.toLocaleString()} benign train sequences only, so they cannot learn "which host" from labels. Test split: ${d.test_counts.positive} attack targets,${" "}
+      ${d.test_counts.negative.toLocaleString()} benign.</p>
+    <div class="twocol">
+      <div><h3 class="sub">Ranking quality · ROC-AUC</h3><${MetricBars} rows=${d.rows} metric="roc_auc" refValue=${0.5} refLabel="0.5 = random ranking"/></div>
+      <div><h3 class="sub">Precision–recall · PR-AUC</h3><${MetricBars} rows=${d.rows} metric="pr_auc" refValue=${base} refLabel=${`${fmt(base, 3)} = base rate (random)`} max=${0.5}/></div>
+    </div>
+    <div class="scroll" data-lenis-prevent style=${{ marginTop: "14px" }}><table>
+      <thead><tr><th>Model</th><th>Labels</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">FPR</th>
+        <th class="num">ROC-AUC, hosts other than 172.16.0.1</th><th class="num">Benign flagged on 172.16.0.1</th><th class="num">Botnet detected</th></tr></thead>
+      <tbody>${d.rows.map(r => html`<tr key=${r.model} style=${{ cursor: "default" }}><td>${r.model}</td><td>${r.labels_used ? "used" : "none"}</td>
+        <td class="num">${fmt(r.at_lstm_fpr.precision)}</td><td class="num">${fmt(r.at_lstm_fpr.recall)}</td><td class="num">${fmt(r.at_lstm_fpr.false_positive_rate * 100, 1)}%</td>
+        <td class="num">${fmt((host(r).other_hosts || {}).roc_auc)}</td>
+        <td class="num">${host(r)["172.16.0.1"] ? `${host(r)["172.16.0.1"].neg_flagged}/${host(r)["172.16.0.1"].neg}` : "–"}</td>
+        <td class="num">${bot(r).n ? `${bot(r).detected}/${bot(r).n}` : "–"}</td></tr>`)}</tbody></table></div>
+    <div class="note" style=${{ marginTop: "12px" }}><b>Reading:</b> the isolation forest ranks attacks better (ROC-AUC ${fmt(d.rows[1] && d.rows[1].roc_auc, 2)} vs ${fmt(d.rows[0].roc_auc, 2)})
+      and depends less on the attacker host, but at the same false-alarm rate it does not detect more, and Botnet is still almost entirely missed. ${d.note}</div>
+    <div class="small muted" style=${{ marginTop: "6px" }}>Precision, recall and FPR at the LSTM's test FPR. Source: ${d.source}; full write-up in ${d.report}.</div>
+  </section>`;
+}
+
+function ModelsPage({ ctx }) {
+  const { boot: { model, ev, feats, models, cfg } } = ctx;
+  const lstm = model.test_metrics.lstm || {}, lr = model.test_metrics.logistic_regression || {}, cal = model.confidence_calibration;
+  return html`<main class="page">
+    <${PageHead} title="Models and evaluation" desc="Held-out numbers for the replayed model, a label-free baseline, and every model trained on this machine. Nothing here is recomputed or rounded for effect."/>
+    <section class="card span12"><h2>Replayed model: LSTM on the chronological test split</h2>
+      <div class="stats">
+        <${Stat} label="F1" value=${fmt(lstm.f1, 3)} sub=${`logistic regression ${fmt(lr.f1, 3)}`}/>
+        <${Stat} label="ROC-AUC" value=${fmt(lstm.roc_auc, 3)} sub=${`logistic regression ${fmt(lr.roc_auc, 3)}`}/>
+        <${Stat} label="PR-AUC" value=${fmt(lstm.pr_auc, 3)} sub=${`logistic regression ${fmt(lr.pr_auc, 3)}`}/>
+        <${Stat} label="Precision / recall" value=${`${fmt(lstm.precision, 2)} / ${fmt(lstm.recall, 2)}`} sub=${`FPR ${fmt(lstm.false_positive_rate * 100, 1)}%`}/>
+        <${Stat} label="Alert threshold" value=${fmt(model.lstm_threshold, 4)} sub=${model.threshold_selection}/>
+      </div>
+      <div class="kv small" style=${{ marginTop: "14px" }}>
+        <div>Architecture</div><div>LSTM, hidden size ${model.training.hidden_size}, input ${model.input_shape.join(" × ")} (windows × features)</div>
+        <div>Training</div><div>${model.training.epochs_run} of ${model.training.epochs_requested} epochs, best checkpoint epoch ${model.training.best_checkpoint_epoch} by ${model.training.checkpoint_selection}</div>
+        <div>Confidence</div><div>${cfg.confidence_calibrated ? `calibrated (${cal.status}); confident when ≥ ${cfg.confidence_threshold}` : cal.status}</div>
+        <div>Stage prediction</div><div>${feats.stage_model.available ? "opt-in multi-task model is enabled" : model.stage_note}</div>
+      </div>
+    </section>
+    <${AnomalyCard}/>
+    <${EvaluationCard} ev=${ev} model=${model} feats=${feats}/>
+    <${ModelsCard} models=${models}/>
+  </main>`;
+}
+
+function AuditPage({ ctx }) {
+  const sessions = useLoad(() => api("/audit/sessions"), [ctx.live.st && ctx.live.st.session_id, ctx.alerts.length]);
+  return html`<main class="page">
+    <${PageHead} title="Audit ledger" desc="Every alert and every analyst action is appended to a SHA-256 hash chain, so any edit after the fact is detectable."/>
+    <section class="card span12 chainviz">
+      ${["Alert n−1", "Alert n", "Alert n+1"].map((x, i) => html`<${React.Fragment} key=${x}>
+        <div class="block"><div class="block-k">${x}</div><div class="mono small">prev_hash</div><div class="mono small">fields…</div><div class="mono small acc-t">hash = SHA-256(fields + prev_hash)</div></div>
+        ${i < 2 && html`<div class="link-arrow" aria-hidden="true">→</div>`}<//>`)}
+      <div class="small muted chainviz-note">Each hash covers the record's fields and the previous hash. Editing a stored field makes its recomputed hash differ from the stored one, and every later record is linked to the stored value. "Verify chains" recomputes them all.</div>
+    </section>
+    <${AuditCard} alerts=${ctx.alerts}/>
+    <section class="card span12"><h2>Replay sessions in the ledger</h2>
+      ${sessions.data && sessions.data.length ? html`<table><thead><tr><th>Session</th><th class="num">Alerts</th><th class="num">First id</th><th class="num">Last id</th><th></th></tr></thead>
+        <tbody>${sessions.data.map(s => html`<tr key=${s.session_id} style=${{ cursor: "default" }}><td class="mono">${s.session_id}</td><td class="num">${s.alerts}</td>
+          <td class="num">${s.first_id}</td><td class="num">${s.last_id}</td><td>${ctx.live.st && ctx.live.st.session_id === s.session_id ? html`<span class="badge demo">current</span>` : ""}</td></tr>`)}</tbody></table>`
+        : html`<${Empty}>No sessions yet.<//>`}
+    </section>
+  </main>`;
+}
+
+function CapturePage({ ctx }) {
+  return html`<main class="page">
+    <${PageHead} title="Capture and export" desc="Score your own packet capture or NetFlow export, and send alerts to a SIEM."/>
+    <${CaptureCard} feats=${ctx.boot.feats}/>
+    <${SiemCard}/>
+  </main>`;
+}
+
+function AboutPage({ ctx }) {
+  const { boot: { ds, model, cfg, feats } } = ctx;
+  const lstm = model.test_metrics.lstm || {};
+  const steps = [
+    ["Flows", "CIC-IDS2017 flow records (or your own capture), cleaned and keyed by source host."],
+    ["Windows", "Per host, flows are grouped into 60 s windows and summarised as 28 behaviour features."],
+    ["Sequences", "The last 10 windows of a host form one input sequence."],
+    ["Forecast", "The LSTM gives the probability that the host's next window contains attack traffic."],
+    ["Alert", `If p ≥ ${fmt(model.lstm_threshold, 3)}, a 0–100 risk score is computed and the alert is hash-chained into the ledger.`],
+  ];
+  return html`<main class="page">
+    <${PageHead} title="How it works" desc="What the demo does, what the numbers mean, and where it stops."/>
+    <section class="card span12"><h2>Pipeline</h2>
+      <ol class="pipeline">${steps.map(([k, v], i) => html`<li key=${k}><span class="pn">${i + 1}</span><b>${k}</b><span class="small muted">${v}</span></li>`)}</ol>
+    </section>
+    <section class="card span6"><h2>What the demo shows</h2><ul class="list">
+      <li>The held-out test period (${t(ds.split.test_cutoff_time)} onwards) replayed through the saved model; every score is a real model output.</li>
+      <li>Alerts as early warning: the model says a host's next window is likely to carry attack traffic, typically while an attack on that host is already under way.</li>
+      <li>Per-alert explanations (SHAP or Integrated Gradients), a risk breakdown, analyst review, and a tamper-evident ledger.</li>
+      <li>Your own PCAP or NetFlow scored by the same model through the streaming pipeline.</li>
+    </ul></section>
+    <section class="card span6"><h2>Known limits</h2><ul class="list">
+      <li>Test F1 is ${fmt(lstm.f1, 2)} and ROC-AUC ${fmt(lstm.roc_auc, 2)}: modest, and close to chance at ranking.</li>
+      <li>${model.limitation}</li>
+      <li>Predicting attack onset (before any attack traffic from that host) did not beat simple baselines; see the "attack onset only" tab under Models.</li>
+      <li>${feats.stage_model.available ? "Stage predictions come from an opt-in multi-task model and are proxies, not ground truth." : `No kill-chain stage is predicted: ${model.stage_note}`}</li>
+      <li>Confidence is ${cfg.confidence_calibrated ? "a calibrated probability" : "the raw model probability (not calibrated)"}.</li>
+    </ul></section>
+    <section class="card span12"><h2>Data</h2>
+      <div class="kv small">
+        <div>Dataset</div><div>${ds.dataset}</div>
+        <div>Provenance</div><div>${ds.provenance || "–"}</div>
+        <div>Time range</div><div class="mono">${ds.time_range ? `${t(ds.time_range[0])} → ${t(ds.time_range[1])}` : "–"}</div>
+        <div>Split</div><div>chronological: train ${ds.split.train_sequences?.toLocaleString() ?? "–"}, validation ${ds.split.val_sequences?.toLocaleString() ?? "–"}, test ${ds.split.test_sequences.toLocaleString()} sequences${ds.split.boundary_excluded_sequences != null ? ` (${ds.split.boundary_excluded_sequences} excluded at split boundaries)` : ""}</div>
+      </div>
+      <div class="small muted" style=${{ marginTop: "8px" }}>The original single-page dashboard is still available as the <a href="/classic">classic view</a>.</div>
+    </section>
+  </main>`;
+}
+
+// ------------------------------------------------------------------ app shell
+function Sidebar({ page, st, counts }) {
+  return html`<nav class="side" aria-label="Pages">
+    <a class="brand" href="#/overview"><span class="brand-mark" aria-hidden="true"></span><span>AegisFlow</span></a>
+    <div class="nav">${PAGES.map(p => html`<a key=${p.id} href=${"#/" + p.id} class=${page === p.id ? "on" : ""} aria-current=${page === p.id ? "page" : undefined}>
+      <${Icon} name=${p.id}/><span>${p.label}</span>${counts[p.id] ? html`<span class="count">${counts[p.id]}</span>` : null}</a>`)}</div>
+    <div class="side-foot">
+      <span class=${"chip " + (st ? st.state : "idle")}>${st ? st.state + (st.state === "running" ? ` · ${st.speed}×` : "") : "idle"}</span>
+      <div class="small muted">sim clock <span class="mono">${st && st.sim_time ? t(st.sim_time).slice(11) : "–"}</span></div>
+      <a class="small muted" href="/classic">classic view</a>
+    </div>
+  </nav>`;
+}
+
 function App() {
+  const route = useRoute();
   const [boot, setBoot] = useState(null), [bootErr, setBootErr] = useState(null);
   const [live, setLive] = useState({ st: null, hosts: [], alerts: [], statuses: {}, triage: {} }), [liveErr, setLiveErr] = useState(null);
-  const [speed, setSpeed] = useState(null), [starting, setStarting] = useState(false);
-  const [sel, setSel] = useState(null), [tick, setTick] = useState(0);
+  const [tick, setTick] = useState(0), [rev, setRev] = useState(0);
   const timer = useRef(null);
 
   useEffect(() => {
     (async () => {
-      const cfg = await api("/risk/config");
-      const [ds, model, ev, feats, models] = await Promise.all([api("/dataset/status"), api("/model/status"), api("/evaluation"), api("/features"), api("/models")]);
-      setSpeed(cfg.default_speed); setBoot({ cfg, ds, model, ev, feats, models });
+      const [cfg, ds, model, ev, feats, models] = await Promise.all([api("/risk/config"), api("/dataset/status"), api("/model/status"),
+        api("/evaluation"), api("/features"), api("/models")]);
+      setBoot({ cfg, ds, model, ev, feats, models });
     })().catch(setBootErr);
   }, []);
 
@@ -554,7 +957,7 @@ function App() {
     try {
       const [st, hosts, alerts, statuses, triage] = await Promise.all([api("/replay/status"), api("/hosts"), api("/alerts?limit=50"),
         api("/triage/statuses"), api("/triage/summary")]);
-      apply({ st, hosts, alerts, statuses, triage });
+      apply({ st, hosts, alerts, statuses, triage }); setRev(x => x + 1);
     } catch (e) { setLiveErr(e.message); }
   }, [apply]);
   useEffect(() => {
@@ -573,68 +976,37 @@ function App() {
     return () => { stop = true; es.close(); clearTimeout(timer.current); };
   }, [boot, poll, apply]);
 
-  useEffect(() => { if (boot) FX.revealCards(); }, [!!boot]);
+  const st = live.st;
+  const alerts = useSessionAlerts(`${st ? st.session_id : ""}:${st ? st.alerts_emitted : 0}:${rev}`);
+  useEffect(() => { if (boot) FX.revealCards(); }, [!!boot, route.page, route.arg]);
 
-  if (bootErr) return html`<main><section class="card span12"><h2>Cannot load</h2><div class="err">${bootErr.message}</div></section></main>`;
-  if (!boot) return html`<p style=${{ padding: "20px" }} class="muted">Loading dashboard…</p>`;
-  const { cfg, ds, model, ev, feats, models } = boot, { st, hosts, alerts, statuses, triage } = live;
-  const pct = st ? Math.round(st.progress * 100) : 0, tp = st ? st.alerts_matching_attack_label : 0;
-  const start = async () => {
-    setStarting(true);
-    try { await post("/replay/start", { speed: +speed, reset: true }); setSel(null); } catch (e) { setLiveErr(e.message); }
-    setStarting(false);
-  };
-  const triageLine = Object.entries(triage).filter(([, n]) => n).map(([k, n]) => `${n} ${STATUS_LABEL[k] || k}`).join(" · ");
+  const { page, arg } = route;
+  const ctx = { boot, live, liveErr, setLiveErr, tick, poll, alerts };
+  let body;
+  if (bootErr) body = html`<main class="page"><section class="card span12"><h2>Cannot load</h2><div class="err">${bootErr.message}</div></section></main>`;
+  else if (!boot) body = html`<main class="page"><section class="card span12"><div class="skel" style=${{ width: "38%" }}></div><div class="skel" style=${{ height: "160px" }}></div></section></main>`;
+  else if (page === "alerts") body = arg ? html`<${AlertPage} key=${arg} ctx=${ctx} id=${arg}/>` : html`<${AlertsPage} ctx=${ctx}/>`;
+  else if (page === "hosts") body = arg ? html`<${HostPage} key=${arg} ctx=${ctx} id=${arg}/>` : html`<${HostsPage} ctx=${ctx}/>`;
+  else if (page === "models") body = html`<${ModelsPage} ctx=${ctx}/>`;
+  else if (page === "audit") body = html`<${AuditPage} ctx=${ctx}/>`;
+  else if (page === "capture") body = html`<${CapturePage} ctx=${ctx}/>`;
+  else if (page === "about") body = html`<${AboutPage} ctx=${ctx}/>`;
+  else body = html`<${OverviewPage} ctx=${ctx}/>`;
+  const counts = { alerts: st && st.alerts_emitted ? st.alerts_emitted : 0, hosts: st ? st.hosts_seen : 0 };
 
-  return html`<div>
-  <header>
-    <div><h1><${FX.ShinyText}>AegisFlow — network attack forecasting demo<//></h1>
-      <div class="sub">Replays the held-out CIC-IDS2017 test period through the saved model. All scores are real model outputs. <a href="/classic">classic view</a></div></div>
-    <div class="row"><span class=${"chip " + (st ? st.state : "idle")}>${st ? st.state + (st.state === "running" ? ` · ${st.speed}×` : "") : "idle"}</span>
-      <span class="muted small">sim clock</span><span class="mono">${st ? t(st.sim_time) : "–"}</span></div>
-  </header>
-  <main>
-    <section class="card span3"><h2>Hosts monitored</h2><div class="big"><${FX.CountUp} value=${st ? st.hosts_seen : 0}/></div>
-      <div class="small muted">of ${ds.hosts.toLocaleString()} in dataset · test split ${ds.split.test_sequences.toLocaleString()} sequences</div></section>
-    <section class="card span3"><h2>Alerts this replay</h2><div class="big"><${FX.CountUp} value=${st ? st.alerts_emitted : 0}/></div>
-      <div class="small muted">${st && st.alerts_emitted ? `${tp} match an attack label, ${st.alerts_emitted - tp} benign` : " "}</div>
-      <div class="small muted">${triageLine}</div></section>
-    <section class="card span3"><h2>Replay</h2><div class="big"><${FX.CountUp} value=${pct}/>%</div>
-      <div class="bar"><div style=${{ width: pct + "%" }}></div></div>
-      <div class="small muted">${liveErr ? "backend: " + liveErr : st ? (st.model_ready ? `${st.processed.toLocaleString()} / ${st.total.toLocaleString()} test sequences` : "loading model and scoring test split…") + (st.error ? ` · ERROR ${st.error}` : "") : " "}</div></section>
-    <section class="card span3"><h2>Replay controls</h2>
-      <div class="row"><label class="small muted" for="speed">Speed</label>
-        <select id="speed" value=${speed} onChange=${e => setSpeed(e.target.value)}>${cfg.allowed_speeds.map(s => html`<option key=${s} value=${s}>${s}×</option>`)}</select>
-        <button class="primary" disabled=${starting || (st && st.state === "running")} onClick=${start}>${starting ? "Starting…" : "Start"}</button>
-        <button class="danger" disabled=${!st || st.state !== "running"} onClick=${() => post("/replay/stop")}>Stop</button></div>
-      <div class="small muted" style=${{ marginTop: "8px" }}>Model <span class="mono">${model.version}</span><br/>alert when LSTM p ≥ ${fmt(model.lstm_threshold, 4)} (validation-selected)</div>
-    </section>
-
-    <section class="card span6"><h2>Host risk</h2><div class="scroll" data-lenis-prevent><table>
-      <thead><tr><th>Host</th><th class="num">Seqs</th><th class="num">Alerts</th><th class="num">Latest risk</th><th class="num">Max risk</th><th class="num">LSTM p</th></tr></thead>
-      <tbody>${hosts.length ? hosts.slice(0, 60).map(h => html`<tr key=${h.host_id} class=${sel && sel.host === h.host_id ? "sel" : ""} onClick=${() => setSel({ host: h.host_id })}>
-        <td class="mono">${h.host_id}</td><td class="num">${h.sequences}</td><td class="num">${h.alerts}</td>
-        <td class=${"num lvl-" + levelOf(h.latest_risk, cfg)}>${fmt(h.latest_risk, 1)}</td><td class=${"num lvl-" + levelOf(h.max_risk, cfg)}>${fmt(h.max_risk, 1)}</td>
-        <td class="num">${fmt(h.latest_lstm_p)}</td></tr>`) : html`<tr><td colspan="6" class="muted">Start the replay to see hosts.</td></tr>`}</tbody></table></div></section>
-    <section class="card span6"><h2>Alerts (newest first)</h2><div class="scroll" data-lenis-prevent><table>
-      <thead><tr><th>#</th><th>Host</th><th>Target</th><th class="num">Risk</th><th class="num">LSTM p</th><th>Stage</th><th>Status</th><th>Dataset label</th></tr></thead>
-      <tbody>${alerts.length ? alerts.map(a => { const s = statuses[a.id] || "open"; return html`<tr key=${a.id} class=${sel && sel.alert === a.id ? "sel" : ""} onClick=${() => setSel({ alert: a.id })}>
-        <td>${a.id}</td><td class="mono">${a.host_id}</td><td class="mono">${hm(a.target_window_start)}</td>
-        <td class=${"num lvl-" + levelOf(a.risk_score, cfg)}>${fmt(a.risk_score, 1)}</td><td class="num">${fmt(a.lstm_probability)}</td>
-        <td>${a.predicted_stage}</td><td><span class=${"status " + s}>${STATUS_LABEL[s] || s}</span></td><td>${a.truth_class}</td></tr>`; })
-        : html`<tr><td colspan="8" class="muted">No alerts yet.</td></tr>`}</tbody></table></div></section>
-
-    <section class="card span7"><h2>${sel ? (sel.alert ? `Alert #${sel.alert}` : `Host ${sel.host}`) : "Detail"}</h2>
-      ${!sel ? html`<div class="muted">Click an alert to see why it fired, its stage forecast and the analyst controls, or click a host for its risk timeline.</div>`
-        : sel.alert ? html`<${AlertDetail} key=${sel.alert} id=${sel.alert} cfg=${cfg} feats=${feats} models=${models} onChange=${poll}/>`
-        : html`<${HostDetail} key=${sel.host} id=${sel.host} cfg=${cfg} tick=${Math.floor(tick / 3)} onAlert=${id => setSel({ alert: id })}/>`}
-    </section>
-    <${AuditCard} alerts=${alerts}/>
-    <${CaptureCard} feats=${feats}/>
-    <${SiemCard}/>
-    <${ModelsCard} models=${models}/>
-    <${EvaluationCard} ev=${ev} model=${model} feats=${feats}/>
-  </main></div>`;
+  return html`<div class="shell">
+    <${Sidebar} page=${page} st=${st} counts=${counts}/>
+    <div class="content">
+      <header>
+        <div><h1><${FX.ShinyText}>AegisFlow — network attack forecasting demo<//></h1>
+          <div class="sub">Replays the held-out CIC-IDS2017 test period through the saved model. All scores are real model outputs.</div></div>
+        <div class="row">${st && st.state === "running" && html`<div class="mini-progress" title="replay progress"><div style=${{ width: Math.round(st.progress * 100) + "%" }}></div></div>`}
+          <span class=${"chip " + (st ? st.state : "idle")}>${st ? st.state + (st.state === "running" ? ` · ${st.speed}×` : "") : "idle"}</span>
+          <span class="muted small">sim clock</span><span class="mono">${st ? t(st.sim_time) : "–"}</span></div>
+      </header>
+      ${body}
+    </div>
+  </div>`;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(html`<${App}/>`);

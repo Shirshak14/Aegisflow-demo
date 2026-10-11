@@ -118,3 +118,15 @@ def test_upload_scores_capture_through_stream(client, name, kind):
     assert out["flows"] > 0 and out["sequences_scored"] > 0
     assert out["sequences_scored"] == out["status"]["sequences_scored"]  # reset=True: counts are this file's
     assert len(client.get("/stream/results", params={"limit": 1000}).json()) == out["sequences_scored"]
+
+
+def test_anomaly_baseline_copies_the_committed_report(client):
+    r = client.get("/evaluation/anomaly")
+    assert r.status_code == 200
+    body = r.json()
+    raw = json.loads((Path(__file__).resolve().parents[2] / "reports/anomaly_eval.json").read_text())
+    lstm, forest = body["rows"][0], body["rows"][1]
+    assert lstm["labels_used"] and not forest["labels_used"]
+    assert lstm["roc_auc"] == raw["lstm_committed"]["test"]["roc_auc"]
+    assert forest["roc_auc"] == raw["models"]["isolation_forest"]["test_roc_auc"]
+    assert forest["at_lstm_fpr"]["recall"] == raw["models"]["isolation_forest"]["test_at_lstm_fpr"]["recall"]

@@ -182,6 +182,14 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     def evaluation() -> dict[str, Any]:
         return info.evaluation()
 
+    @app.get("/evaluation/anomaly")
+    def anomaly_evaluation() -> dict[str, Any]:
+        """Benign-only anomaly baseline from reports/anomaly_eval.json (read-only; not used by the replay)."""
+        out = info.anomaly_baseline()
+        if out is None:
+            raise HTTPException(404, "no anomaly baseline report; run scripts/evaluation/anomaly_eval.py")
+        return out
+
     @app.post("/replay/start")
     def replay_start(req: ReplayStart | None = None) -> dict[str, Any]:
         req = req or ReplayStart()
