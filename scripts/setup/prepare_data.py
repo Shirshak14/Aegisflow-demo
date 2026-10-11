@@ -4,8 +4,8 @@ Run the full Phase-1 data preparation pipeline for one dataset:
 discover -> load -> clean -> label -> write data/interim/<dataset>.parquet -> EDA.
 
 Usage:
-    python scripts/prepare_data.py --dataset cic_ids2017
-    python scripts/prepare_data.py --dataset cic_ids2017 --sample-size 200000
+    python scripts/setup/prepare_data.py --dataset cic_ids2017
+    python scripts/setup/prepare_data.py --dataset cic_ids2017 --sample-size 200000
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from aegisflow.config import load_config
 from aegisflow.errors import AegisFlowError

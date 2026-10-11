@@ -7,7 +7,7 @@ pipeline, demo model and thresholds stay on CIC-IDS2017.
 Reads eCAR endpoint telemetry: one JSON object per line, gzip-compressed, one file
 per host and day (``AIA-201-225.ecar-2019-09-23-sysclient0201.json.gz`` in the
 corrected release, or the ``*.flows.json.gz`` reductions written by
-``scripts/optc_remote.py extract``, which keep only FLOW events). Only FLOW events
+``scripts/ingest/optc_remote.py extract``, which keep only FLOW events). Only FLOW events
 are used; process, file and registry events are ignored here.
 
 What eCAR can and cannot supply (nothing is invented):
@@ -177,8 +177,8 @@ Ten tar archives, one per day 2019-09-16 .. 2019-09-25, about 940 GB in all. Eac
 one gzip eCAR file per host and day. Do not download whole archives: fetch single
 host-days with HTTP range requests and keep only FLOW events:
 
-   python scripts/optc_remote.py index
-   python scripts/optc_remote.py extract --hosts 201 402 --days 2019-09-22 2019-09-23
+   python scripts/ingest/optc_remote.py index
+   python scripts/ingest/optc_remote.py extract --hosts 201 402 --days 2019-09-22 2019-09-23
 
 Files go to {self.raw_dir}. Red-team labels (small CSVs) go to {self.labels_dir}:
    https://gitlab.inria.fr/fmajorcz/a_new_hope_for_darpa_optc/-/tree/main/labelling/host/ground_truths

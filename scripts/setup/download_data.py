@@ -3,8 +3,8 @@
 Print exact, official download instructions for a configured dataset.
 
 Usage:
-    python scripts/download_data.py --dataset cic_ids2017
-    python scripts/download_data.py --all
+    python scripts/setup/download_data.py --dataset cic_ids2017
+    python scripts/setup/download_data.py --all
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from aegisflow.config import load_config
 from aegisflow.ml.datasets import get_adapter

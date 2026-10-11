@@ -11,7 +11,7 @@ import pandas as pd
 import torch
 from sklearn.metrics import average_precision_score, roc_auc_score
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from aegisflow.ml.modeling import (ForecastDataset, LSTMForecaster, MODEL_FEATURES,
                                    SequencePreprocessor, metrics_at, positive_class_weight)

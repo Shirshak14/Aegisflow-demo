@@ -209,41 +209,39 @@ Model Training / Replay
 
 ## Project Structure
 
+```
 Aegisflow-demo/
 |
-+-- aegisflow/
++-- aegisflow/                  core library (also the `python -m aegisflow` CLI)
+|   +-- cli.py, config.py, schema.py, doctor.py
 |   +-- ml/
-|   +-- temporal/
-|   +-- preprocessing/
-|   +-- ingestion/
-|   +-- schema.py
+|       +-- ingestion/          CSV / PCAP / NetFlow readers
+|       +-- datasets/           dataset adapters (CIC-IDS2017, CTU-13, OpTC, LANL)
+|       +-- preprocessing/      cleaning, labels
+|       +-- features/           flow features + registry
+|       +-- temporal/           windowing, sequences, splits
+|       +-- modeling.py, multitask.py, graph.py, explain.py,
+|           calibration.py, scoring.py, streaming.py
 |
 +-- backend/
-|   +-- app/
-|       +-- main.py
-|       +-- replay.py
-|       +-- audit.py
-|       +-- static/
-|           +-- index.html   (React dashboard shell)
-|           +-- app.js / app.css
-|           +-- classic.html (original dashboard, /classic)
-|           +-- vendor/      (React 18, htm)
+|   +-- app/                    FastAPI service (main, replay, audit, analyst, siem, live, info)
+|   |   +-- static/             React dashboard (index.html, app.js/css, fonts/, vendor/)
+|   +-- tests/                  API and replay tests
 |
-+-- configs/
-|   +-- config.yaml
-|   +-- datasets.yaml
-|   +-- stages.yaml
-|   +-- mitre_mapping.yaml
-|
-+-- data/
-+-- docs/
-+-- reports/
++-- configs/                    config.yaml, datasets.yaml, stages.yaml, mitre_mapping.yaml
 +-- scripts/
-+-- tests/
+|   +-- setup/                  download_data.py, prepare_data.py
+|   +-- evaluation/             audit_phase3, phase3_baselines, lodo_pilot, hostrel_eval
+|   +-- ingest/                 golden_ingest, optc_remote, optc_onset_census
++-- tests/                      core-library tests and fixtures
++-- docs/                       architecture, api, model, data pipeline, walkthrough, demo
++-- reports/                    committed evaluation reports (phase3 audits, LODO, host-relative)
++-- data/                       raw/ interim/ processed/ (gitignored contents)
++-- artifacts/                  trained models (gitignored)
++-- notebooks/                  01_eda.ipynb
 |
-+-- pyproject.toml
-+-- requirements.txt
-+-- README.md
++-- pyproject.toml, Makefile, requirements*.txt, README.md
+```
 
 
 # Installation

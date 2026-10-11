@@ -1,6 +1,6 @@
 # B1 experiment: host-relative inputs
 
-Question: does expressing each window relative to the same host's own past (causal rolling median, last 240 windows, log space) remove the attacker-host shortcut? Same hyperparameters, seed and split as the committed model. Trained into `artifacts/experiments/cic_ids2017_hostrel`; the demo model is untouched. Reproduce: `.venv/Scripts/python.exe scripts/hostrel_eval.py` (raw numbers in `reports/hostrel_eval.json`).
+Question: does expressing each window relative to the same host's own past (causal rolling median, last 240 windows, log space) remove the attacker-host shortcut? Same hyperparameters, seed and split as the committed model. Trained into `artifacts/experiments/cic_ids2017_hostrel`; the demo model is untouched. Reproduce: `.venv/Scripts/python.exe scripts/evaluation/hostrel_eval.py` (raw numbers in `reports/hostrel_eval.json`).
 
 ## Test split (487 positive targets, 10,892 negative)
 

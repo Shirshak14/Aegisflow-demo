@@ -11,7 +11,7 @@ Per-host onset census for every host the red team reached:
     index, no download needed), and, when the onset day's flows have been extracted,
     the host's own non-red-team flows in the 10 and 60 minutes before onset.
 
-    python scripts/optc_onset_census.py [--labels data/raw/optc/labels] [--flows data/raw/optc/flows]
+    python scripts/ingest/optc_onset_census.py [--labels data/raw/optc/labels] [--flows data/raw/optc/flows]
 
 Writes reports/optc_onset_census.json. Raw data stays in data/raw/optc (gitignored).
 """
@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from aegisflow.ml.datasets.optc import load_ground_truth, read_flow_events, label_flows, OptcAdapter  # noqa: E402

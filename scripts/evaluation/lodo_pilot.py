@@ -36,7 +36,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from aegisflow.ml.modeling import ForecastDataset, LSTMForecaster, metrics_at, train_experiment  # noqa: E402
 from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES  # noqa: E402

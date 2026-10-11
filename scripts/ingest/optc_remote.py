@@ -8,9 +8,9 @@ host. The object store honours HTTP Range requests, so this script walks the tar
 headers (one 512-byte read per member) to build an index, and then fetches only
 the members it is asked for.
 
-    python scripts/optc_remote.py index  [--days 2019-09-16 ...]      -> reports/optc_tar_index.json
-    python scripts/optc_remote.py fetch   --hosts 201 402 --days 2019-09-23      -> data/raw/optc/ecar
-    python scripts/optc_remote.py extract --hosts 201 --days 2019-09-23 [--until 16:30:00] -> data/raw/optc/flows
+    python scripts/ingest/optc_remote.py index  [--days 2019-09-16 ...]      -> reports/optc_tar_index.json
+    python scripts/ingest/optc_remote.py fetch   --hosts 201 402 --days 2019-09-23      -> data/raw/optc/ecar
+    python scripts/ingest/optc_remote.py extract --hosts 201 --days 2019-09-23 [--until 16:30:00] -> data/raw/optc/flows
 
 Raw files go to data/raw/optc (gitignored). Nothing here is needed to run AegisFlow.
 """
@@ -33,7 +33,7 @@ DATAFILES = {  # day -> Dataverse datafile id (from the dataset's file list)
     "2019-09-20": 713571, "2019-09-21": 713572, "2019-09-22": 713573, "2019-09-23": 713574,
     "2019-09-24": 713575, "2019-09-25": 713576,
 }
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 INDEX = ROOT / "reports" / "optc_tar_index.json"
 HOST_RE = re.compile(r"sysclient(\d{4})\.json\.gz$", re.IGNORECASE)
 

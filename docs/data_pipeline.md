@@ -13,11 +13,11 @@ raw dataset files
 
 Driven by `python -m aegisflow ingest --dataset cic_ids2017` /
 `python -m aegisflow eda --dataset cic_ids2017`, or both together via
-`python scripts/prepare_data.py --dataset cic_ids2017`.
+`python scripts/setup/prepare_data.py --dataset cic_ids2017`.
 
 ## Setting up CIC-IDS2017
 
-1. `python scripts/download_data.py --dataset cic_ids2017` — prints the exact
+1. `python scripts/setup/download_data.py --dataset cic_ids2017` — prints the exact
    official instructions (also reproduced below).
 2. Go to https://www.unb.ca/cic/datasets/ids-2017.html and download
    **`GeneratedLabelledFlows.zip`** (not `MachineLearningCSV.zip` — that

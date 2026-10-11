@@ -1,6 +1,6 @@
 # Phase 3 follow-up: sampling hypothesis, onset targets, baselines, host shortcut
 
-No deep model was retrained. No split, architecture, or Phase 4 change was made. Reproduce the baseline numbers with `python scripts/phase3_baselines.py`; the full output is in `reports/phase3_baselines_onset.json`.
+No deep model was retrained. No split, architecture, or Phase 4 change was made. Reproduce the baseline numbers with `python scripts/evaluation/phase3_baselines.py`; the full output is in `reports/phase3_baselines_onset.json`.
 
 ## 1. Truncation hypothesis: refuted
 
