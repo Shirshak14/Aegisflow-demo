@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.live import snapshot_events
 from backend.app.main import create_app
-from backend.tests.conftest import AUTH
+from tests.api.conftest import AUTH
 
 
 def _collect(snapshots, *, polls, heartbeat=1e9):
