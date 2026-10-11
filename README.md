@@ -230,7 +230,7 @@ Aegisflow-demo/
 +-- configs/                    config.yaml, datasets.yaml, stages.yaml, mitre_mapping.yaml
 +-- scripts/
 |   +-- setup/                  download_data.py, prepare_data.py
-|   +-- evaluation/             audit_phase3, phase3_baselines, lodo_pilot, hostrel_eval
+|   +-- evaluation/             audit_phase3, phase3_baselines, lodo_pilot, hostrel_eval, anomaly_eval
 |   +-- ingest/                 golden_ingest, optc_remote, optc_onset_census
 +-- tests/                      pytest suite: core library, tests/api/ (backend), fixtures/
 +-- docs/                       architecture, api, model, data pipeline, walkthrough, demo
