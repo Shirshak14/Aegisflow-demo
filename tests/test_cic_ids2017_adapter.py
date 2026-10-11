@@ -130,3 +130,60 @@ def test_sampling_does_not_exclude_late_file_attack_burst(cfg, cic_ids2017_entry
     # And not systematically: across many seeds, the tail keeps roughly its 10% share.
     tail_share = [(p[0] >= 9_000).mean() for p in (spread_sample_plan([10_000], 500, s) for s in range(50))]
     assert 0.07 < sum(tail_share) / len(tail_share) < 0.13
+
+
+# --------------------------------------------------------------------------------------------------
+# Chunked, column-restricted reading must give exactly what the old whole-file read gave (B5).
+def _old_whole_file_load(adapter, path: Path):
+    """The pre-B5 reader, kept as the reference: whole file, every column, normalised headers."""
+    import pandas as pd
+
+    from aegisflow.ml.datasets.cic_ids2017 import _normalize_header
+    from aegisflow.schema import coerce_canonical_frame
+
+    df = pd.read_csv(path, low_memory=False, encoding="cp1252")
+    df.columns = [_normalize_header(c) for c in df.columns]
+    df = df[df["label"].astype(str).str.strip().str.lower() != "label"]
+    df["__source_file__"] = path.name
+    canonical = coerce_canonical_frame(adapter._to_canonical(df.reset_index(drop=True)))
+    canonical["source_dataset"] = "cic_ids2017"
+    return canonical
+
+
+def test_chunked_usecols_read_equals_old_whole_file_read(tmp_path, cfg, cic_ids2017_entry, monkeypatch):
+    import pandas as pd
+
+    from aegisflow.ml.datasets import cic_ids2017 as mod
+
+    header = ["Flow ID", " Source IP", " Source Port", " Destination IP", " Destination Port", " Protocol",
+              " Timestamp", " Flow Duration", " Total Fwd Packets", "Total Length of Fwd Packets",
+              " Fwd Header Length", " Bwd IAT Max", " Label"]  # last-but-two: columns the adapter never uses
+    rows = []
+    for i in range(7):  # integers in the early chunks ...
+        rows.append([f"f{i}", "10.0.0.1", 1000 + i, "10.0.0.2", 80, 6, f"7/7/2017 9:0{i}", 1_000_000 * (i + 1),
+                     3, 100 + i, 20, 5, "BENIGN"])
+    rows.append(["f7", "10.0.0.1", 1007, "10.0.0.2", 80, 17, "7/7/2017 9:08", 2_500_000, 3, 100.5, 20, 5, "DDoS"])
+    rows.append(["Flow ID", "Source IP", "Source Port", "Destination IP", "Destination Port", "Protocol",
+                 "Timestamp", "Flow Duration", "Total Fwd Packets", "Total Length of Fwd Packets",
+                 "Fwd Header Length", "Bwd IAT Max", "Label"])  # re-embedded header row (mid-file)
+    rows.append(["f8", "10.0.0.3", 1008, "10.0.0.2", 80, 6, "7/7/2017 9:09", 3_000_000, 3, 101, 20, 5, "BENIGN"])
+    rows += [["", "", "", "", "", "", "", "", "", "", "", "", ""]] * 5  # trailing blank rows: an all-empty chunk
+    path = tmp_path / "Day.pcap_ISCX.csv"
+    pd.DataFrame(rows, columns=header).to_csv(path, index=False, encoding="cp1252")
+
+    cic_ids2017_entry["raw_dir"] = str(tmp_path)
+    adapter = CicIds2017Adapter(cfg=cfg, entry=cic_ids2017_entry)
+    expected = _old_whole_file_load(adapter, path)
+    monkeypatch.setattr(mod, "_CSV_CHUNK_ROWS", 2)  # many chunks, including all-empty ones at the end
+    got = adapter.load_raw()
+    pd.testing.assert_frame_equal(got, expected, check_exact=True)
+
+
+def test_only_used_columns_are_parsed(cfg, cic_ids2017_entry):
+    from aegisflow.ml.datasets.cic_ids2017 import _COLUMN_MAP, _USED_HEADERS, _read_used_columns
+
+    assert _USED_HEADERS == {k for k, v in _COLUMN_MAP.items() if v} and "flow id" not in _USED_HEADERS
+    adapter = CicIds2017Adapter(cfg=cfg, entry=cic_ids2017_entry)
+    path = adapter.discover().files[0]
+    df = _read_used_columns(path, None)
+    assert set(df.columns) <= _USED_HEADERS and "label" in df.columns
