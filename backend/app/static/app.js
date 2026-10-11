@@ -921,6 +921,9 @@ function PerturbationCard({ p }) {
     ...p.missing_windows.map(r => ({ kind: "Whole windows missing", level: `${r.windows} of 10 windows`, r })),
   ];
   const groups = p.missing_group, feats = p.missing_feature.slice(0, 6);
+  const sum = o => Object.values(o).reduce((a, b) => a + b, 0), allAtk = sum(p.test_attacks_by_class);
+  const tcp = groups.find(g => g.group === "tcp_flags") || c, div = groups.find(g => g.group === "destination_diversity") || c;
+  const tcpDet = sum(tcp.detected_by_class), tcpOf = allAtk, divAlerts = div.alerts_changed_vs_clean, divBot = div.detected_by_class.Botnet ?? 0, divAuc = div.roc_auc;
   const delta = v => { const d = v - c.roc_auc; return html`<span class=${d < -0.02 ? "neg-t" : "muted"}>${d >= 0 ? "+" : ""}${fmt(d, 3)}</span>`; };
   return html`<${React.Fragment}>
     <section class="card span12"><h2>Noisy and missing inputs</h2>
@@ -943,6 +946,11 @@ function PerturbationCard({ p }) {
             <td class="num">${fmt(p.missing_last_window.recall)}</td><td class="num">${fmt(p.missing_last_window.false_positive_rate * 100, 2)}%</td><td class="num">${p.missing_last_window.alerts}</td><td class="num">${p.missing_last_window.alerts_changed_vs_clean}</td></tr>
         </tbody></table></div>
     </section>
+    <section class="card span12"><div class="note"><b>Reading:</b> the alerts barely move under noise or random gaps (F1 stays near ${fmt(c.f1, 2)} and ROC-AUC near ${fmt(c.roc_auc, 2)}),
+      but that is not strength: ROC-AUC is ${fmt(c.roc_auc, 2)} to begin with, and ${fmt(c.roc_auc_hosts_other_than_172_16_0_1, 2)} on hosts other than 172.16.0.1, so there is little signal to lose.
+      The weak spots are structural: with every TCP-flag feature missing the model detects ${tcpDet} of ${tcpOf} test attacks, and with the destination-diversity features missing
+      it changes ${fmt(divAlerts, 0)} of ${c.n.toLocaleString()} alert decisions (${divBot} Botnet detected vs ${c.detected_by_class.Botnet ?? 0}). A higher ROC-AUC after removing a group (e.g. ${fmt(divAuc, 2)}) is not an improvement; it shows the ranking was close to chance.
+      Missing inputs here are imputed with train medians; a live feed that sends zeros or stale values instead could behave differently.</div></section>
     <section class="card span6"><h2>A whole feature group missing</h2>
       <table><thead><tr><th>Group</th><th class="num">F1</th><th class="num">ROC-AUC</th><th class="num">Δ ROC-AUC</th><th class="num">Alerts flipped</th></tr></thead>
         <tbody>${groups.map(g => html`<tr key=${g.group} style=${{ cursor: "default" }} title=${g.features.join(", ")}><td>${g.group.replace(/_/g, " ")} <span class="muted small">(${g.features.length})</span></td>
