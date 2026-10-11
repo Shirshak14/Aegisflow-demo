@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -95,6 +96,9 @@ def default_db_path() -> Path:
 
 def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastAPI:
     app = FastAPI(title="AegisFlow demo API", version="0.1.0")
+    # Compress JSON and the dashboard assets (the JS/CSS and vendored React are ~300 KB raw). Starlette skips
+    # text/event-stream by default, so /live is not buffered.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     ledger = Ledger(db_path or default_db_path())
     engine = ReplayEngine(ledger)
     analyst = AnalystLog(ledger, list(load_config().stages.stages_order))
@@ -124,6 +128,14 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
 
     # Dashboard assets, including the vendored React / htm builds (no CDN, so the demo works offline).
     app.mount("/static", StaticFiles(directory=static), name="static")
+
+    @app.middleware("http")
+    async def cache_static_libraries(request: Request, call_next):
+        # Fonts and vendored libraries never change between releases; app.js/app.css keep revalidating (ETag).
+        response = await call_next(request)
+        if request.url.path.startswith(("/static/fonts/", "/static/vendor/")):
+            response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
 
     @app.get("/features")
     def features_status() -> dict[str, Any]:

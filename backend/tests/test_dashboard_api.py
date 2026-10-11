@@ -35,6 +35,17 @@ def test_react_page_classic_fallback_and_vendored_assets(client):
     assert client.get("/static/../main.py").status_code == 404
 
 
+def test_static_assets_are_gzipped_and_libraries_cacheable_and_live_is_not_compressed(client):
+    js = client.get("/static/app.js", headers={"Accept-Encoding": "gzip"})
+    assert js.status_code == 200 and js.headers["content-encoding"] == "gzip"
+    assert "cache-control" not in js.headers  # app code keeps revalidating via ETag
+    lib = client.get("/static/vendor/react.production.min.js")
+    assert lib.headers["cache-control"] == "public, max-age=86400"
+    with client.stream("GET", "/live?max_events=1", headers={"Accept-Encoding": "gzip"}) as live:
+        assert live.headers["content-type"].startswith("text/event-stream")
+        assert "content-encoding" not in live.headers
+
+
 def test_features_report_defaults(client):
     f = client.get("/features").json()
     assert f["stage_model"]["configured"] is False and f["stage_model"]["available"] is False
