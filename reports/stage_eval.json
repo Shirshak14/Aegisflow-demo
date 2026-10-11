@@ -1,0 +1,222 @@
+{
+  "demo_threshold": 0.3307546377182007,
+  "alerts": 349,
+  "true_positive_alerts": 79,
+  "true_positive_stages": {
+    "Impact": 42,
+    "Reconnaissance": 33,
+    "Command and Control": 4
+  },
+  "attack_stages_by_split": {
+    "train": {
+      "Initial Access": 241,
+      "Impact": 141
+    },
+    "val": {
+      "Initial Access": 116,
+      "Lateral Movement": 11
+    },
+    "test": {
+      "Command and Control": 409,
+      "Impact": 44,
+      "Reconnaissance": 34
+    }
+  },
+  "committed_split_ceiling": {
+    "exact": 42,
+    "of": 79,
+    "why": "stages absent from train+val cannot be predicted"
+  },
+  "results": {
+    "baseline_gated": {
+      "exact": 34,
+      "of": 79,
+      "exact_rate": 0.43037974683544306,
+      "macro_f1": 0.2982456140350877,
+      "per_stage_f1": {
+        "Command and Control": 0.0,
+        "Impact": 0.8947368421052632,
+        "Reconnaissance": 0.0
+      },
+      "per_stage_correct": {
+        "Command and Control": "0/4",
+        "Impact": "34/42",
+        "Reconnaissance": "0/33"
+      },
+      "predicted": {
+        "Impact": 34,
+        "UNCERTAIN": 22,
+        "Initial Access": 18,
+        "Benign": 5
+      }
+    },
+    "baseline": {
+      "exact": 39,
+      "of": 79,
+      "exact_rate": 0.4936708860759494,
+      "macro_f1": 0.3023255813953488,
+      "per_stage_f1": {
+        "Command and Control": 0.0,
+        "Impact": 0.9069767441860465,
+        "Reconnaissance": 0.0
+      },
+      "per_stage_correct": {
+        "Command and Control": "0/4",
+        "Impact": "39/42",
+        "Reconnaissance": "0/33"
+      },
+      "predicted": {
+        "Impact": 44,
+        "Initial Access": 27,
+        "Benign": 8
+      },
+      "false_positive_alerts_labeled_benign": 217
+    },
+    "weighted": {
+      "exact": 39,
+      "of": 79,
+      "exact_rate": 0.4936708860759494,
+      "macro_f1": 0.32098765432098764,
+      "per_stage_f1": {
+        "Command and Control": 0.0,
+        "Impact": 0.9629629629629629,
+        "Reconnaissance": 0.0
+      },
+      "per_stage_correct": {
+        "Command and Control": "0/4",
+        "Impact": "39/42",
+        "Reconnaissance": "0/33"
+      },
+      "predicted": {
+        "Impact": 39,
+        "Benign": 24,
+        "Initial Access": 16
+      },
+      "false_positive_alerts_labeled_benign": 247
+    },
+    "two_step": {
+      "exact": 28,
+      "of": 79,
+      "exact_rate": 0.35443037974683544,
+      "macro_f1": 0.2629107981220657,
+      "per_stage_f1": {
+        "Command and Control": 0.0,
+        "Impact": 0.7887323943661971,
+        "Reconnaissance": 0.0
+      },
+      "per_stage_correct": {
+        "Command and Control": "0/4",
+        "Impact": "28/42",
+        "Reconnaissance": "0/33"
+      },
+      "predicted": {
+        "Initial Access": 31,
+        "Impact": 29,
+        "Lateral Movement": 19
+      },
+      "trained_on": {
+        "Initial Access": 357,
+        "Impact": 141,
+        "Lateral Movement": 11
+      },
+      "mean_confidence": {
+        "true_positive_alerts": 0.8021629493991882,
+        "false_positive_alerts": 0.8478479568453786
+      }
+    },
+    "two_step_cv": {
+      "exact": 35,
+      "of": 79,
+      "exact_rate": 0.4430379746835443,
+      "macro_f1": 0.46088280060882797,
+      "per_stage_f1": {
+        "Command and Control": 0.5333333333333333,
+        "Impact": 0.8493150684931506,
+        "Reconnaissance": 0.0
+      },
+      "per_stage_correct": {
+        "Command and Control": "4/4",
+        "Impact": "31/42",
+        "Reconnaissance": "0/33"
+      },
+      "predicted": {
+        "Impact": 31,
+        "Lateral Movement": 21,
+        "Initial Access": 16,
+        "Command and Control": 11
+      },
+      "all_test_attack_sequences": {
+        "exact": 405,
+        "of": 487,
+        "exact_rate": 0.8316221765913757,
+        "macro_f1": 0.5300082009990308,
+        "per_stage_f1": {
+          "Command and Control": 0.9429657794676806,
+          "Impact": 0.6470588235294118,
+          "Reconnaissance": 0.0
+        },
+        "per_stage_correct": {
+          "Command and Control": "372/409",
+          "Impact": "33/44",
+          "Reconnaissance": "0/34"
+        },
+        "predicted": {
+          "Command and Control": 380,
+          "Impact": 58,
+          "Initial Access": 25,
+          "Lateral Movement": 24
+        }
+      }
+    },
+    "two_step_cv_window": {
+      "exact": 53,
+      "of": 79,
+      "exact_rate": 0.6708860759493671,
+      "macro_f1": 0.5871375251220212,
+      "per_stage_f1": {
+        "Command and Control": 0.3333333333333333,
+        "Impact": 0.9629629629629629,
+        "Reconnaissance": 0.46511627906976744
+      },
+      "per_stage_correct": {
+        "Command and Control": "4/4",
+        "Impact": "39/42",
+        "Reconnaissance": "10/33"
+      },
+      "predicted": {
+        "Impact": 39,
+        "Command and Control": 20,
+        "Initial Access": 10,
+        "Reconnaissance": 10
+      },
+      "all_test_attack_sequences": {
+        "exact": 444,
+        "of": 487,
+        "exact_rate": 0.9117043121149897,
+        "macro_f1": 0.742044534123742,
+        "per_stage_f1": {
+          "Command and Control": 0.9597069597069597,
+          "Impact": 0.8118811881188119,
+          "Reconnaissance": 0.45454545454545453
+        },
+        "per_stage_correct": {
+          "Command and Control": "393/409",
+          "Impact": "41/44",
+          "Reconnaissance": "10/34"
+        },
+        "predicted": {
+          "Command and Control": 410,
+          "Impact": 57,
+          "Initial Access": 10,
+          "Reconnaissance": 10
+        }
+      }
+    }
+  },
+  "caveats": [
+    "Stage labels are the label-to-stage proxy in configs/stages.yaml, not ground truth.",
+    "Every attack stage except Command and Control (Botnet) comes from the single attacker host 172.16.0.1.",
+    "two_step_cv trains on the test day (grouped and purged, but the same attack episodes); treat it as an upper bound on this dataset.",
+    "two_step_cv_window uses the alerted window's own traffic, so it labels an attack in progress; it is not a forecast of the stage."
+  ]
+}
