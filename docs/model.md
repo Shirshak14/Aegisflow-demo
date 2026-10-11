@@ -89,6 +89,8 @@ The isolation forest from `scripts/evaluation/anomaly_eval.py` (same fit set: be
 
 It is a second opinion only. The LSTM alone decides which alerts fire, so alert counts, risk scores and ledger records are unchanged; the verdict is attached when alerts are read and is not part of the hashed record. On the test split the isolation forest ranks attacks better than the LSTM (ROC-AUC 0.64 vs 0.55) but at the same false-alarm rate it does not catch more of them (recall 13.6% vs 16.2%); see `reports/anomaly_report.md`. Default `null` keeps the demo exactly as it was.
 
+Measured on the committed demo artifacts (full test split replay, 2026-10-11): of the LSTM's 349 alerts, the anomaly model also flags 67, and 57 of those (85%) match an attack label (42 DoS, 15 Reconnaissance). The 282 LSTM-only alerts have 22 attacks (8%): 18 Reconnaissance and all 4 Botnet. Agreement concentrates the high-volume attacks; it does not help with Botnet. Over the whole test split the anomaly model flags 0.66% of benign sequences.
+
 ## Split
 
 Chronological 60/20/20 on sequence target-end time; sequences straddling a cutoff are `boundary_excluded`. Cutoffs: 2017-07-06 09:20:22 and 2017-07-07 09:15:22. Thresholds are chosen on validation (max F1), never on test.
