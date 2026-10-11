@@ -27,6 +27,7 @@ import json
 import os
 import sqlite3
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -127,11 +128,28 @@ class Ledger:
         payload = {"last_id": last_id, "head_hash": head_hash, "hmac": self._sign(last_id, head_hash)}
         tmp = self.anchor_path.with_name(self.anchor_path.name + ".tmp")
         tmp.write_text(json.dumps(payload), encoding="utf-8")
-        os.replace(tmp, self.anchor_path)
+        # Windows refuses to replace a file another handle (a concurrent verify read, antivirus) has open for a
+        # moment; that is transient, so retry briefly instead of failing the whole replay.
+        for attempt in range(20):
+            try:
+                os.replace(tmp, self.anchor_path)
+                return
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
 
     def _read_anchor(self) -> dict[str, Any] | None:
         try:
-            a = json.loads(self.anchor_path.read_text(encoding="utf-8"))
+            for attempt in range(20):  # same transient Windows lock as in _write_anchor, seen from the reader
+                try:
+                    raw = self.anchor_path.read_text(encoding="utf-8")
+                    break
+                except PermissionError:
+                    if attempt == 19:
+                        raise
+                    time.sleep(0.01 * (attempt + 1))
+            a = json.loads(raw)
             return {"last_id": int(a["last_id"]), "head_hash": str(a["head_hash"]), "hmac": a.get("hmac")}
         except FileNotFoundError:
             return None

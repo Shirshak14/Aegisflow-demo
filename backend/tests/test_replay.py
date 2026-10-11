@@ -117,3 +117,23 @@ def test_calibrated_confidence_keeps_alerts_and_maps_probability(tmp_path, synth
     # the ledger stores reals rounded to 6 decimals
     assert all(a["confidence"] == pytest.approx(cal.transform(a["lstm_probability"]), abs=2e-6) for a in alerts)
     assert engine.risk_config()["confidence_calibrated"] is True
+
+
+def test_host_timeline_is_capped_to_the_most_recent_points(tmp_path, synthetic_replay, monkeypatch):
+    from backend.app import replay
+
+    monkeypatch.setattr(replay, "TIMELINE_MAX_POINTS", 5)
+    engine = ReplayEngine(Ledger(tmp_path / "t.db"))
+    engine.prepare()
+    engine.session_id = "t"
+    for i in range(len(engine.events)):
+        engine._process(engine.events.iloc[i])
+    ev = engine.events
+    busiest = ev.host_id.value_counts().index[0]
+    assert (ev.host_id == busiest).sum() > 5
+    h = engine.host(busiest)
+    expected = [t.isoformat() for t in ev.target_window_start[ev.host_id == busiest]][-5:]
+    assert isinstance(h["timeline"], list) and [p["t"] for p in h["timeline"]] == expected
+    assert h["sequences"] == (ev.host_id == busiest).sum()  # counters are not capped, only the timeline
+    h["timeline"].clear()
+    assert len(engine.host(busiest)["timeline"]) == 5  # callers get a copy

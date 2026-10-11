@@ -19,7 +19,7 @@ def register(name: str):
 def get_adapter(name: str, cfg: AegisFlowConfig) -> DatasetAdapter:
     """Instantiate the adapter registered under ``name`` (see configs/datasets.yaml: adapter)."""
     # Import submodules for their side-effecting @register decorators.
-    from . import cic_ids2017, ctu_13  # noqa: F401
+    from . import cic_ids2017, ctu_13, lanl_2015, optc  # noqa: F401
 
     if name not in _REGISTRY:
         raise ConfigError(

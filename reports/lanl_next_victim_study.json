@@ -1,0 +1,151 @@
+{
+ "note": "Summary transcribed from the full run report (seed 42, runtime 390 s on the laptop). The full JSON with per-burst AUCs stays on the laptop; per-burst values are not repeated here.",
+ "meta": {
+  "n_hosts": 12027,
+  "victims": 301,
+  "victims_in_flows": 209,
+  "decisions": 683,
+  "bursts": 35,
+  "rows": 5211624,
+  "median_candidates": 8185
+ },
+ "contact": {
+  "hosts_contacted": 514,
+  "later_compromised": 35,
+  "compromised_before_contact": 0,
+  "never_compromised": 479,
+  "delay_min_quantiles": {
+   "0.0": 18.95,
+   "0.1": 19.21,
+   "0.25": 19.54,
+   "0.5": 19.93,
+   "0.75": 31.19,
+   "0.9": 3512.7,
+   "1.0": 16930.2
+  }
+ },
+ "horizons": {
+  "10": {
+   "positives": 267,
+   "scored_decisions": 173,
+   "scored_bursts": 19,
+   "null_mean_hit10": 0.0019,
+   "results": {
+    "C-ACT": {
+     "median_burst_auc": 0.715,
+     "mean_burst_hit10": 0.0717,
+     "victims_alerted": 5,
+     "median_lead_s": 548
+    },
+    "C-NBR": {
+     "median_burst_auc": 0.499,
+     "mean_burst_hit10": 0.0211,
+     "victims_alerted": 1,
+     "median_lead_s": 553
+    },
+    "C-DEG": {
+     "median_burst_auc": 0.74,
+     "mean_burst_hit10": 0.1231,
+     "victims_alerted": 5,
+     "median_lead_s": 548
+    },
+    "M-CTRL": {
+     "median_burst_auc": 0.442,
+     "mean_burst_hit10": 0.0088,
+     "victims_alerted": 1,
+     "median_lead_s": 378
+    },
+    "R-CONTACT": {
+     "median_burst_auc": 0.499,
+     "mean_burst_hit10": 0.2518,
+     "victims_alerted": 32,
+     "median_lead_s": 448.5
+    },
+    "M-GB": {
+     "median_burst_auc": 0.465,
+     "mean_burst_hit10": 0.1727,
+     "victims_alerted": 13,
+     "median_lead_s": 429
+    }
+   },
+   "bars": {
+    "R-CONTACT": {
+     "N1": false,
+     "N2": false,
+     "N3": true,
+     "N4": true,
+     "N5": false
+    },
+    "M-GB": {
+     "N1": false,
+     "N2": false,
+     "N3": false,
+     "N4": true,
+     "N5": false
+    }
+   },
+   "no_day9_identical": true
+  },
+  "60": {
+   "positives": 1493,
+   "scored_decisions": 394,
+   "scored_bursts": 21,
+   "null_mean_hit10": 0.0031,
+   "results": {
+    "C-ACT": {
+     "median_burst_auc": 0.66,
+     "mean_burst_hit10": 0.145,
+     "victims_alerted": 5,
+     "median_lead_s": 3523
+    },
+    "C-NBR": {
+     "median_burst_auc": 0.499,
+     "mean_burst_hit10": 0.0559,
+     "victims_alerted": 3,
+     "median_lead_s": 2997
+    },
+    "C-DEG": {
+     "median_burst_auc": 0.691,
+     "mean_burst_hit10": 0.188,
+     "victims_alerted": 5,
+     "median_lead_s": 3523
+    },
+    "M-CTRL": {
+     "median_burst_auc": 0.448,
+     "mean_burst_hit10": 0.0051,
+     "victims_alerted": 2,
+     "median_lead_s": 1814.5
+    },
+    "R-CONTACT": {
+     "median_burst_auc": 0.499,
+     "mean_burst_hit10": 0.1771,
+     "victims_alerted": 32,
+     "median_lead_s": 1027
+    },
+    "M-GB": {
+     "median_burst_auc": 0.584,
+     "mean_burst_hit10": 0.1646,
+     "victims_alerted": 26,
+     "median_lead_s": 1023.5
+    }
+   },
+   "bars": {
+    "R-CONTACT": {
+     "N1": false,
+     "N2": false,
+     "N3": false,
+     "N4": true,
+     "N5": false
+    },
+    "M-GB": {
+     "N1": false,
+     "N2": false,
+     "N3": false,
+     "N4": true,
+     "N5": false
+    }
+   },
+   "no_day9_identical": true
+  }
+ }
+}
