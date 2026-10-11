@@ -95,9 +95,9 @@ The dashboard provides a centralized view of:
 - Live PCAP / NetFlow upload scored through the streaming pipeline
 - SIEM export (CEF, syslog, JSON lines)
 - Audit records
-- Trained models and model evaluation
+- Trained models and model evaluation, including the benign-only anomaly baseline
 
-The dashboard is React 18 (vendored, no build step, works offline). The original page is at `/classic`.
+The dashboard is React 18 (vendored, no build step, works offline). It has seven pages in a sidebar: Overview, Alerts (list and per-alert detail), Hosts (list and per-host timeline), Models and evaluation, Audit ledger, Capture and export, and How it works. Pages are hash routes (`/#/alerts/12`), so links can be shared. The original single page is at `/classic`.
 
 
 ## System Architecture

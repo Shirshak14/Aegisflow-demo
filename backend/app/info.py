@@ -179,3 +179,35 @@ def evaluation() -> dict[str, Any]:
         "honest_note": HOST_NOTE,
         "consistency": evaluation_consistency(b, lodo_report),
     }
+
+
+def anomaly_baseline() -> dict[str, Any] | None:
+    """Benign-only anomaly baseline (reports/anomaly_eval.json) beside the committed LSTM; None if not run.
+
+    Copied from the report as written by scripts/evaluation/anomaly_eval.py; nothing is recomputed.
+    """
+    path = REPORTS / "anomaly_eval.json"
+    if not path.exists():
+        return None
+    r = _read(path)
+    lstm = r["lstm_committed"]
+    keys = ("precision", "recall", "f1", "false_positive_rate")
+    rows = [{"model": "LSTM (demo model)", "labels_used": True, "roc_auc": lstm["test"]["roc_auc"],
+             "pr_auc": lstm["test"]["pr_auc"], "at_lstm_fpr": {k: lstm["test"][k] for k in keys},
+             "host_check": lstm["test_host_and_class"]["shortcut_host_vs_rest"],
+             "per_class": lstm["test_host_and_class"]["per_class_detection"]}]
+    for name, label in (("isolation_forest", "Isolation forest"), ("autoencoder", "Autoencoder")):
+        m = r["models"].get(name)
+        if m is None:
+            continue
+        rows.append({"model": label, "labels_used": False, "roc_auc": m["test_roc_auc"], "pr_auc": m["test_pr_auc"],
+                     "at_lstm_fpr": {k: m["test_at_lstm_fpr"][k] for k in keys},
+                     "at_benign_p99": {k: m["test_at_benign_p99"][k] for k in keys},
+                     "host_check": m["test_host_and_class_at_lstm_fpr"]["shortcut_host_vs_rest"],
+                     "per_class": m["test_host_and_class_at_lstm_fpr"]["per_class_detection"],
+                     "seed_range": r.get("seed_stability_test_roc_pr", {}).get(name)})
+    return {"source": "reports/anomaly_eval.json", "report": "reports/anomaly_report.md",
+            "fit_sequences": r["fit_set"]["sequences"], "test_counts": r["test_counts"], "rows": rows,
+            "note": ("Fit on benign train sequences only, so labels cannot teach the attacker-host shortcut. "
+                     "The anomaly thresholds are set to the LSTM's test FPR for a like-for-like recall comparison; "
+                     "that is not a deployable threshold. Not wired into the replay.")}

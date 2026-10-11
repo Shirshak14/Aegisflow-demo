@@ -12,13 +12,14 @@ Open http://127.0.0.1:8000. Wait until the progress line stops saying "loading m
 
 ## Click path
 
-1. Read the "Honest finding" banner: detections are largely attacker-host recognition; stage is not predicted.
-2. Choose speed (1000x finishes quickly), press **Start**. Note: each Start opens a new session; earlier sessions stay in the ledger, and the dashboard shows the current one.
-3. Watch Hosts monitored, Alerts, progress and the sim clock. Replay covers the held-out test period (from 2017-07-07 09:15).
-4. Click an alert: risk score and components (max reachable 75), LSTM probability vs threshold, logistic-regression comparison, dataset label (revealed for evaluation only), MITRE lookup for that label.
-5. Click a host for its risk timeline.
-6. Press **Verify chain**: expect `VERIFIED`, record count and head hash.
-7. Scroll to Model evaluation: switch any/onset target and val/test; read the host-check and leave-one-day-out lines.
+The sidebar has seven pages; each is a link (for example `/#/alerts/12`) you can open directly.
+
+1. **Overview**: choose speed (1000x finishes quickly), press **Start**. Each Start opens a new session; earlier sessions stay in the ledger, and the dashboard shows the current one. Watch hosts, alerts, progress and the sim clock; the replay covers the held-out test period (from 2017-07-07 09:15). The bottom card shows the honest test numbers and the attacker-host limitation.
+2. **Alerts**: filter by risk or status, open one. Left: risk score and components (max reachable 75), LSTM probability vs threshold, logistic-regression comparison, dataset label (evaluation only), MITRE lookup for that label, ledger record. Right: feature attribution, attention (if trained), stage model (off by default) and analyst review.
+3. **Hosts**: open 172.16.0.1 for its risk timeline and alerts.
+4. **Audit ledger**: press **Verify chains**: expect `VERIFIED`, record count and head hash.
+5. **Models and evaluation**: LSTM test numbers, the label-free anomaly baseline next to it, then the evaluation table (switch any/onset target and val/test) with the host-check and leave-one-day-out lines.
+6. **How it works**: the pipeline, what the demo claims, and its known limits.
 
 ## Expected numbers (full replay)
 
