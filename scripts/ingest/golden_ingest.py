@@ -3,8 +3,8 @@
 Runs the real ``run_ingestion`` with its output redirected to a scratch directory (the committed
 ``data/interim`` is never touched), and records what it produced and what it cost:
 
-    python scripts/golden_ingest.py --out <dir> [--sample-size N] [--only-file SUBSTR]
-    python scripts/golden_ingest.py --out <new_dir> ... --compare <golden_dir>
+    python scripts/ingest/golden_ingest.py --out <dir> [--sample-size N] [--only-file SUBSTR]
+    python scripts/ingest/golden_ingest.py --out <new_dir> ... --compare <golden_dir>
 
 ``--out`` receives ``cic_ids2017.parquet``, ``cic_ids2017.ingest.json`` and ``golden_record.json``
 (SHA-256 of both outputs, row counts, schema, wall time, peak memory, git commit).
@@ -29,7 +29,7 @@ import threading
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 DATASET = "cic_ids2017"

@@ -6,7 +6,7 @@
 
 The full 2.83M-row run is **not** justified by this result.
 
-Reproduce with `python scripts/lodo_pilot.py`. The full output is in `reports/lodo_pilot_results.json`, and per-fold artifacts are in `artifacts/models/cic_ids2017_lodo_pilot/<fold>/`. The Phase 3 artifacts are untouched.
+Reproduce with `python scripts/evaluation/lodo_pilot.py`. The full output is in `reports/lodo_pilot_results.json`, and per-fold artifacts are in `artifacts/models/cic_ids2017_lodo_pilot/<fold>/`. The Phase 3 artifacts are untouched.
 
 ## Protocol
 

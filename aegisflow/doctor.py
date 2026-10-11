@@ -20,7 +20,7 @@ class Check:
 
 CHECKS: tuple[Check, ...] = (
     Check("raw data", "CIC-IDS2017 CSVs", f"data/raw/{DATASET}/*/*.pcap_ISCX.csv",
-          f"python scripts/download_data.py --dataset {DATASET}  (prints where to download, then unpack under "
+          f"python scripts/setup/download_data.py --dataset {DATASET}  (prints where to download, then unpack under "
           f"data/raw/{DATASET}/)", "preprocess (only if data/processed is missing)"),
     Check("processed data", "sequences", f"data/processed/{DATASET}/sequences.parquet", _PREPROCESS,
           "replay, /dataset/status, training"),
@@ -33,9 +33,9 @@ CHECKS: tuple[Check, ...] = (
     Check("model", "model metrics", f"artifacts/models/{DATASET}/metrics.json", _TRAIN, "replay, /evaluation"),
     Check("reports", "data quality report", "reports/data_quality_report.json", _PREPROCESS, "/dataset/status"),
     Check("reports", "onset baselines", "reports/phase3_baselines_onset.json",
-          "python scripts/phase3_baselines.py  (or git checkout the committed copy)", "/evaluation"),
+          "python scripts/evaluation/phase3_baselines.py  (or git checkout the committed copy)", "/evaluation"),
     Check("reports", "LODO pilot results", "reports/lodo_pilot_results.json",
-          "python scripts/lodo_pilot.py  (or git checkout the committed copy)", "/evaluation"),
+          "python scripts/evaluation/lodo_pilot.py  (or git checkout the committed copy)", "/evaluation"),
 )
 
 

@@ -27,7 +27,7 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from aegisflow.ml.modeling import (ForecastDataset, LSTMForecaster, SequencePreprocessor,  # noqa: E402
                                    metrics_at, select_threshold)

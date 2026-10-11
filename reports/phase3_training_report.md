@@ -84,4 +84,4 @@ Actual test split: 487 positives, 10,892 negatives. The PR-AUC prevalence baseli
 - `best.pt`: LSTM, epoch 1. `last.pt`: LSTM, epoch 4.
 - `logistic.joblib`, `preprocessor.joblib`, `metadata.json`, `metrics.json` (test metrics only).
 - `validation_and_test_metrics.json`: validation and test metrics plus per-class results, recomputed from the saved artifacts with no refitting.
-- `evaluation_audit.json`, `audit_predictions.csv`: output of `scripts/audit_phase3.py`.
+- `evaluation_audit.json`, `audit_predictions.csv`: output of `scripts/evaluation/audit_phase3.py`.

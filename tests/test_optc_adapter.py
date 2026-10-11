@@ -13,7 +13,7 @@ from aegisflow.ml.datasets.optc import OptcAdapter, host_key, load_ground_truth,
 from aegisflow.ml.preprocessing.labels import apply_stage_mapping
 
 FIXTURES = Path(__file__).parent / "fixtures" / "optc"
-SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+SCRIPTS = Path(__file__).resolve().parents[1] / "scripts" / "ingest"
 
 
 @pytest.fixture()

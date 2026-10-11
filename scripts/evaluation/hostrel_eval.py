@@ -14,8 +14,8 @@ import sys
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "scripts"))
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "scripts" / "evaluation"))
 from aegisflow.ml.modeling import ForecastDataset, LSTMForecaster, metrics_at, train_experiment  # noqa: E402
 from phase3_baselines import SHORTCUT_HOST, per_host  # noqa: E402
 
