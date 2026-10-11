@@ -1,0 +1,522 @@
+{
+  "notes": "Benign-only anomaly baseline: can a model that never sees an attack label detect attacks?\n\nThe supervised models (LSTM, logistic regression) can learn \"which host\" instead of \"what\nattack\", because nearly every attack class comes from one attacker host (172.16.0.1). These\ndetectors are fit on benign traffic only, so they cannot learn that shortcut from labels:\n\n  isolation_forest  sklearn IsolationForest on the flattened, preprocessed input sequence\n  autoencoder       dense autoencoder (280 -> 64 -> 16 -> 64 -> 280); score = reconstruction MSE\n\nFit set: train-split sequences whose target is benign AND whose 10 input windows contain no\nattack flow (``attack_flow_ratio == 0`` in every window). Same inputs, preprocessing and\nsplit as the committed model; the label-derived features never enter the model.\n\nThresholds (none uses an attack label):\n  benign_p99     99th percentile of the scores on the benign fit set (nominal 1% FPR)\n  lstm_fpr       the score at which the test-split benign FPR equals the committed LSTM's test FPR\n                 (2.5%). It uses which test sequences are benign, so it is a comparison point for\n                 recall at equal false alarms, not a deployable threshold\n\nBecause no attack label is used to fit, attacks from every split can be scored, so the\nper-class table covers all six classes (train-split attacks were never in the fit set).\nThe committed LSTM is read from ``audit_predictions.csv`` and is NOT retrained.\n\nOutput: reports/anomaly_eval.json and a console table. Nothing here is read by the backend.",
+  "fit_set": {
+    "sequences": 50645,
+    "excluded_train_benign_target_but_attack_in_inputs": 66
+  },
+  "test_counts": {
+    "positive": 487,
+    "negative": 10892
+  },
+  "lstm_committed": {
+    "threshold": 0.3307546377182007,
+    "test": {
+      "threshold": 0.3307546377182007,
+      "precision": 0.22636103151862463,
+      "recall": 0.162217659137577,
+      "f1": 0.18899521531100477,
+      "roc_auc": 0.5529727750752016,
+      "pr_auc": 0.17710914311135434,
+      "false_positive_rate": 0.02478883584282042,
+      "confusion_matrix": [
+        [
+          10622,
+          270
+        ],
+        [
+          408,
+          79
+        ]
+      ],
+      "positive_predictions": 349,
+      "actual_positives": 487,
+      "actual_negatives": 10892
+    },
+    "test_host_and_class": {
+      "shortcut_host_vs_rest": {
+        "172.16.0.1": {
+          "neg": 29,
+          "neg_flagged": 29,
+          "pos": 76,
+          "pos_detected": 75,
+          "roc_auc": 0.7722323049001816
+        },
+        "other_hosts": {
+          "neg": 10863,
+          "neg_flagged": 241,
+          "pos": 411,
+          "pos_detected": 4,
+          "roc_auc": 0.47200669788493854
+        }
+      },
+      "per_class_detection": {
+        "Botnet": {
+          "n": 409,
+          "detected": 4
+        },
+        "Denial of Service": {
+          "n": 44,
+          "detected": 42
+        },
+        "Reconnaissance": {
+          "n": 34,
+          "detected": 33
+        }
+      }
+    }
+  },
+  "models": {
+    "isolation_forest": {
+      "thresholds": {
+        "benign_p99": 0.5564705405386993,
+        "lstm_fpr": 0.5113897697160035
+      },
+      "test_roc_auc": 0.6395175593714204,
+      "test_pr_auc": 0.11577124180161921,
+      "heldout_benign_fpr": {
+        "benign_p99": 0.005366672662948972,
+        "lstm_fpr": 0.015470408346824968
+      },
+      "test_at_benign_p99": {
+        "threshold": 0.5564705405386993,
+        "precision": 0.45038167938931295,
+        "recall": 0.12114989733059549,
+        "f1": 0.19093851132686085,
+        "false_positive_rate": 0.006610356224752111,
+        "confusion_matrix": [
+          [
+            10820,
+            72
+          ],
+          [
+            428,
+            59
+          ]
+        ],
+        "positive_predictions": 131,
+        "actual_positives": 487,
+        "actual_negatives": 10892
+      },
+      "test_host_and_class_at_benign_p99": {
+        "shortcut_host_vs_rest": {
+          "172.16.0.1": {
+            "neg": 29,
+            "neg_flagged": 7,
+            "pos": 76,
+            "pos_detected": 57,
+            "roc_auc": 0.7803992740471868
+          },
+          "other_hosts": {
+            "neg": 10863,
+            "neg_flagged": 65,
+            "pos": 411,
+            "pos_detected": 2,
+            "roc_auc": 0.5846094009151358
+          }
+        },
+        "per_class_detection": {
+          "Botnet": {
+            "n": 409,
+            "detected": 0
+          },
+          "Denial of Service": {
+            "n": 44,
+            "detected": 44
+          },
+          "Reconnaissance": {
+            "n": 34,
+            "detected": 15
+          }
+        }
+      },
+      "all_splits_host_and_class_at_benign_p99": {
+        "shortcut_host_vs_rest": {
+          "172.16.0.1": {
+            "neg": 78,
+            "neg_flagged": 7,
+            "pos": 590,
+            "pos_detected": 164,
+            "roc_auc": 0.6329204693611474
+          },
+          "other_hosts": {
+            "neg": 33276,
+            "neg_flagged": 172,
+            "pos": 422,
+            "pos_detected": 6,
+            "roc_auc": 0.6975827689027971
+          }
+        },
+        "per_class_detection": {
+          "Botnet": {
+            "n": 409,
+            "detected": 0
+          },
+          "Brute Force": {
+            "n": 238,
+            "detected": 0
+          },
+          "Denial of Service": {
+            "n": 185,
+            "detected": 151
+          },
+          "Infiltration": {
+            "n": 11,
+            "detected": 4
+          },
+          "Reconnaissance": {
+            "n": 39,
+            "detected": 15
+          },
+          "Web Attack": {
+            "n": 130,
+            "detected": 0
+          }
+        }
+      },
+      "test_at_lstm_fpr": {
+        "threshold": 0.5113897697160035,
+        "precision": 0.19642857142857142,
+        "recall": 0.13552361396303902,
+        "f1": 0.16038882138517618,
+        "false_positive_rate": 0.02478883584282042,
+        "confusion_matrix": [
+          [
+            10622,
+            270
+          ],
+          [
+            421,
+            66
+          ]
+        ],
+        "positive_predictions": 336,
+        "actual_positives": 487,
+        "actual_negatives": 10892
+      },
+      "test_host_and_class_at_lstm_fpr": {
+        "shortcut_host_vs_rest": {
+          "172.16.0.1": {
+            "neg": 29,
+            "neg_flagged": 10,
+            "pos": 76,
+            "pos_detected": 59,
+            "roc_auc": 0.7803992740471868
+          },
+          "other_hosts": {
+            "neg": 10863,
+            "neg_flagged": 260,
+            "pos": 411,
+            "pos_detected": 7,
+            "roc_auc": 0.5846094009151358
+          }
+        },
+        "per_class_detection": {
+          "Botnet": {
+            "n": 409,
+            "detected": 5
+          },
+          "Denial of Service": {
+            "n": 44,
+            "detected": 44
+          },
+          "Reconnaissance": {
+            "n": 34,
+            "detected": 17
+          }
+        }
+      },
+      "all_splits_host_and_class_at_lstm_fpr": {
+        "shortcut_host_vs_rest": {
+          "172.16.0.1": {
+            "neg": 78,
+            "neg_flagged": 10,
+            "pos": 590,
+            "pos_detected": 203,
+            "roc_auc": 0.6329204693611474
+          },
+          "other_hosts": {
+            "neg": 33276,
+            "neg_flagged": 506,
+            "pos": 422,
+            "pos_detected": 14,
+            "roc_auc": 0.6975827689027971
+          }
+        },
+        "per_class_detection": {
+          "Botnet": {
+            "n": 409,
+            "detected": 5
+          },
+          "Brute Force": {
+            "n": 238,
+            "detected": 12
+          },
+          "Denial of Service": {
+            "n": 185,
+            "detected": 176
+          },
+          "Infiltration": {
+            "n": 11,
+            "detected": 7
+          },
+          "Reconnaissance": {
+            "n": 39,
+            "detected": 17
+          },
+          "Web Attack": {
+            "n": 130,
+            "detected": 0
+          }
+        }
+      },
+      "all_splits_roc_auc": 0.8181839660596202,
+      "all_splits_per_class_roc_auc_vs_heldout_benign": {
+        "Botnet": 0.6896236680446386,
+        "Brute Force": 0.8697749832078903,
+        "Denial of Service": 0.9943822937886618,
+        "Infiltration": 0.8975099074937175,
+        "Reconnaissance": 0.8733769678184141,
+        "Web Attack": 0.8541893256949922
+      },
+      "shortcut_host_benign_median_percentile": 0.8755171793488037
+    },
+    "autoencoder": {
+      "thresholds": {
+        "benign_p99": 8970.3125,
+        "lstm_fpr": 2849.889892578125
+      },
+      "test_roc_auc": 0.6166749365244427,
+      "test_pr_auc": 0.05575089798300226,
+      "heldout_benign_fpr": {
+        "benign_p99": 0.00842477663848414,
+        "lstm_fpr": 0.014271151885830785
+      },
+      "test_at_benign_p99": {
+        "threshold": 8970.3125,
+        "precision": 0.026143790849673203,
+        "recall": 0.008213552361396304,
+        "f1": 0.0125,
+        "false_positive_rate": 0.013679764965112008,
+        "confusion_matrix": [
+          [
+            10743,
+            149
+          ],
+          [
+            483,
+            4
+          ]
+        ],
+        "positive_predictions": 153,
+        "actual_positives": 487,
+        "actual_negatives": 10892
+      },
+      "test_host_and_class_at_benign_p99": {
+        "shortcut_host_vs_rest": {
+          "172.16.0.1": {
+            "neg": 29,
+            "neg_flagged": 0,
+            "pos": 76,
+            "pos_detected": 0,
+            "roc_auc": 0.541742286751361
+          },
+          "other_hosts": {
+            "neg": 10863,
+            "neg_flagged": 149,
+            "pos": 411,
+            "pos_detected": 4,
+            "roc_auc": 0.5642099020022204
+          }
+        },
+        "per_class_detection": {
+          "Botnet": {
+            "n": 409,
+            "detected": 4
+          },
+          "Denial of Service": {
+            "n": 44,
+            "detected": 0
+          },
+          "Reconnaissance": {
+            "n": 34,
+            "detected": 0
+          }
+        }
+      },
+      "all_splits_host_and_class_at_benign_p99": {
+        "shortcut_host_vs_rest": {
+          "172.16.0.1": {
+            "neg": 78,
+            "neg_flagged": 0,
+            "pos": 590,
+            "pos_detected": 0,
+            "roc_auc": 0.13026944806605822
+          },
+          "other_hosts": {
+            "neg": 33276,
+            "neg_flagged": 281,
+            "pos": 422,
+            "pos_detected": 4,
+            "roc_auc": 0.6515285912622791
+          }
+        },
+        "per_class_detection": {
+          "Botnet": {
+            "n": 409,
+            "detected": 4
+          },
+          "Brute Force": {
+            "n": 238,
+            "detected": 0
+          },
+          "Denial of Service": {
+            "n": 185,
+            "detected": 0
+          },
+          "Infiltration": {
+            "n": 11,
+            "detected": 0
+          },
+          "Reconnaissance": {
+            "n": 39,
+            "detected": 0
+          },
+          "Web Attack": {
+            "n": 130,
+            "detected": 0
+          }
+        }
+      },
+      "test_at_lstm_fpr": {
+        "threshold": 2849.889892578125,
+        "precision": 0.014598540145985401,
+        "recall": 0.008213552361396304,
+        "f1": 0.010512483574244415,
+        "false_positive_rate": 0.02478883584282042,
+        "confusion_matrix": [
+          [
+            10622,
+            270
+          ],
+          [
+            483,
+            4
+          ]
+        ],
+        "positive_predictions": 274,
+        "actual_positives": 487,
+        "actual_negatives": 10892
+      },
+      "test_host_and_class_at_lstm_fpr": {
+        "shortcut_host_vs_rest": {
+          "172.16.0.1": {
+            "neg": 29,
+            "neg_flagged": 0,
+            "pos": 76,
+            "pos_detected": 0,
+            "roc_auc": 0.541742286751361
+          },
+          "other_hosts": {
+            "neg": 10863,
+            "neg_flagged": 270,
+            "pos": 411,
+            "pos_detected": 4,
+            "roc_auc": 0.5642099020022204
+          }
+        },
+        "per_class_detection": {
+          "Botnet": {
+            "n": 409,
+            "detected": 4
+          },
+          "Denial of Service": {
+            "n": 44,
+            "detected": 0
+          },
+          "Reconnaissance": {
+            "n": 34,
+            "detected": 0
+          }
+        }
+      },
+      "all_splits_host_and_class_at_lstm_fpr": {
+        "shortcut_host_vs_rest": {
+          "172.16.0.1": {
+            "neg": 78,
+            "neg_flagged": 0,
+            "pos": 590,
+            "pos_detected": 7,
+            "roc_auc": 0.13026944806605822
+          },
+          "other_hosts": {
+            "neg": 33276,
+            "neg_flagged": 476,
+            "pos": 422,
+            "pos_detected": 4,
+            "roc_auc": 0.6515285912622791
+          }
+        },
+        "per_class_detection": {
+          "Botnet": {
+            "n": 409,
+            "detected": 4
+          },
+          "Brute Force": {
+            "n": 238,
+            "detected": 0
+          },
+          "Denial of Service": {
+            "n": 185,
+            "detected": 7
+          },
+          "Infiltration": {
+            "n": 11,
+            "detected": 0
+          },
+          "Reconnaissance": {
+            "n": 39,
+            "detected": 0
+          },
+          "Web Attack": {
+            "n": 130,
+            "detected": 0
+          }
+        }
+      },
+      "all_splits_roc_auc": 0.690562770054898,
+      "all_splits_per_class_roc_auc_vs_heldout_benign": {
+        "Botnet": 0.6440597294225258,
+        "Brute Force": 0.4634018925073177,
+        "Denial of Service": 0.8703487081252868,
+        "Infiltration": 0.8383156988121909,
+        "Reconnaissance": 0.9550094326133183,
+        "Web Attack": 0.9050622460228503
+      },
+      "shortcut_host_benign_median_percentile": 0.9465131618396594
+    }
+  },
+  "seed_stability_test_roc_pr": {
+    "isolation_forest": {
+      "roc_auc": [
+        0.6339365365081544,
+        0.6513682781326611
+      ],
+      "pr_auc": [
+        0.1073768730571711,
+        0.11559703129631985
+      ],
+      "seeds": 5
+    },
+    "autoencoder": {
+      "roc_auc": [
+        0.6147506864107635,
+        0.6256195795041252
+      ],
+      "pr_auc": [
+        0.05547176460099524,
+        0.05773472441436174
+      ],
+      "seeds": 3
+    }
+  }
+}
