@@ -81,6 +81,16 @@ Security events are stored using a SHA-256 hash chain where each event reference
 
 This provides a verifiable sequence of audit records.
 
+### What is enabled by default, what needs artifacts, what is research only
+
+| Status | Features |
+|---|---|
+| **On by default** (needs the processed CIC-IDS2017 data and the trained demo model, see [docs/release.md](docs/release.md)) | Replay of the held-out test split, alerts and risk scores, host pages, MITRE lookup, hash-chain ledger with head anchor, analyst actions, SSE live updates, local-only access mode, Models and evaluation, Robustness report page |
+| **Needs optional artifacts or setup** | Calibrated confidence (`aegisflow calibrate`), label-free anomaly second opinion (`train-anomaly`, `replay.anomaly_model_dir`), multi-task stage model (`train-multitask`, `replay.stage_model_dir`), explanations (`shap`), PCAP / NetFlow upload (`scapy`), token sign-in (`AEGISFLOW_AUTH=on`), signed ledger anchor and external checkpoint (`AEGISFLOW_LEDGER_KEY`) |
+| **Research only, not adopted** | Attack-onset forecasting, per-host normalisation, benign-only anomaly baseline as the detector, host-disjoint evaluation, next-victim prediction, multi-task stage head. They are reported in `reports/` and none beats the committed LSTM. Predicted stage is `UNCERTAIN` unless the multi-task model is enabled |
+
+Streaming scoring (`/stream/*`, `aegisflow stream`, capture upload) is implemented; robustness work on duplicates across chunks, late arrivals and missing windows is still open (see [docs/optimization_opportunities.md](docs/optimization_opportunities.md)).
+
 ### Security Dashboard
 
 The dashboard provides a centralized view of:
@@ -97,7 +107,7 @@ The dashboard provides a centralized view of:
 - Audit records
 - Trained models and model evaluation, including the benign-only anomaly baseline
 
-The dashboard is React 18 (vendored, no build step, works offline). It has seven pages in a sidebar: Overview, Alerts (list and per-alert detail), Hosts (list and per-host timeline), Models and evaluation, Audit ledger, Capture and export, and How it works. Pages are hash routes (`/#/alerts/12`), so links can be shared. The original single page is at `/classic`.
+The dashboard is React 18 (vendored, no build step, works offline). It has eight pages in a sidebar: Overview, Alerts (list and per-alert detail), Hosts (list and per-host timeline), Models and evaluation, Robustness, Audit ledger, Capture and export, and How it works. Pages are hash routes (`/#/alerts/12`), so links can be shared. The original single page is at `/classic`.
 
 
 ## System Architecture
@@ -162,10 +172,10 @@ ML Risk Prediction
 
 ### Frontend
 
-- HTML
-- CSS
-- Vanilla JavaScript
-- Chart.js
+- React 18, vendored (no build step, works offline), with htm templates in `backend/app/static/app.js`
+- Hand-drawn SVG charts (no charting library)
+- GSAP and Lenis for motion and scrolling (vendored)
+- A legacy single-page view at `/classic` (plain HTML and JavaScript)
 
 ### Development & Testing
 
@@ -386,9 +396,19 @@ Hash 3
 
 If an earlier record is modified, the subsequent chain relationships can be detected during verification.
 
-The ledger is a tamper-evident hash chain, not a decentralized blockchain network.
+The ledger is a tamper-evident hash chain, not a decentralized blockchain network. It is tamper-evident, not tamper-proof: it makes undetected edits hard, it does not prevent them, and anyone who holds the signing key and the host can rewrite history.
 
 Head anchor: after every append the newest record's id and hash are also written to `<ledger db>.head`, so `GET /audit/verify` can detect deletion of the most recent records and a fully recomputed chain. Set `AEGISFLOW_LEDGER_KEY` to HMAC-sign the anchor; without it the anchor is a plain second copy of the head.
+
+External checkpoint: the local anchor lives next to the database, so it cannot protect against someone who controls the host. Store a signed checkpoint somewhere else (another machine, a bucket, a printout):
+
+```
+python -m backend.app.audit checkpoint --db <ledger.db> --out <off-host path>/ledger_checkpoint.json
+python -m backend.app.audit verify     --db <ledger.db> --checkpoint <off-host path>/ledger_checkpoint.json
+python -m backend.app.audit recover    --db <ledger.db> --out recovered.db
+```
+
+`verify` recomputes the chain, then confirms the checkpointed record is still there with the same hash (new records after it are fine). Truncation, rewriting or replacing the database is reported as `MISMATCH` even if the local anchor was repaired. Set `AEGISFLOW_LEDGER_KEY` first: without it the checkpoint is unsigned and only detects accidents. `AEGISFLOW_LEDGER_CHECKPOINT=<path>` also rewrites the checkpoint after every append, which helps only if that path is on separate storage. `recover` copies the intact prefix into a new database and never edits the original. A checkpoint is only as fresh as the last time you took it: records appended afterwards are not covered until the next one.
 
 `POST /alerts` is disabled unless `AEGISFLOW_API_KEY` is set on the server, and then needs that value in an `X-API-Key` header. The replay engine writes to the ledger directly and does not use this endpoint.
 
@@ -458,7 +478,7 @@ The repository intentionally excludes:
 - Temporary test directories
 - Archived experiment data
 
-These files can be generated locally using the project pipeline.
+These files can be generated locally using the project pipeline. [docs/release.md](docs/release.md) covers the clean-clone walkthrough, the no-data smoke test (`python -m aegisflow.smoke`), the model manifest (`python -m aegisflow manifest`) and why no data is bundled.
 
 
 # Project Status

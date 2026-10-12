@@ -143,3 +143,18 @@ def test_robustness_report_is_served_as_committed(client):
     at = next(x for x in body["thresholds"]["splits"]["test"]["rows"]
               if x["threshold"] == body["thresholds"]["committed_threshold"])
     assert (test["alerts"], test["tp"]) == (at["alerts"], at["tp"])  # one source, two views
+
+
+def test_evaluation_provenance_always_answers_and_marks_missing_items(client, monkeypatch, tmp_path):
+    from backend.app import info
+    monkeypatch.setattr(info, "MODEL_DIR", tmp_path / "no_model")
+    monkeypatch.setattr(info, "DATA_DIR", tmp_path / "no_data")
+    r = client.get("/evaluation/provenance")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["target"]["input_windows"] == 10 and d["target"]["forecast_horizon_windows"] == 1
+    assert d["model"]["available"] is False and "doctor" in d["model"]["reason"]
+    assert d["split"]["available"] is False
+    assert set(d["sources"]) == {"replay_scores", "live_capture_scores", "ground_truth_labels"}
+    cp = d["class_performance"]
+    assert cp["available"] is False or all(c["recall"] is None or 0 <= c["recall"] <= 1 for c in cp["classes"])
