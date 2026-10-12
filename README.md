@@ -224,7 +224,7 @@ Aegisflow-demo/
 |           calibration.py, scoring.py, streaming.py
 |
 +-- backend/
-|   +-- app/                    FastAPI service (main, replay, audit, analyst, siem, live, info)
+|   +-- app/                    FastAPI service (main, replay, audit, analyst, security, siem, live, info)
 |   |   +-- static/             React dashboard (index.html, app.js/css, fonts/, vendor/)
 |
 +-- configs/                    config.yaml, datasets.yaml, stages.yaml, mitre_mapping.yaml
@@ -391,6 +391,8 @@ The ledger is a tamper-evident hash chain, not a decentralized blockchain networ
 Head anchor: after every append the newest record's id and hash are also written to `<ledger db>.head`, so `GET /audit/verify` can detect deletion of the most recent records and a fully recomputed chain. Set `AEGISFLOW_LEDGER_KEY` to HMAC-sign the anchor; without it the anchor is a plain second copy of the head.
 
 `POST /alerts` is disabled unless `AEGISFLOW_API_KEY` is set on the server, and then needs that value in an `X-API-Key` header. The replay engine writes to the ledger directly and does not use this endpoint.
+
+Access control: by default the server runs in local mode, with no sign-in, and only answers requests from the same machine. To serve other machines, set `AEGISFLOW_AUTH=on` and `AEGISFLOW_AUTH_SECRET`, then issue viewer / analyst / admin tokens with `python -m backend.app.security issue-token`. Analyst decisions are then recorded under the signed-in user. `AEGISFLOW_ENV=production` refuses to start without the auth secret and `AEGISFLOW_LEDGER_KEY`. See [docs/api.md](docs/api.md#access-control).
 
 
 # MITRE ATT&CK
