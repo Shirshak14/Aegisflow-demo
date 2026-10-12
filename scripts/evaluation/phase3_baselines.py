@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from aegisflow.ml.modeling import (ForecastDataset, LSTMForecaster, SequencePreprocessor,  # noqa: E402
                                    metrics_at, select_threshold)
-from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES  # noqa: E402
+from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES, feature_array  # noqa: E402
 
 DATA = ROOT / "data/processed/cic_ids2017/sequences.parquet"
 ARTIFACT = ROOT / "artifacts/models/cic_ids2017"
@@ -64,7 +64,7 @@ def run() -> dict:
     data = ForecastDataset.from_parquet(DATA)
     f = data.frame
     std = list(STANDARD_NUMERIC_WINDOW_FEATURES)
-    raw_last = np.stack([np.stack(v)[-1] for v in f.sequence_features])
+    raw_last = feature_array(f.sequence_features, n_features=len(std))[:, -1].astype(np.float64)
     last_attack = (raw_last[:, std.index("attack_flow_ratio")] > 0).astype(float)
     onset = f.target_is_onset.to_numpy(bool)
     any_pos = data.attack.astype(bool)

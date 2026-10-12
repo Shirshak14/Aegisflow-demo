@@ -36,7 +36,7 @@ from ...logging_setup import get_logger
 from ..features.flow_features import compute_flow_features
 from ..ingestion.pipeline import read_ingest_summary, run_ingestion
 from .reporting import QualityMetrics, generate_data_quality_report
-from .sequences import build_host_sequences
+from .sequences import build_host_sequences, write_sequences
 from .split import compute_temporal_splits
 from .windowing import aggregate_host_windows
 
@@ -92,6 +92,7 @@ def run_preprocessing(
     sequence_length: int | None = None,
     forecast_horizon: int | None = None,
     reingest: bool = False,
+    sequence_format: str = "nested",
 ) -> PreprocessingResult:
     """Execute the full Phase-2 temporal data engineering pipeline.
 
@@ -104,6 +105,7 @@ def run_preprocessing(
         sequence_length: Number of time steps in sequence input.
         forecast_horizon: Number of steps ahead to predict future state.
         reingest: Whether to force re-running Phase 1 ingestion from raw CSV.
+        sequence_format: Feature-column layout of sequences.parquet, "nested" (default) or "arrays".
 
     Returns:
         PreprocessingResult containing paths and verified counts.
@@ -167,7 +169,7 @@ def run_preprocessing(
     seq_df, split_metadata = compute_temporal_splits(seq_df, cfg=cfg, dataset_key=dataset_key)
 
     seq_out_path = processed_dir / "sequences.parquet"
-    _write_parquet(seq_df, seq_out_path)
+    write_sequences(seq_df, seq_out_path, sequence_format=sequence_format)
     log.info("saved sequences", path=str(seq_out_path), sequences=len(seq_df))
 
     split_meta_path = processed_dir / "split_metadata.json"
@@ -204,7 +206,7 @@ def run_preprocessing(
 
 
 def rebuild_temporal_outputs_from_flows(
-    cfg: AegisFlowConfig, dataset_key: str = "cic_ids2017"
+    cfg: AegisFlowConfig, dataset_key: str = "cic_ids2017", *, sequence_format: str = "nested"
 ) -> PreprocessingResult:
     """Rebuild windows, sequences, splits, and reports from saved engineered flows.
 
@@ -230,7 +232,7 @@ def rebuild_temporal_outputs_from_flows(
     seq_df = build_host_sequences(windows_df, cfg=cfg)
     seq_df, split_meta = compute_temporal_splits(seq_df, cfg=cfg, dataset_key=dataset_key)
     sequences_path = processed_dir / "sequences.parquet"
-    _write_parquet(seq_df, sequences_path)
+    write_sequences(seq_df, sequences_path, sequence_format=sequence_format)
     split_path = processed_dir / "split_metadata.json"
     split_meta.save(split_path)
     report_md, report_json, quality = generate_data_quality_report(

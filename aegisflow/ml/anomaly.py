@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 from .modeling import ForecastDataset, SequencePreprocessor
-from .temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES
+from .temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES, feature_array
 
 META_FILE = "anomaly.json"
 MODEL_FILE = "isolation_forest.joblib"
@@ -32,7 +32,8 @@ PREP_FILE = "preprocessor.joblib"
 def input_attack_mask(frame: pd.DataFrame) -> np.ndarray:
     """True where any input window of the sequence carries an attack flow (used only to clean the fit set)."""
     col = list(STANDARD_NUMERIC_WINDOW_FEATURES).index("attack_flow_ratio")
-    return np.array([np.nan_to_num(np.stack(v)[:, col]).max() > 0 for v in frame.sequence_features], dtype=bool)
+    X = feature_array(frame.sequence_features, n_features=len(STANDARD_NUMERIC_WINDOW_FEATURES))
+    return np.nan_to_num(X[:, :, col]).max(axis=1) > 0
 
 
 def fit_indices(data: ForecastDataset) -> np.ndarray:

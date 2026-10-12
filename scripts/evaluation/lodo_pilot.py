@@ -39,7 +39,7 @@ from sklearn.metrics import roc_auc_score
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from aegisflow.ml.modeling import ForecastDataset, LSTMForecaster, metrics_at, train_experiment  # noqa: E402
-from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES  # noqa: E402
+from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES, feature_array  # noqa: E402
 
 DATA = ROOT / "data/processed/cic_ids2017/sequences.parquet"
 OUT = ROOT / "artifacts/models/cic_ids2017_lodo_pilot"
@@ -152,7 +152,7 @@ def run() -> dict:
     for c in ("seq_start_time", "seq_end_time", "target_window_start", "target_window_end"):
         frame[c] = pd.to_datetime(frame[c])
     std = list(STANDARD_NUMERIC_WINDOW_FEATURES)
-    last_attack = np.array([np.stack(v)[-1][std.index("attack_flow_ratio")] > 0 for v in frame.sequence_features], float)
+    last_attack = (feature_array(frame.sequence_features, n_features=len(std))[:, -1, std.index("attack_flow_ratio")] > 0).astype(float)
     days = sorted(frame.seq_start_time.dt.date.unique())
     out = {"notes": __doc__.strip(), "hyperparameters": HP, "folds": {}}
     for day in days:

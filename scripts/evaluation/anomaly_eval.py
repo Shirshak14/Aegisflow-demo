@@ -39,7 +39,7 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from aegisflow.ml.modeling import ForecastDataset, SequencePreprocessor, metrics_at
-from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES
+from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES, feature_array
 
 DATA = ROOT / "data/processed/cic_ids2017/sequences.parquet"
 ARTIFACT = ROOT / "artifacts/models/cic_ids2017"
@@ -59,7 +59,8 @@ def seed_all(seed: int = SEED) -> None:
 def input_attack_mask(frame: pd.DataFrame) -> np.ndarray:
     """True where any of the sequence's input windows carries an attack flow (labels only, for the fit filter)."""
     col = list(STANDARD_NUMERIC_WINDOW_FEATURES).index("attack_flow_ratio")
-    return np.array([np.nan_to_num(np.stack(v)[:, col]).max() > 0 for v in frame.sequence_features])
+    X = feature_array(frame.sequence_features, n_features=len(STANDARD_NUMERIC_WINDOW_FEATURES))
+    return np.nan_to_num(X[:, :, col]).max(axis=1) > 0
 
 
 def fit_autoencoder(x: np.ndarray, epochs: int = 30, batch_size: int = 256, lr: float = 1e-3, seed: int = SEED):

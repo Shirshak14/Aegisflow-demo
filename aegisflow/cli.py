@@ -109,6 +109,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_prep.add_argument("--seq-len", type=int, default=None, help="Number of steps in sequence input (e.g. 10).")
     p_prep.add_argument("--horizon", type=int, default=None, help="Future forecast horizon in steps (e.g. 1).")
     p_prep.add_argument("--reingest", action="store_true", help="Force re-running Phase 1 ingestion before preprocessing.")
+    p_prep.add_argument("--sequence-format", choices=["nested", "arrays"], default="nested",
+                        help="Layout of the feature columns in sequences.parquet: nested lists (default) or "
+                             "flat float32 arrays (smaller, faster to load; every reader accepts both).")
     _common_args(p_prep)
 
     p_win = sub.add_parser("window", help="Run host-level temporal window aggregation on canonical flows.")
@@ -120,6 +123,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_rebuild = sub.add_parser("rebuild-temporal", help="Rebuild Phase 2 windows/sequences from saved flows.parquet; no raw re-ingestion.")
     p_rebuild.add_argument("--dataset", required=True, help="Dataset key, e.g. cic_ids2017")
+    p_rebuild.add_argument("--sequence-format", choices=["nested", "arrays"], default="nested",
+                        help="Layout of the feature columns in sequences.parquet: nested lists (default) or "
+                             "flat float32 arrays (smaller, faster to load; every reader accepts both).")
     _common_args(p_rebuild)
 
     p_train = sub.add_parser("train", help="Train Phase 3 CIC-IDS2017 forecasting baselines.")
@@ -298,7 +304,7 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         return _cmd_window(cfg, args)
     if args.command == "rebuild-temporal":
         from .ml.temporal.pipeline import rebuild_temporal_outputs_from_flows
-        result = rebuild_temporal_outputs_from_flows(cfg, args.dataset)
+        result = rebuild_temporal_outputs_from_flows(cfg, args.dataset, sequence_format=args.sequence_format)
         print(f"Temporal outputs rebuilt from existing flows for '{args.dataset}'")
         print(f"  Flows          : {result.flows_count:,} (unchanged) -> {result.flows_path}")
         print(f"  Host windows   : {result.windows_count:,} -> {result.windows_path}")
@@ -561,6 +567,7 @@ def _cmd_preprocess(cfg, args) -> int:
         sequence_length=args.seq_len,
         forecast_horizon=args.horizon,
         reingest=args.reingest,
+        sequence_format=args.sequence_format,
     )
     print(f"\nPhase 2 Preprocessing complete for '{args.dataset}'")
     print(f"  Engineered flows : {res.flows_count:,} -> {res.flows_path}")
