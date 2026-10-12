@@ -8,8 +8,14 @@ const html = htm.bind(React.createElement);
 const fmt = (x, d = 3) => x === null || x === undefined || Number.isNaN(+x) ? "–" : Number(x).toFixed(d);
 const t = iso => iso ? String(iso).replace("T", " ").slice(0, 19) : "–";
 const hm = iso => t(iso).slice(11);
+// Who is signed in (GET /auth/me). Local mode (no sign-in, this machine only) acts as admin with no user name.
+let ME = { auth_enabled: false, user: null, role: "admin" };
+const ROLE_RANK = { viewer: 0, analyst: 1, admin: 2 };
+const canDo = role => (ROLE_RANK[ME.role] ?? -1) >= ROLE_RANK[role];
+const needs = role => canDo(role) ? undefined : `needs the ${role} role`;
 async function api(path, opts) {
   const r = await fetch(path, opts);
+  if (r.status === 401 && ME.auth_enabled) { location.assign("/login"); }
   if (!r.ok) {
     let msg = r.status;
     try { msg = (await r.json()).detail || msg; } catch (_) { /* not JSON */ }
@@ -162,7 +168,8 @@ function StageSection({ seqId, feats }) {
 
 function AnalystSection({ alertId, stages, onChange }) {
   const hist = useLoad(() => api(`/alerts/${alertId}/actions`), [alertId]);
-  const [who, setWho] = useState(storage.get("aegisflow.analyst", ""));
+  const [typed, setWho] = useState(storage.get("aegisflow.analyst", ""));
+  const who = ME.user || typed;  // signed in: the server records the token's user, not a typed name
   const [note, setNote] = useState(""), [response, setResponse] = useState(""), [stage, setStage] = useState(stages[0] || "");
   const [err, setErr] = useState(null), [busy, setBusy] = useState(false);
   const act = async (action) => {
@@ -170,7 +177,8 @@ function AnalystSection({ alertId, stages, onChange }) {
     try {
       await post(`/alerts/${alertId}/actions`, { action, analyst: who, note: note || null,
         response: action === "approve_response" ? response : null, stage: action === "override_stage" ? stage : null });
-      storage.set("aegisflow.analyst", who); setNote(""); hist.reload(); onChange && onChange();
+      if (!ME.user) storage.set("aegisflow.analyst", who);
+      setNote(""); hist.reload(); onChange && onChange();
     } catch (e) { setErr(e.message); }
     setBusy(false);
   };
@@ -178,7 +186,8 @@ function AnalystSection({ alertId, stages, onChange }) {
   const can = { acknowledge: ["open", "reopened"], approve_response: ["open", "acknowledged", "reopened"],
                 dismiss: ["open", "acknowledged", "reopened"], reopen: ["response_approved", "dismissed"] };
   const allowed = a => !can[a] || can[a].includes(st);
-  const noWho = !who.trim(), whoHint = noWho ? "enter an analyst name first" : undefined;
+  const noWho = !who.trim() || !canDo("analyst");
+  const whoHint = !canDo("analyst") ? needs("analyst") : noWho ? "enter an analyst name first" : undefined;
   return html`<div class="section"><h3>Analyst review</h3>
     ${h && html`<div class="kv small" style=${{ marginBottom: "8px" }}>
       <div>Status</div><div><span class=${"status " + st}>${STATUS_LABEL[st] || st}</span></div>
@@ -186,7 +195,8 @@ function AnalystSection({ alertId, stages, onChange }) {
       ${h.approved_response && html`<div>Approved response</div><div>${h.approved_response} <span class="muted">(recorded only; nothing is executed)</span></div>`}
     </div>`}
     <div class="row" style=${{ marginBottom: "6px" }}>
-      <input type="text" placeholder="Analyst name" value=${who} onInput=${e => setWho(e.target.value)} style=${{ width: "150px" }}/>
+      ${ME.user ? html`<span class="small muted">Signed in as <b>${ME.user}</b> (${ME.role})</span>`
+        : html`<input type="text" placeholder="Analyst name" value=${typed} onInput=${e => setWho(e.target.value)} style=${{ width: "150px" }}/>`}
       <input type="text" placeholder="Note (optional; needed to comment)" value=${note} onInput=${e => setNote(e.target.value)} style=${{ flex: 1, minWidth: "160px" }}/>
     </div>
     <div class="row" style=${{ marginBottom: "6px" }}>
@@ -339,8 +349,9 @@ function CaptureCard({ feats }) {
         <option value="pcap">packet capture</option>
         <option value="netflow">NetFlow v5/v9/IPFIX export or nfdump CSV</option>
       </select>
-      <button class="primary" disabled=${!file || busy} onClick=${upload}>${busy ? "Scoring…" : "Upload and score"}</button>
-      <button disabled=${busy} onClick=${async () => { await post("/stream/reset"); setRes(null); refresh(); }}>Reset stream</button>
+      <button class="primary" title=${needs("analyst")} disabled=${!file || busy || !canDo("analyst")} onClick=${upload}>${busy ? "Scoring…" : "Upload and score"}</button>
+      <button title=${needs("admin")} disabled=${busy || !canDo("admin")} onClick=${async () => {
+        try { await post("/stream/reset"); setRes(null); refresh(); } catch (e) { setErr(e.message); } }}>Reset stream</button>
     </div>
     <div class="small muted" style=${{ marginTop: "6px" }}>Flows are built from the file (CICFlowMeter conventions, plus TTL and TCP retransmissions for packets),
       windowed per host with the same 60 s / 30 s settings as training, and scored by ${feats.stream.model_dir} as each window closes.
@@ -654,8 +665,8 @@ function ReplayControls({ ctx }) {
   return html`<section class="card span3"><h2>Replay controls</h2>
     <div class="row"><label class="small muted" for="speed">Speed</label>
       <select id="speed" value=${speed} onChange=${e => setSpeed(e.target.value)}>${cfg.allowed_speeds.map(s => html`<option key=${s} value=${s}>${s}×</option>`)}</select>
-      <button class="primary" disabled=${starting || (st && st.state === "running")} onClick=${start}>${starting ? "Starting…" : "Start"}</button>
-      <button class="danger" disabled=${!st || st.state !== "running"} onClick=${() => post("/replay/stop")}>Stop</button></div>
+      <button class="primary" title=${needs("admin")} disabled=${starting || (st && st.state === "running") || !canDo("admin")} onClick=${start}>${starting ? "Starting…" : "Start"}</button>
+      <button class="danger" title=${needs("admin")} disabled=${!st || st.state !== "running" || !canDo("admin")} onClick=${() => post("/replay/stop").catch(e => ctx.setLiveErr(e.message))}>Stop</button></div>
     <div class="small muted" style=${{ marginTop: "8px" }}>Model <span class="mono">${model.version}</span><br/>alert when LSTM p ≥ ${fmt(model.lstm_threshold, 4)} (validation-selected)</div>
   </section>`;
 }
@@ -1137,6 +1148,8 @@ function Sidebar({ page, st, counts }) {
       <span class=${"chip " + (st ? st.state : "idle")}>${st ? st.state + (st.state === "running" ? ` · ${st.speed}×` : "") : "idle"}</span>
       <div class="small muted">sim clock <span class="mono">${st && st.sim_time ? t(st.sim_time).slice(11) : "–"}</span></div>
       <a class="small muted" href="/classic">classic view</a>
+      ${ME.auth_enabled && html`<div class="small muted">${ME.user} (${ME.role}) · <a class="muted" href="#" onClick=${async e => {
+        e.preventDefault(); await fetch("/auth/logout", { method: "POST" }); location.assign("/login"); }}>sign out</a></div>`}
     </div>
   </nav>`;
 }
@@ -1150,6 +1163,8 @@ function App() {
 
   useEffect(() => {
     (async () => {
+      ME = await api("/auth/me");
+      if (ME.auth_enabled && !ME.user) { location.assign("/login"); return; }
       const [cfg, ds, model, ev, feats, models] = await Promise.all([api("/risk/config"), api("/dataset/status"), api("/model/status"),
         api("/evaluation"), api("/features"), api("/models")]);
       setBoot({ cfg, ds, model, ev, feats, models });

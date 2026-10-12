@@ -8,6 +8,8 @@ def _api_key(monkeypatch):
     """POST /alerts is disabled unless a key is configured; the tests configure one."""
     monkeypatch.setenv("AEGISFLOW_API_KEY", "test-key")
     monkeypatch.delenv("AEGISFLOW_LEDGER_KEY", raising=False)
+    for name in ("AEGISFLOW_AUTH", "AEGISFLOW_AUTH_SECRET", "AEGISFLOW_ENV", "AEGISFLOW_RATE_LIMITS"):
+        monkeypatch.delenv(name, raising=False)  # tests run in local mode unless they build Settings themselves
 
 
 def build_synthetic_sequences(seed: int = 7, seq_len: int = 5):

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AegisFlow Sign-in</title>
+<meta name="color-scheme" content="dark">
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .signin { max-width: 460px; margin: 12vh auto 0; padding: 0 16px; }
+  .signin textarea { width: 100%; box-sizing: border-box; min-height: 96px; font: 12px/1.4 ui-monospace, monospace;
+                     color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+</style>
+</head>
+<body>
+<main class="signin">
+  <section class="card">
+    <h2>Sign in to AegisFlow</h2>
+    <p class="small muted">Paste the access token an administrator issued you. It is kept in an HttpOnly cookie
+      until it expires.</p>
+    <form id="f">
+      <label class="small muted" for="token">Access token</label>
+      <textarea id="token" autocomplete="off" spellcheck="false" required></textarea>
+      <div class="row" style="margin-top:10px"><button class="primary" type="submit">Sign in</button></div>
+      <div id="msg" class="err small" role="alert" style="margin-top:8px"></div>
+    </form>
+  </section>
+</main>
+<script>
+"use strict";
+(async () => {
+  const me = await fetch("/auth/me").then(r => r.json()).catch(() => null);
+  if (me && (!me.auth_enabled || me.user)) location.replace("/");  // local mode, or already signed in
+})();
+document.getElementById("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  const msg = document.getElementById("msg");
+  msg.textContent = "";
+  const r = await fetch("/auth/session", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: document.getElementById("token").value.trim() }) });
+  if (r.ok) { location.replace("/"); return; }
+  let detail = r.status;
+  try { detail = (await r.json()).detail || detail; } catch (_) { /* not JSON */ }
+  msg.textContent = typeof detail === "string" ? detail : "sign-in failed";
+});
+</script>
+</body>
+</html>

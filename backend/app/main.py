@@ -4,6 +4,7 @@ from __future__ import annotations
 import hmac
 import os
 import threading
+import time
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -19,9 +20,18 @@ from . import features, info, live
 from .analyst import ActionError, AnalystLog
 from .audit import Ledger
 from .replay import ReplayEngine
+from .security import COOKIE, BodySizeLimit, BoundedRunner, Principal, Security, Settings, require, verify_token
 
 ROOT = Path(__file__).resolve().parents[2]
 MAX_UPLOAD_BYTES = 200 * 2**20
+MAX_STREAM_BODY_BYTES = 20 * 2**20  # POST /stream/flows
+MAX_BODY_BYTES = 2**20  # every other request body
+
+
+def body_limit(path: str) -> int:
+    if path == "/ingest/upload":
+        return MAX_UPLOAD_BYTES + 2**20  # multipart framing around the file
+    return MAX_STREAM_BODY_BYTES if path == "/stream/flows" else MAX_BODY_BYTES
 
 
 class ReplayStart(BaseModel):
@@ -30,15 +40,20 @@ class ReplayStart(BaseModel):
 
 
 class ActionIn(BaseModel):
-    action: str
-    analyst: str
-    note: str | None = None
-    response: str | None = None
-    stage: str | None = None
+    action: str = Field(max_length=32)
+    # Local mode only: with authentication on, the analyst is the signed-in user and this field is ignored.
+    analyst: str | None = Field(None, max_length=64)
+    note: str | None = Field(None, max_length=2000)
+    response: str | None = Field(None, max_length=2000)
+    stage: str | None = Field(None, max_length=64)
 
 
 class StreamFlows(BaseModel):
-    flows: list[dict[str, Any]]
+    flows: list[dict[str, Any]] = Field(max_length=50_000)
+
+
+class SessionIn(BaseModel):
+    token: str = Field(max_length=4096)
 
 
 Prob = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
@@ -94,11 +109,22 @@ def default_db_path() -> Path:
     return ROOT / url.replace("sqlite:///", "")
 
 
-def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastAPI:
+def create_app(db_path: str | Path | None = None, warm_up: bool = True, settings: Settings | None = None) -> FastAPI:
+    # Read and check the access-control settings first: an incomplete production configuration stops here,
+    # before the ledger is opened (see security.py).
+    settings = settings or Settings.from_env()
+    security = Security(settings)
     app = FastAPI(title="AegisFlow demo API", version="0.1.0")
     # Compress JSON and the dashboard assets (the JS/CSS and vendored React are ~300 KB raw). Starlette skips
     # text/event-stream by default, so /live is not buffered.
     app.add_middleware(GZipMiddleware, minimum_size=1024)
+    app.add_middleware(BodySizeLimit, limit_for=body_limit)
+    app.middleware("http")(security.middleware)
+    app.state.security = security
+    uploads = BoundedRunner("upload", workers=1, timeout_s=settings.upload_timeout_s)
+    inference = BoundedRunner("inference", workers=2, timeout_s=settings.inference_timeout_s)
+    analyst_role = Depends(require("analyst", bucket="write"))
+    admin_role = Depends(require("admin", bucket="write"))
     ledger = Ledger(db_path or default_db_path())
     engine = ReplayEngine(ledger)
     analyst = AnalystLog(ledger, list(load_config().stages.stages_order))
@@ -125,6 +151,35 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     def classic_dashboard() -> FileResponse:
         """The original single-file dashboard, kept as a fallback."""
         return FileResponse(static / "classic.html")
+
+    @app.get("/login", include_in_schema=False)
+    def login_page() -> FileResponse:
+        return FileResponse(static / "login.html")
+
+    # ---- sign-in; see security.py. In local mode these report that no sign-in is needed.
+    @app.get("/auth/me")
+    def auth_me(request: Request) -> dict[str, Any]:
+        p: Principal | None = getattr(request.state, "principal", None)
+        return {"auth_enabled": settings.auth, "user": p.user if p else None, "role": p.role if p else None}
+
+    @app.post("/auth/session")
+    def auth_session(body: SessionIn, request: Request) -> JSONResponse:
+        """Exchange a signed token for an HttpOnly session cookie (what the dashboard sign-in page does)."""
+        if not settings.auth:
+            raise HTTPException(409, "authentication is off (local mode); no sign-in needed")
+        client = request.client.host if request.client else "?"
+        security.check_rate("login", client)
+        p, exp = verify_token(settings.secret, body.token.strip())
+        resp = JSONResponse({"auth_enabled": True, "user": p.user, "role": p.role})
+        resp.set_cookie(COOKIE, body.token.strip(), max_age=max(1, exp - int(time.time())),
+                        httponly=True, samesite="strict", secure=settings.production, path="/")
+        return resp
+
+    @app.post("/auth/logout")
+    def auth_logout() -> JSONResponse:
+        resp = JSONResponse({"signed_out": True})
+        resp.delete_cookie(COOKIE, path="/", httponly=True, samesite="strict", secure=settings.production)
+        return resp
 
     # Dashboard assets, including the vendored React / htm builds (no CDN, so the demo works offline).
     app.mount("/static", StaticFiles(directory=static), name="static")
@@ -199,7 +254,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
             raise HTTPException(404, "no robustness report; run scripts/evaluation/robustness_eval.py")
         return out
 
-    @app.post("/replay/start")
+    @app.post("/replay/start", dependencies=[admin_role])
     def replay_start(req: ReplayStart | None = None) -> dict[str, Any]:
         req = req or ReplayStart()
         try:
@@ -209,7 +264,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         except RuntimeError as exc:
             raise HTTPException(409, str(exc))
 
-    @app.post("/replay/stop")
+    @app.post("/replay/stop", dependencies=[admin_role])
     def replay_stop() -> dict[str, Any]:
         return engine.stop()
 
@@ -228,38 +283,41 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
             raise HTTPException(404, f"host {host_id} not seen in the current replay")
         return h | {"alerts_list": engine.with_anomaly(ledger.list(limit=200, host_id=host_id, session_id=engine.session_id))}
 
-    @app.get("/explain/{sequence_id}")
-    def explain(sequence_id: str, model: str = "lstm", method: str = "shap", top: int = 5) -> dict[str, Any]:
+    inference_role = Depends(require("viewer", bucket="inference"))
+
+    @app.get("/explain/{sequence_id}", dependencies=[inference_role])
+    async def explain(sequence_id: str, model: str = "lstm", method: str = "shap", top: int = 5) -> dict[str, Any]:
         """Per-feature / per-time-step attribution of one test-split prediction."""
         if model not in {"lstm", "logistic_regression"} or method not in {"shap", "integrated_gradients"}:
             raise HTTPException(422, "model must be lstm|logistic_regression, method shap|integrated_gradients")
         try:
-            out = engine.explain(sequence_id, model=model, method=method, top=max(1, min(top, 28)))
+            out = await inference.run(engine.explain, sequence_id, model=model, method=method,
+                                      top=max(1, min(top, 28)))
         except ImportError:
             raise HTTPException(501, "SHAP is not installed (pip install shap); use method=integrated_gradients")
         if out is None:
             raise HTTPException(404, f"sequence {sequence_id} is not in the replayed test split")
         return out
 
-    @app.get("/forecast/{sequence_id}")
-    def forecast(sequence_id: str) -> dict[str, Any]:
+    @app.get("/forecast/{sequence_id}", dependencies=[inference_role])
+    async def forecast(sequence_id: str) -> dict[str, Any]:
         """Stage distribution, MITRE tactic and K-step future state from the opt-in multi-task model."""
         try:
-            out = engine.forecast(sequence_id)
+            out = await inference.run(engine.forecast, sequence_id)
         except LookupError as exc:
             raise HTTPException(409, f"{exc}; train one with `python -m aegisflow train-multitask`")
         if out is None:
             raise HTTPException(404, f"sequence {sequence_id} is not in the replayed test split")
         return out
 
-    @app.get("/attention/{sequence_id}")
-    def attention(sequence_id: str, model: str) -> dict[str, Any]:
+    @app.get("/attention/{sequence_id}", dependencies=[inference_role])
+    async def attention(sequence_id: str, model: str) -> dict[str, Any]:
         """Per-window attention weights of a trained attention_lstm / transformer model (see GET /models)."""
         model_dir = (features.MODELS_DIR / model).resolve()
         if model_dir.parent != features.MODELS_DIR.resolve() or not (model_dir / "best.pt").exists():
             raise HTTPException(404, f"no trained model named {model!r} in artifacts/models")
         try:
-            out = engine.attention(sequence_id, model_dir)
+            out = await inference.run(engine.attention, sequence_id, model_dir)
         except ValueError as exc:
             raise HTTPException(422, str(exc))
         if out is None:
@@ -304,7 +362,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
                 app.state.stream = StreamScorer(model_dir, cfg, allowed_lateness=float(st.get("allowed_lateness_seconds") or 0))
             return app.state.stream
 
-    @app.post("/stream/flows")
+    @app.post("/stream/flows", dependencies=[Depends(require("analyst", bucket="inference"))])
     def stream_flows(body: StreamFlows) -> dict[str, Any]:
         """Push canonical flow records (JSON objects with the aegisflow.schema columns), oldest first.
         Returns the host sequences scored because a window closed. Nothing is written to the ledger."""
@@ -322,7 +380,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         scored = stream_scorer().push(coerce_canonical_frame(df))
         return {"scored": scored, "status": stream_scorer().status()}
 
-    @app.post("/stream/flush")
+    @app.post("/stream/flush", dependencies=[analyst_role])
     def stream_flush() -> dict[str, Any]:
         return {"scored": stream_scorer().flush(), "status": stream_scorer().status()}
 
@@ -335,7 +393,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         rows = [r for r in stream_scorer().results if r["predicted_attack"] or not alerts_only]
         return rows[::-1][:max(1, min(limit, 1000))]
 
-    @app.post("/ingest/upload")
+    @app.post("/ingest/upload", dependencies=[Depends(require("analyst", bucket="upload"))])
     async def ingest_upload(file: UploadFile, kind: str = "auto", reset: bool = True) -> dict[str, Any]:
         """Upload a packet capture (kind=pcap) or NetFlow v5/v9/IPFIX export capture / nfdump CSV
         (kind=netflow), turn it into flows and play them through the streaming scorer.
@@ -350,31 +408,38 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         data = await file.read(MAX_UPLOAD_BYTES + 1)
         if len(data) > MAX_UPLOAD_BYTES:
             raise HTTPException(413, f"file larger than {MAX_UPLOAD_BYTES // 2**20} MB; use the CLI for big captures")
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / f"upload{suffix or '.bin'}"
-            path.write_bytes(data)
-            try:
-                if kind == "pcap":
-                    from aegisflow.ml.ingestion.pcap import pcap_to_flows
-                    flows = pcap_to_flows(path)
-                else:
-                    from aegisflow.ml.ingestion.netflow import netflow_to_flows
-                    flows = netflow_to_flows(path)
-            except ImportError as exc:
-                raise HTTPException(501, f"PCAP reader not installed: {exc}")
-            except Exception as exc:  # malformed capture: report it, never crash the server
-                raise HTTPException(422, f"could not read {file.filename} as {kind}: {exc}")
-        scorer = stream_scorer()
-        if reset:
-            scorer.reset()
-        scored = scorer.push(flows.sort_values("timestamp")) if len(flows) else []
-        scored += scorer.flush()
+
+        def parse_and_score() -> tuple[Any, list[dict[str, Any]], Any]:
+            # Runs on the upload worker (one at a time, with a deadline) so a large capture does not block
+            # the event loop that serves the dashboard and /live.
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / f"upload{suffix or '.bin'}"
+                path.write_bytes(data)
+                try:
+                    if kind == "pcap":
+                        from aegisflow.ml.ingestion.pcap import pcap_to_flows
+                        flows = pcap_to_flows(path)
+                    else:
+                        from aegisflow.ml.ingestion.netflow import netflow_to_flows
+                        flows = netflow_to_flows(path)
+                except ImportError as exc:
+                    raise HTTPException(501, f"PCAP reader not installed: {exc}")
+                except Exception as exc:  # malformed capture: report it, never crash the server
+                    raise HTTPException(422, f"could not read {file.filename} as {kind}: {exc}")
+            scorer = stream_scorer()
+            if reset:
+                scorer.reset()
+            scored = scorer.push(flows.sort_values("timestamp")) if len(flows) else []
+            scored += scorer.flush()
+            return flows, scored, scorer
+
+        flows, scored, scorer = await uploads.run(parse_and_score)
         return {"file": file.filename, "kind": kind, "flows": int(len(flows)),
                 "source_hosts": int(flows["source_ip"].nunique()) if len(flows) else 0,
                 "sequences_scored": len(scored), "alerts": sum(int(r["predicted_attack"]) for r in scored),
                 "status": scorer.status()}
 
-    @app.post("/stream/reset")
+    @app.post("/stream/reset", dependencies=[admin_role])
     def stream_reset() -> dict[str, Any]:
         stream_scorer().reset()
         return stream_scorer().status()
@@ -394,10 +459,13 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
 
     # ---- analyst review; see backend/app/analyst.py
     @app.post("/alerts/{alert_id}/actions", status_code=201)
-    def add_action(alert_id: int, body: ActionIn) -> dict[str, Any]:
-        """Record an analyst decision on an alert. Approving a response records it; nothing is executed."""
+    def add_action(alert_id: int, body: ActionIn,
+                   who: Principal = Depends(require("analyst", bucket="write"))) -> dict[str, Any]:
+        """Record an analyst decision on an alert. Approving a response records it; nothing is executed.
+        With authentication on, the analyst recorded is the signed-in user, never the request's `analyst`."""
+        name = who.user if who.user is not None else (body.analyst or "")
         try:
-            return analyst.record(alert_id, body.action, body.analyst, note=body.note, response=body.response,
+            return analyst.record(alert_id, body.action, name, note=body.note, response=body.response,
                                   stage=body.stage)
         except LookupError as exc:
             raise HTTPException(404, str(exc))

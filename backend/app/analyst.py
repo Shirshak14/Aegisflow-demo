@@ -16,8 +16,9 @@ Status of an alert = result of its latest status-changing action (``open`` if no
   override_stage    any status, status unchanged    (needs ``stage`` from stages.yaml stages_order)
   comment           any status, status unchanged    (needs ``note``)
 
-Known limit: there is no authentication, so ``analyst`` is self-declared; put the API behind the
-SOC's SSO before relying on names.
+Who is recorded as ``analyst``: with authentication on (see security.py) the API passes the signed-in
+user from the verified token and ignores any name in the request. In local mode (no sign-in, this machine
+only) the name is self-declared, as typed in the dashboard.
 """
 from __future__ import annotations
 
