@@ -41,7 +41,7 @@ import pandas as pd
 from aegisflow.config import load_config
 from aegisflow.ml.calibration import CALIBRATION_FILE, load_calibrator
 from aegisflow.ml.modeling import ForecastDataset, LSTMForecaster, score_batched
-from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES
+from aegisflow.ml.temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES, feature_array
 
 from .audit import Ledger
 from .info import DATA_DIR, MODEL_DIR, ROOT, model_version
@@ -146,7 +146,7 @@ class ReplayEngine:
         calibrator = load_calibrator(MODEL_DIR)
         conf = calibrator.transform(lstm_p).astype(float) if calibrator else lstm_p
         std = list(STANDARD_NUMERIC_WINDOW_FEATURES)
-        raw_last = np.stack([np.stack(v)[-1] for v in frame.sequence_features])
+        raw_last = feature_array(frame.sequence_features, n_features=len(std))[:, -1].astype(np.float64)
         if self.stage_model_dir is not None:
             from aegisflow.ml.multitask import MultiTaskPredictor
             sp = MultiTaskPredictor(self.stage_model_dir).predict(data.X)

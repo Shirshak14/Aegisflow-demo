@@ -23,7 +23,7 @@ from sklearn.metrics import (
 from sklearn.preprocessing import RobustScaler
 import joblib
 
-from .temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES
+from .temporal.sequences import STANDARD_NUMERIC_WINDOW_FEATURES, feature_array
 
 # These two host-window values are computed from dataset labels, not traffic
 # observations. They are useful annotations but unavailable to an unlabeled
@@ -62,9 +62,8 @@ class ForecastDataset:
             raise ValueError(f"Sequence table missing required columns: {sorted(missing)}")
         raw_names = list(STANDARD_NUMERIC_WINDOW_FEATURES)
         names = list(MODEL_FEATURES)
-        # PyArrow round-trips list<list<float>> as a NumPy object array of row arrays.
-        X = np.stack([np.asarray(np.asarray(x).tolist(), dtype=np.float32) for x in frame.sequence_features])
-        ystate = np.stack([np.asarray(np.asarray(x).tolist(), dtype=np.float32) for x in frame.target_features])
+        X = feature_array(frame.sequence_features, n_features=len(raw_names))
+        ystate = feature_array(frame.target_features)
         if X.ndim != 3 or X.shape[2] != len(raw_names) or ystate.shape != (len(frame), len(raw_names)):
             raise ValueError(f"Unexpected feature tensor shapes: X={X.shape}, target={ystate.shape}")
         X = X[:, :, [raw_names.index(name) for name in names]]

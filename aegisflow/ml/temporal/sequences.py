@@ -17,6 +17,7 @@ Strict Anti-Leakage Constraints:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -60,6 +61,14 @@ STANDARD_NUMERIC_WINDOW_FEATURES: tuple[str, ...] = (
     "attack_flow_ratio",
     "benign_flow_ratio",
 )
+
+
+# On-disk layouts of the two feature columns in sequences.parquet. "nested" (the default, and what
+# every committed file uses) stores list<list<double>> per row. "arrays" stores one fixed-size float32
+# list per row (the L x F input matrix flattened row by row), which is smaller and much faster to read.
+# Both load through ``feature_array``.
+SEQUENCE_FORMATS: tuple[str, ...] = ("nested", "arrays")
+FEATURE_COLUMNS: tuple[str, ...] = ("sequence_features", "target_features")
 
 
 @dataclass
@@ -144,84 +153,86 @@ def build_host_sequences(
     # Sort strictly by host and window_start
     clean_df = clean_df.sort_values(["host_id", "window_start"]).reset_index(drop=True)
 
-    records: list[dict[str, Any]] = []
+    # Whole-table arrays, read once. Hosts are contiguous row ranges after the sort above.
+    clean_df = clean_df[clean_df["host_id"].notna()].reset_index(drop=True)
+    feat_matrix = clean_df[feat_cols].to_numpy(dtype=np.float32)
+    start_ns = clean_df["window_start"].to_numpy(dtype="datetime64[ns]")
+    end_ns = clean_df["window_end"].to_numpy(dtype="datetime64[ns]")
+    attack_presents = clean_df["attack_present"].to_numpy()
+    attack_cum = np.concatenate([[0], np.cumsum(attack_presents != 0)])
+    host_values = clean_df["host_id"].to_numpy()
+    bounds = np.flatnonzero(clean_df["host_id"].ne(clean_df["host_id"].shift()).to_numpy())
+    bounds = np.append(bounds, len(clean_df))
 
-    # Process each host independently to guarantee zero cross-host leakage
-    for host_id, host_group in clean_df.groupby("host_id", sort=False):
-        n_windows = len(host_group)
+    seq_rows: list[np.ndarray] = []  # row of each sequence's first input window
+    target_rows: list[np.ndarray] = []
+    seq_local: list[np.ndarray] = []  # i in "<host>_seq_<i>"
+
+    # Each host independently (row ranges never cross hosts) to guarantee zero cross-host leakage
+    for lo, hi in zip(bounds[:-1].tolist(), bounds[1:].tolist()):
+        n_windows = hi - lo
         if n_windows < L + 1:
             # Not enough chronological windows for this host to form a sequence + future target
             continue
+        starts_h, ends_h = start_ns[lo:hi], end_ns[lo:hi]
+        if np.any(starts_h[1:] < starts_h[:-1]) or np.any(ends_h[1:] < ends_h[:-1]):
+            raise ValueError(f"Host windows are not chronological for host {host_values[lo]}")
 
-        host_group_sorted = host_group.sort_values("window_start").reset_index(drop=True)
-        feat_matrix = host_group_sorted[feat_cols].to_numpy(dtype=np.float32)
+        starts = np.arange(0, n_windows - L + 1, step)
+        final_idx = starts + L - 1
+        # Horizon is the one-based rank among windows whose start is strictly after the final
+        # input end. Starts are sorted, so those windows are one contiguous run from the first
+        # index past both the final input window and seq_end. With 60s windows/30s stride,
+        # horizon=1 skips the next overlapping windows and selects the first non-overlap.
+        first_eligible = np.maximum(final_idx + 1, np.searchsorted(starts_h, ends_h[final_idx], side="right"))
+        target_idx = first_eligible + H - 1
+        keep = target_idx < n_windows
+        seq_rows.append(lo + starts[keep])
+        target_rows.append(lo + target_idx[keep])
+        seq_local.append(starts[keep])
 
-        window_starts = host_group_sorted["window_start"].values
-        window_ends = host_group_sorted["window_end"].values
-        attack_presents = host_group_sorted["attack_present"].values
-        dom_classes = host_group_sorted["dominant_class"].values
-        dom_stages = host_group_sorted["dominant_stage"].values
-        stage_dists = host_group_sorted["stage_distribution"].values
-        confidences = host_group_sorted["label_confidence"].values
+    if not seq_rows or sum(len(r) for r in seq_rows) == 0:
+        seq_df = pd.DataFrame()
+    else:
+        first_rows = np.concatenate(seq_rows)
+        tgt = np.concatenate(target_rows)
+        input_rows = first_rows[:, None] + np.arange(L)
+        final_rows = first_rows + L - 1
 
-        parsed_starts = pd.to_datetime(window_starts)
-        parsed_ends = pd.to_datetime(window_ends)
-        if not parsed_starts.is_monotonic_increasing or not parsed_ends.is_monotonic_increasing:
-            raise ValueError(f"Host windows are not chronological for host {host_id}")
+        # Explicit strict no-overlap and future-order validation against every input window end.
+        target_starts = start_ns[tgt]
+        if np.any(target_starts <= end_ns[input_rows].max(axis=1)):
+            bad = int(np.flatnonzero(target_starts <= end_ns[input_rows].max(axis=1))[0])
+            raise ValueError(
+                f"Temporal leakage detected: target_start ({pd.Timestamp(target_starts[bad])}) is not after "
+                f"sequence input window end ({pd.Timestamp(end_ns[final_rows[bad]])}) for host {host_values[first_rows[bad]]}."
+            )
 
-        for i in range(0, n_windows - L + 1, step):
-            in_slice = slice(i, i + L)
-            final_input_idx = i + L - 1
-            seq_end = pd.Timestamp(window_ends[final_input_idx])
-            # Horizon is the one-based rank among windows whose start is strictly
-            # after the final input end. With 60s windows/30s stride, horizon=1
-            # skips the next overlapping windows and selects the first non-overlap.
-            eligible = np.flatnonzero(parsed_starts[final_input_idx + 1:] > seq_end) + final_input_idx + 1
-            if len(eligible) < H:
-                continue
-            target_idx = int(eligible[H - 1])
-            input_ends = parsed_ends[in_slice]
-            if pd.Timestamp(window_starts[target_idx]) <= input_ends.max():
-                raise ValueError(f"Overlapping target window detected for host {host_id}")
-
-            input_features = feat_matrix[in_slice].tolist()  # shape (L, len(feat_cols))
-            target_features = feat_matrix[target_idx].tolist()  # shape (len(feat_cols),)
-
-            seq_start = pd.Timestamp(window_starts[i])
-            seq_end = pd.Timestamp(window_ends[final_input_idx])
-            target_start = pd.Timestamp(window_starts[target_idx])
-            target_end = pd.Timestamp(window_ends[target_idx])
-
-            # Explicit strict no-overlap and future-order validation.
-            if target_start <= seq_end:
-                raise ValueError(
-                    f"Temporal leakage detected: target_start ({target_start}) is not after "
-                    f"sequence input window end ({seq_end}) for host {host_id}."
-                )
-
-            records.append({
-                "sequence_id": f"{host_id}_seq_{i}",
-                "host_id": str(host_id),
-                "target_host_id": str(host_id),
-                "seq_start_time": seq_start,
-                "seq_end_time": seq_end,
-                "target_window_start": target_start,
-                "target_window_end": target_end,
-                "forecast_horizon": H,
-                "sequence_length": L,
-                "sequence_features": input_features,
-                "target_features": target_features,
-                "target_attack_present": int(attack_presents[target_idx]),
-                "target_dominant_class": str(dom_classes[target_idx]),
-                "target_dominant_stage": str(dom_stages[target_idx]),
-                "target_stage_distribution": str(stage_dists[target_idx]),
-                "target_label_confidence": str(confidences[target_idx]),
-                # Onset: attack target with no attack in ANY input window. Positives that are
-                # not onsets are continuations of an attack already visible in the input.
-                "target_is_onset": bool(attack_presents[target_idx]) and not bool(np.any(attack_presents[in_slice])),
-            })
-
-    seq_df = pd.DataFrame(records)
+        # Onset: attack target with no attack in ANY input window. Positives that are
+        # not onsets are continuations of an attack already visible in the input.
+        input_has_attack = (attack_cum[first_rows + L] - attack_cum[first_rows]) > 0
+        target_attack = attack_presents[tgt]
+        hosts = [str(h) for h in host_values[first_rows]]
+        seq_df = pd.DataFrame({
+            "sequence_id": [f"{h}_seq_{i}" for h, i in zip(hosts, np.concatenate(seq_local).tolist())],
+            "host_id": hosts,
+            "target_host_id": hosts,
+            "seq_start_time": clean_df["window_start"].to_numpy()[first_rows],
+            "seq_end_time": clean_df["window_end"].to_numpy()[final_rows],
+            "target_window_start": clean_df["window_start"].to_numpy()[tgt],
+            "target_window_end": clean_df["window_end"].to_numpy()[tgt],
+            "forecast_horizon": H,
+            "sequence_length": L,
+            # Python lists of float32 values, shape (L, n_features) and (n_features,), as before.
+            "sequence_features": feat_matrix[input_rows].tolist(),
+            "target_features": feat_matrix[tgt].tolist(),
+            "target_attack_present": target_attack.astype(np.int64),
+            "target_dominant_class": _as_str(clean_df["dominant_class"].to_numpy()[tgt]),
+            "target_dominant_stage": _as_str(clean_df["dominant_stage"].to_numpy()[tgt]),
+            "target_stage_distribution": _as_str(clean_df["stage_distribution"].to_numpy()[tgt]),
+            "target_label_confidence": _as_str(clean_df["label_confidence"].to_numpy()[tgt]),
+            "target_is_onset": (target_attack != 0) & ~input_has_attack,
+        })
     if not seq_df.empty:
         seq_df = seq_df.sort_values(["seq_start_time", "host_id"]).reset_index(drop=True)
 
@@ -235,3 +246,49 @@ def build_host_sequences(
         target_benign_sequences=int((seq_df["target_attack_present"] == 0).sum()) if not seq_df.empty else 0,
     )
     return seq_df
+
+
+def _as_str(values: np.ndarray) -> np.ndarray:
+    return np.array([str(v) for v in values], dtype=object)
+
+
+def feature_array(values: pd.Series | list, n_features: int | None = None) -> np.ndarray:
+    """Stack a sequence_features or target_features column into one float32 array.
+
+    Accepts every form the column takes: Python lists (as built), PyArrow's object array of float row
+    arrays per row (nested format read from Parquet) and flat float rows (arrays format). Pass
+    ``n_features`` for sequence_features so flat rows are reshaped to (n, sequence_length, n_features).
+    """
+    rows = list(values)
+    if not rows:
+        raise ValueError("no feature rows to stack")
+    first = rows[0]
+    if isinstance(first, np.ndarray) and first.dtype == object:
+        out = np.stack([np.asarray(r.tolist(), dtype=np.float32) for r in rows])
+    elif isinstance(first, np.ndarray):
+        out = np.stack(rows).astype(np.float32, copy=False)
+    else:
+        out = np.asarray(rows, dtype=np.float32)
+    if n_features is not None and out.ndim == 2:
+        out = out.reshape(len(out), -1, n_features)
+    return out
+
+
+def write_sequences(seq_df: pd.DataFrame, path: Path, *, sequence_format: str = "nested") -> None:
+    """Write the sequence table to Parquet in the given feature-column layout (see SEQUENCE_FORMATS)."""
+    if sequence_format not in SEQUENCE_FORMATS:
+        raise ValueError(f"sequence_format must be one of {SEQUENCE_FORMATS}, got {sequence_format!r}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if sequence_format == "nested" or seq_df.empty:
+        seq_df.to_parquet(path, index=False)
+        return
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    table = pa.Table.from_pandas(seq_df.drop(columns=list(FEATURE_COLUMNS)), preserve_index=False)
+    for name in FEATURE_COLUMNS:
+        arr = feature_array(seq_df[name])
+        flat = arr.reshape(len(arr), -1)
+        column = pa.FixedSizeListArray.from_arrays(pa.array(flat.ravel()), flat.shape[1])
+        table = table.add_column(list(seq_df.columns).index(name), name, column)
+    pq.write_table(table, path)
