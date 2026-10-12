@@ -572,6 +572,7 @@ function AlertDetail({ id, cfg, feats, models, onChange }) {
   const lstmMax = Math.max(a.lstm_probability, a.lstm_threshold, 1e-9);
   const hasLr = a.lr_probability !== null && a.lr_probability !== undefined;
   const hasRule = a.reference_rule_flag !== null && a.reference_rule_flag !== undefined;
+  const hasAnom = a.anomaly_flag !== null && a.anomaly_flag !== undefined;
   return html`<${React.Fragment}>
     <section class="card span5 alert-detail">
       <div class="hero">
@@ -591,6 +592,8 @@ function AlertDetail({ id, cfg, feats, models, onChange }) {
           title=${stageModel ? "From the multi-task stage head" : "No stage model configured: binary attack detector only"}/>
         ${hasLr && html`<${Chip} label="Logistic regression" value=${a.lr_flag ? "also flags" : "does not flag"} tone=${a.lr_flag ? "bad" : "dim"}
           title=${`p = ${fmt(a.lr_probability, 4)}, threshold ${fmt(a.lr_threshold, 5)}`}/>`}
+        ${hasAnom && html`<${Chip} label="Anomaly model" value=${a.anomaly_flag ? "also flags" : "does not flag"} tone=${a.anomaly_flag ? "bad" : "dim"}
+          title=${`Label-free isolation forest, second opinion only: score ${fmt(a.anomaly_score, 4)}, threshold ${fmt(a.anomaly_threshold, 4)}, set on benign training traffic only`}/>`}
         ${hasRule && html`<${Chip} label="Reference rule" value=${a.reference_rule_flag ? "under attack" : "not under attack"} tone="dim"
           title="Last input window per dataset labels; comparison only"/>`}
       </div>
@@ -669,6 +672,7 @@ function OverviewPage({ ctx }) {
       <div class="small muted">of ${ds.hosts.toLocaleString()} in dataset · test split ${ds.split.test_sequences.toLocaleString()} sequences</div></section>
     <section class="card span3"><h2>Alerts this replay</h2><div class="big"><${FX.CountUp} value=${st ? st.alerts_emitted : 0}/></div>
       <div class="small muted">${st && st.alerts_emitted ? `${tp} match an attack label, ${st.alerts_emitted - tp} benign` : " "}</div>
+      ${st && st.anomaly && st.alerts_emitted > 0 && html`<div class="small muted"><a href="#/alerts">${st.anomaly.alerts_both_models} also flagged by the anomaly model</a></div>`}
       <div class="small muted">${triageLine}</div></section>
     <section class="card span3"><h2>Replay</h2><div class="big"><${FX.CountUp} value=${pct}/>%</div>
       <div class="bar"><div style=${{ width: pct + "%" }}></div></div>
@@ -704,31 +708,61 @@ function OverviewPage({ ctx }) {
 }
 
 const LEVEL_FILTERS = ["all", "high", "medium", "low"];
+const AGREE_FILTERS = { all: "All", both: "Both models", lstm_only: "LSTM only" };
+// Second-opinion summary: how many alerts the label-free anomaly model also flags, and how many of each group are real attacks.
+function AgreementCard({ alerts, rule }) {
+  const an = useLoad(() => api("/evaluation/anomaly").catch(() => null), []);
+  const scored = alerts.filter(a => a.anomaly_flag !== null && a.anomaly_flag !== undefined);
+  const both = scored.filter(a => a.anomaly_flag), only = scored.filter(a => !a.anomaly_flag);
+  const atk = xs => xs.filter(a => a.truth_attack === 1).length;
+  const pct = (k, n) => n ? `${Math.round(k / n * 100)}%` : "–";
+  const rows = an.data ? an.data.rows : [], lstm = rows[0], iso = rows.find(r => r.model === "Isolation forest");
+  return html`<section class="card span12 honest"><h2>Second opinion: label-free anomaly model</h2>
+    <div class="stats">
+      <${Stat} label="Both models flag" value=${both.length} sub=${`${atk(both)} match an attack label (${pct(atk(both), both.length)})`}/>
+      <${Stat} label="LSTM only" value=${only.length} sub=${`${atk(only)} match an attack label (${pct(atk(only), only.length)})`}/>
+    </div>
+    <div class="note" style=${{ marginTop: "12px" }}>The LSTM alone raises alerts; the anomaly model never adds or removes one, so the alert count is unchanged.
+      It is an isolation forest fit on benign training traffic only, flagging a sequence when its score reaches ${rule || "a threshold set on that traffic"}.
+      ${iso && lstm ? ` On the test split it ranks attacks better than the LSTM (ROC-AUC ${fmt(iso.roc_auc, 2)} vs ${fmt(lstm.roc_auc, 2)}) and leans less on the attacker host,
+      but at the same false-alarm rate it does not catch more attacks (recall ${fmt(iso.at_lstm_fpr.recall * 100, 1)}% vs ${fmt(lstm.at_lstm_fpr.recall * 100, 1)}%). ` :
+      " It ranks attacks better than the LSTM but does not catch more attacks at the same false-alarm rate (reports/anomaly_report.md). "}
+      Agreement is a triage hint, not proof. The attack-label counts use dataset ground truth and are for evaluation only.</div>
+  </section>`;
+}
+
 function AlertsPage({ ctx }) {
-  const { boot: { cfg }, live: { statuses }, alerts } = ctx;
-  const [lvl, setLvl] = useState("all"), [status, setStatus] = useState("all"), [q, setQ] = useState("");
+  const { boot: { cfg, feats }, live: { statuses, st }, alerts } = ctx;
+  const [lvl, setLvl] = useState("all"), [status, setStatus] = useState("all"), [q, setQ] = useState(""), [agree, setAgree] = useState("all");
+  const anom = feats.anomaly_model && feats.anomaly_model.available;
   const rows = alerts.filter(a => (lvl === "all" || levelOf(a.risk_score, cfg) === lvl)
-    && (status === "all" || (statuses[a.id] || "open") === status) && (!q || a.host_id.includes(q.trim())));
+    && (status === "all" || (statuses[a.id] || "open") === status) && (!q || a.host_id.includes(q.trim()))
+    && (!anom || agree === "all" || (agree === "both") === (a.anomaly_flag === true)));
+  const cols = anom ? 10 : 9;
   return html`<main class="page">
     <${PageHead} title="Alerts" desc="Every alert in the current replay session, newest first. Open one to see why it fired and to review it."/>
+    ${anom && alerts.length > 0 && html`<${AgreementCard} alerts=${alerts} rule=${st && st.anomaly && st.anomaly.threshold_rule}/>`}
     <section class="card span12">
       <div class="filters">
         <div class="segctl" role="group" aria-label="risk level"><span class="segctl-k">Risk</span>${LEVEL_FILTERS.map(k =>
           html`<button key=${k} class=${lvl === k ? "on" : ""} onClick=${() => setLvl(k)}>${k === "all" ? "All" : LEVEL_LABEL[k]}</button>`)}</div>
+        ${anom && html`<div class="segctl" role="group" aria-label="model agreement"><span class="segctl-k">Anomaly model</span>${Object.entries(AGREE_FILTERS).map(([k, v]) =>
+          html`<button key=${k} class=${agree === k ? "on" : ""} onClick=${() => setAgree(k)}>${v}</button>`)}</div>`}
         <select value=${status} onChange=${e => setStatus(e.target.value)} aria-label="status">
           <option value="all">Any status</option>${Object.entries(STATUS_LABEL).map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}</select>
         <input type="text" placeholder="Filter by host IP" value=${q} onInput=${e => setQ(e.target.value)} style=${{ width: "180px" }}/>
         <span class="small muted">${rows.length} of ${alerts.length} alerts</span>
       </div>
       <div class="scroll tall" data-lenis-prevent><table>
-        <thead><tr><th>#</th><th>Host</th><th>Target window</th><th class="num">Risk</th><th class="num">LSTM p</th><th>Confidence</th><th>Stage</th><th>Status</th><th>Dataset label <span class="muted">(eval)</span></th></tr></thead>
+        <thead><tr><th>#</th><th>Host</th><th>Target window</th><th class="num">Risk</th><th class="num">LSTM p</th><th>Confidence</th><th>Stage</th>${anom && html`<th title="Label-free isolation forest, second opinion only">Anomaly</th>`}<th>Status</th><th>Dataset label <span class="muted">(eval)</span></th></tr></thead>
         <tbody>${rows.length ? rows.map(a => { const s = statuses[a.id] || "open"; return html`<tr key=${a.id} onClick=${() => go("alerts", a.id)}>
           <td>${a.id}</td><td class="mono">${a.host_id}</td><td class="mono">${t(a.target_window_start).slice(5)}</td>
           <${RiskCell} v=${a.risk_score} cfg=${cfg}/><td class="num">${fmt(a.lstm_probability)}</td>
           <td class=${a.confidence_label === cfg.uncertain_label ? "muted" : ""}>${a.confidence_label}</td><td>${a.predicted_stage}</td>
+          ${anom && html`<td class=${a.anomaly_flag ? "" : "muted"}>${a.anomaly_flag === true ? "also flags" : a.anomaly_flag === false ? "no" : "–"}</td>`}
           <td><span class=${"status " + s}>${STATUS_LABEL[s] || s}</span></td>
           <td><span class=${"lbl " + (a.truth_attack ? "atk" : "ben")}>${a.truth_class}</span></td></tr>`; })
-          : html`<tr><td colspan="9" class="muted">${alerts.length ? "No alerts match these filters." : "No alerts yet. Start the replay on the Overview page."}</td></tr>`}</tbody></table></div>
+          : html`<tr><td colspan=${cols} class="muted">${alerts.length ? "No alerts match these filters." : "No alerts yet. Start the replay on the Overview page."}</td></tr>`}</tbody></table></div>
     </section>
   </main>`;
 }

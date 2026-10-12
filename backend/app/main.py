@@ -141,7 +141,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     def features_status() -> dict[str, Any]:
         """Which opt-in features this install can use (SHAP, stage model, PCAP readers, streaming model)."""
         st = load_config().config.get("stream") or {}
-        return features.capabilities(stage_model_dir=engine.stage_model_dir,
+        return features.capabilities(stage_model_dir=engine.stage_model_dir, anomaly_model_dir=engine.anomaly_model_dir,
                                      stream_model_dir=ROOT / str(st.get("model_dir") or "artifacts/models/cic_ids2017")
                                      ) | {"stages": analyst.stages}
 
@@ -184,7 +184,8 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
 
     @app.get("/evaluation/anomaly")
     def anomaly_evaluation() -> dict[str, Any]:
-        """Benign-only anomaly baseline from reports/anomaly_eval.json (read-only; not used by the replay)."""
+        """Benign-only anomaly baseline from reports/anomaly_eval.json (read-only report; the replay's opt-in
+        second opinion is a model trained by `train-anomaly`, see replay.anomaly_model_dir)."""
         out = info.anomaly_baseline()
         if out is None:
             raise HTTPException(404, "no anomaly baseline report; run scripts/evaluation/anomaly_eval.py")
@@ -225,7 +226,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
         h = engine.host(host_id)
         if h is None:
             raise HTTPException(404, f"host {host_id} not seen in the current replay")
-        return h | {"alerts_list": ledger.list(limit=200, host_id=host_id, session_id=engine.session_id)}
+        return h | {"alerts_list": engine.with_anomaly(ledger.list(limit=200, host_id=host_id, session_id=engine.session_id))}
 
     @app.get("/explain/{sequence_id}")
     def explain(sequence_id: str, model: str = "lstm", method: str = "shap", top: int = 5) -> dict[str, Any]:
@@ -281,14 +282,14 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     @app.get("/alerts")
     def list_alerts(limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0),
                     host_id: str | None = None, session_id: str | None = None) -> list[dict[str, Any]]:
-        return ledger.list(limit=limit, offset=offset, host_id=host_id, session_id=scope(session_id))
+        return engine.with_anomaly(ledger.list(limit=limit, offset=offset, host_id=host_id, session_id=scope(session_id)))
 
     @app.get("/alerts/{alert_id}")
     def get_alert(alert_id: int) -> dict[str, Any]:
         rec = ledger.get(alert_id)
         if rec is None:
             raise HTTPException(404, f"alert {alert_id} not found")
-        return rec
+        return engine.with_anomaly([rec])[0]
 
     # ---- streaming telemetry (opt-in); see aegisflow/ml/streaming.py
     stream_lock = threading.Lock()
@@ -421,7 +422,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
     def live_snapshot() -> dict[str, Any]:
         """Same bodies as GET /replay/status, /hosts, /alerts?limit=50, /triage/statuses and /triage/summary."""
         return {"st": engine.status(), "hosts": engine.host_list(),
-                "alerts": ledger.list(limit=50, offset=0, host_id=None, session_id=scope(None)),
+                "alerts": engine.with_anomaly(ledger.list(limit=50, offset=0, host_id=None, session_id=scope(None))),
                 "statuses": analyst.statuses(), "triage": analyst.summary(scope(None))}
 
     @app.get("/live")

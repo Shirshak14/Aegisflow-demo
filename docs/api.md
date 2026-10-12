@@ -17,7 +17,7 @@ Until `preprocess` and `train` have been run, endpoints that need data or the mo
 | GET | `/evaluation` | Baseline tables (any/onset targets), host check, leave-one-day-out DoS summary |
 | POST | `/replay/start` | Body `{"speed": 1\|10\|100\|1000, "reset": true}`. `reset: true` starts a fresh session; the ledger is kept, earlier sessions stay in it and keep verifying. 409 if already running, 422 for a bad speed |
 | POST | `/replay/stop` | Stop the replay |
-| GET | `/replay/status` | State, progress, sim clock, alert counts |
+| GET | `/replay/status` | State, progress, sim clock, alert counts. `anomaly` is null unless `replay.anomaly_model_dir` is set; then it holds the anomaly threshold and how many alerts both models flag (and how many of those match an attack label) |
 | GET | `/live` | Server-sent events for the dashboard: a `snapshot` event (`st`, `hosts`, `alerts`, `statuses`, `triage`, the bodies of `/replay/status`, `/hosts`, `/alerts?limit=50`, `/triage/statuses`, `/triage/summary`) whenever that data changes, checked every 0.5 s; a keep-alive comment every 15 s otherwise; an `error` event if a snapshot fails. `max_events` closes the stream after N events (tests) |
 | GET | `/hosts` | Hosts seen in the current replay, sorted by alerts then risk |
 | GET | `/hosts/{host_id}` | One host: risk timeline and its alerts |
@@ -27,7 +27,7 @@ Until `preprocess` and `train` have been run, endpoints that need data or the mo
 | GET | `/mitre/{stage}` | Static lookup from `configs/mitre_mapping.yaml` (no model involved) |
 | POST | `/alerts` | Append an alert to the hash chain (external producers only; needs the `X-API-Key` header and is disabled unless `AEGISFLOW_API_KEY` is set; the replay engine writes directly) |
 | GET | `/alerts` | List alerts, newest first (`limit` max 1000, `offset`, `host_id`, `session_id`: omitted = the current replay session, or everything if none has started; `all` = every session) |
-| GET | `/alerts/{id}` | One alert with `prev_hash` and `hash` |
+| GET | `/alerts/{id}` | One alert with `prev_hash` and `hash`. With `replay.anomaly_model_dir` set, alerts from `/alerts`, `/alerts/{id}`, `/hosts/{host_id}` and `/live` also carry `anomaly_score`, `anomaly_threshold` and `anomaly_flag` (not part of the hashed record) |
 | POST | `/alerts/{id}/actions` | Analyst decision on an alert. Body `{"action", "analyst", "note"?, "response"?, "stage"?}`; actions `acknowledge`, `approve_response` (needs `response`), `dismiss`, `reopen`, `override_stage` (needs `stage` from `stages.yaml`), `comment` (needs `note`). 422 for a missing field or a transition the current status forbids, 404 for an unknown alert. Approving a response only records it; AegisFlow never executes it |
 | GET | `/alerts/{id}/actions` | Alert's review status (`open`, `acknowledged`, `response_approved`, `dismissed`, `reopened`), model stage vs analyst-effective stage, approved response, full action history |
 | GET | `/triage/statuses` | `{alert_id: status}` for every alert with a review action (others are `open`) |

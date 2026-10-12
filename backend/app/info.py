@@ -223,4 +223,5 @@ def anomaly_baseline() -> dict[str, Any] | None:
             "fit_sequences": r["fit_set"]["sequences"], "test_counts": r["test_counts"], "rows": rows,
             "note": ("Fit on benign train sequences only, so labels cannot teach the attacker-host shortcut. "
                      "The anomaly thresholds are set to the LSTM's test FPR for a like-for-like recall comparison; "
-                     "that is not a deployable threshold. Not wired into the replay.")}
+                     "that is not a deployable threshold. The replay's optional second opinion (replay.anomaly_model_dir) "
+                     "uses a label-free threshold instead: the 99th percentile of the benign fit-set scores.")}

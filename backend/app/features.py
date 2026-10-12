@@ -75,7 +75,12 @@ def list_models(models_dir: Path = MODELS_DIR, demo_dir: Path | None = None) -> 
     return out
 
 
-def capabilities(*, stage_model_dir: Path | None, stream_model_dir: Path) -> dict[str, Any]:
+def _rel(path: Path) -> str:
+    return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
+
+
+def capabilities(*, stage_model_dir: Path | None, stream_model_dir: Path,
+                 anomaly_model_dir: Path | None = None) -> dict[str, Any]:
     """What the dashboard can offer on this install, and how to enable what is missing."""
     return {
         "explanations": {"shap": _has("shap"), "integrated_gradients": True,
@@ -84,6 +89,10 @@ def capabilities(*, stage_model_dir: Path | None, stream_model_dir: Path) -> dic
                         "path": None if stage_model_dir is None else str(stage_model_dir.relative_to(ROOT)),
                         "available": stage_model_dir is not None and (stage_model_dir / "best.pt").exists(),
                         "hint": "python -m aegisflow train-multitask, then set replay.stage_model_dir in configs/config.yaml"},
+        "anomaly_model": {"configured": anomaly_model_dir is not None,
+                          "path": None if anomaly_model_dir is None else _rel(anomaly_model_dir),
+                          "available": anomaly_model_dir is not None and (anomaly_model_dir / "anomaly.json").exists(),
+                          "hint": "python -m aegisflow train-anomaly, then set replay.anomaly_model_dir in configs/config.yaml"},
         "pcap": {"scapy": _has("scapy"), "pyshark": _has("pyshark") and shutil.which("tshark") is not None},
         "netflow": {"available": True, "formats": ["NetFlow v5/v9/IPFIX export capture (.pcap)", "nfdump CSV (.csv)"]},
         "stream": {"model_dir": str(stream_model_dir.relative_to(ROOT)) if stream_model_dir.is_relative_to(ROOT)

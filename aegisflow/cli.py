@@ -174,6 +174,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_mt.add_argument("--output-dir", default=None, help="default: artifacts/models/<dataset>_multitask")
     _common_args(p_mt)
 
+    p_an = sub.add_parser("train-anomaly", help="Fit the benign-only isolation forest used as a label-free second "
+                                                "opinion on replay alerts (replay.anomaly_model_dir).")
+    p_an.add_argument("--dataset", default="cic_ids2017")
+    p_an.add_argument("--quantile", type=float, default=0.99,
+                      help="flag threshold = this quantile of the benign fit-set scores (default 0.99)")
+    p_an.add_argument("--output-dir", default=None, help="default: artifacts/models/<dataset>_anomaly")
+    _common_args(p_an)
+
     p_fc = sub.add_parser("forecast", help="Predict attack, stage (+ MITRE tactic) and K-step future state per sequence.")
     p_fc.add_argument("--dataset", default="cic_ids2017")
     p_fc.add_argument("--input", default=None, help="sequences Parquet (default: data/processed/<dataset>/sequences.parquet)")
@@ -351,6 +359,18 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         for h in res["future_state"]["per_horizon"]:
             print(f"  state  : {h}")
         print(f"  Metrics: {out / 'metrics.json'}")
+        return 0
+    if args.command == "train-anomaly":
+        from .ml.anomaly import train_anomaly
+        from .ml.modeling import ForecastDataset
+        data = ForecastDataset.from_parquet(cfg.path(cfg.config.paths.data_processed, args.dataset, "sequences.parquet"))
+        out = cfg.path(args.output_dir) if args.output_dir else cfg.path("artifacts", "models", f"{args.dataset}_anomaly")
+        meta = train_anomaly(data, out, seed=int(cfg.config.random_seed), quantile=args.quantile, dataset=args.dataset)
+        print(f"Anomaly model saved: {out}")
+        print(f"  fit on {meta['fit_sequences']:,} benign train sequences; threshold {meta['threshold']:.5f} "
+              f"(set at {meta['threshold_rule']})")
+        rel = out.relative_to(cfg.root).as_posix() if out.is_relative_to(cfg.root) else out
+        print(f"  To use it in the replay: set replay.anomaly_model_dir: {rel} in configs/config.yaml")
         return 0
     if args.command == "forecast":
         import json
