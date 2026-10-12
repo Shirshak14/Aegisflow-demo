@@ -6,6 +6,13 @@ Current state. Numbers are from `artifacts/models/cic_ids2017/metrics.json` and 
 
 Binary next-window prediction per host: given the last 10 observed 60 s windows (30 s stride) of a source host, predict whether the host's next strictly-future window contains attack traffic (`target_attack_present`). Windows are built per `source_ip`.
 
+### What "next window" means
+
+The target is the host's next **observed** window that starts strictly after the input's last window ends (`build_host_sequences`, rank `forecast_horizon = 1`). It is not a fixed time ahead. A host only has a window in slots where it sent traffic, so the 10 input windows are 10 consecutive rows, not necessarily 10 consecutive 30 s slots, and the target can start long after the input ends if the host went quiet. With no gaps the input spans 330 s and the earliest target starts 30 s after it ends. The training data contains such gaps and the model was trained on them, so they are reported, not rejected, by default:
+
+- Training sequences: `target_window_start - seq_end_time` is the real lead (the dashboard's temporal context shows it).
+- Scoring (`score-pcap`, `score-netflow`, `/stream/*`): every sequence carries `input_span_seconds`, `input_missing_windows`, `max_gap_windows`, `contiguous` and `target_not_before` (the earliest the predicted window can start). `--max-missing-windows N` / `stream.max_missing_windows` refuses to score sequences with more than N silent slots. A fixed-horizon target would need a retrained model and is not offered.
+
 ## Input
 
 Tensor `[batch, 10, 28]`: 28 numeric traffic features per window (counts, byte/packet sums, flag counts and ratios, unique destination IPs/ports, port entropy, burst). The two label-derived columns (`attack_flow_ratio`, `benign_flow_ratio`) are excluded. Preprocessing (train-only median imputation, signed log1p on count features, RobustScaler) is fitted on the training split only.

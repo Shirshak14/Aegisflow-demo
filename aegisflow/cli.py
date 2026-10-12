@@ -211,6 +211,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_sp.add_argument("--reader", choices=["scapy", "pyshark"], default="scapy")
     p_sp.add_argument("--threshold", type=float, default=None)
     p_sp.add_argument("--output", default=None, help="optional CSV of all scored sequences")
+    p_sp.add_argument("--max-missing-windows", type=int, default=None,
+        help="skip sequences with more than N silent 30 s slots inside their input (default: score and flag them)")
     _common_args(p_sp)
 
     p_inf = sub.add_parser("ingest-netflow", help="Convert NetFlow v5/v9/IPFIX (capture of exports, or nfdump CSV) "
@@ -226,12 +228,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_snf.add_argument("--model-dir", default="artifacts/models/cic_ids2017")
     p_snf.add_argument("--threshold", type=float, default=None)
     p_snf.add_argument("--output", default=None, help="optional CSV of all scored sequences")
+    p_snf.add_argument("--max-missing-windows", type=int, default=None,
+        help="skip sequences with more than N silent 30 s slots inside their input (default: score and flag them)")
     _common_args(p_snf)
     p_st = sub.add_parser("stream", help="Score a capture or flow file as a stream: windows are scored as they close.")
     p_st.add_argument("--input", required=True, help=".pcap/.pcapng, or canonical flows .parquet/.csv")
     p_st.add_argument("--model-dir", default="artifacts/models/cic_ids2017")
     p_st.add_argument("--chunk-seconds", type=float, default=30.0, help="push flows in chunks of this much traffic time")
     p_st.add_argument("--lateness", type=float, default=0.0, help="allowed out-of-order seconds")
+    p_st.add_argument("--max-missing-windows", type=int, default=None,
+        help="skip sequences with more than N silent 30 s slots inside their input (default: score and flag them)")
     p_st.add_argument("--alerts-only", action="store_true")
     _common_args(p_st)
     p_gnn = sub.add_parser("train-gnn", help="Train the temporal GNN (host-communication graph per window + GRU).")
@@ -427,7 +433,8 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         else:
             from .ml.ingestion.netflow import netflow_to_flows
             flows = netflow_to_flows(cfg.path(args.input), args.format)
-        scored = score_flows(flows, cfg.path(args.model_dir), cfg, threshold=args.threshold)
+        scored = score_flows(flows, cfg.path(args.model_dir), cfg, threshold=args.threshold,
+                             max_missing_windows=args.max_missing_windows)
         print(f"{len(flows):,} flows -> {len(scored):,} scored host sequences, "
               f"{int(scored.predicted_attack.sum()) if len(scored) else 0} above threshold")
         if args.output:
@@ -448,7 +455,8 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         else:
             flows = pd.read_parquet(src) if src.suffix.lower() == ".parquet" else pd.read_csv(src, parse_dates=["timestamp"])
         flows = flows.sort_values("timestamp", kind="stable")
-        st = StreamScorer(cfg.path(args.model_dir), cfg, allowed_lateness=args.lateness)
+        st = StreamScorer(cfg.path(args.model_dir), cfg, allowed_lateness=args.lateness,
+                          max_missing_windows=args.max_missing_windows)
         chunk = ((flows.timestamp - flows.timestamp.min()).dt.total_seconds() // args.chunk_seconds).astype(int)
         for _, part in flows.groupby(chunk, sort=True):
             for r in st.push(part):

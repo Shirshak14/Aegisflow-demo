@@ -16,6 +16,12 @@ from ...schema import OPTIONAL_COLUMNS, REQUIRED_COLUMNS
 
 log = get_logger("PREPROCESS")
 
+# Flow identity: two records with the same values here are the same flow observed twice. Used by the
+# batch cleaner (global) and by the streaming scorer (across chunks, for flows still in open windows).
+FLOW_IDENTITY: tuple[str, ...] = (
+    "timestamp", "source_ip", "destination_ip", "source_port", "destination_port", "protocol",
+)
+
 
 @dataclass
 class CleaningReport:
@@ -71,7 +77,7 @@ def clean_canonical_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, CleaningRepor
 
     before_dedup = len(out)
     out = out.drop_duplicates(
-        subset=["timestamp", "source_ip", "destination_ip", "source_port", "destination_port", "protocol"]
+        subset=list(FLOW_IDENTITY)
     )
     dropped["exact_duplicate_flow"] = before_dedup - len(out)
 
