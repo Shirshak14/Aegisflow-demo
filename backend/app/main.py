@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from aegisflow.config import load_config
 
 from . import features, info, live
+from .investigate import router as investigate_router
 from .analyst import ActionError, AnalystLog
 from .audit import Ledger
 from .replay import ReplayEngine
@@ -114,6 +115,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True) -> FastA
             "`python -m aegisflow train --dataset cic_ids2017` (see README).")})
     if warm_up:
         engine.warm_up()
+    app.include_router(investigate_router)  # /context, /health/model, /evidence; see investigate.py
 
     static = Path(__file__).parent / "static"
 
