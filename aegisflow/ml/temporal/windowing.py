@@ -109,8 +109,9 @@ def aggregate_host_windows(
         return pd.DataFrame()
 
     idx_expanded = np.repeat(np.arange(len(df)), repeats)
-    # Generate list of k values
-    offsets = np.concatenate([np.arange(k1, k2 + 1) for k1, k2 in zip(k_min, k_max)])
+    # k values k_min..k_max of each flow, flow by flow: its k_min plus its position within its own run
+    run_starts = np.cumsum(repeats) - repeats
+    offsets = np.repeat(k_min, repeats) + (np.arange(len(idx_expanded)) - np.repeat(run_starts, repeats))
 
     expanded = df.iloc[idx_expanded].copy()
     expanded["__window_idx__"] = offsets
@@ -251,33 +252,14 @@ def aggregate_host_windows(
     benign_ratio = 1.0 - attack_ratio
     attack_present = (attack_flow_counts > 0).astype(int)
 
-    # Dominant class selection
-    def _pick_dominant_class(row: pd.Series) -> str:
-        if attack_classes:
-            atk_sub = row[attack_classes]
-            if atk_sub.sum() > 0:
-                return str(atk_sub.idxmax())
-        return "Benign"
-
-    dominant_classes = class_matrix.apply(_pick_dominant_class, axis=1)
-
-    # Dominant stage selection
+    # Dominant class/stage: the attack column with the highest count, first column on ties (same as
+    # idxmax), or "Benign" when the window has no attack flows.
+    dominant_classes = _pick_dominant(class_matrix, attack_classes)
     attack_stages = [s for s in stage_matrix.columns if s.lower() != "benign"]
-    def _pick_dominant_stage(row: pd.Series) -> str:
-        if attack_stages:
-            atk_sub = row[attack_stages]
-            if atk_sub.sum() > 0:
-                return str(atk_sub.idxmax())
-        return "Benign"
+    dominant_stages = _pick_dominant(stage_matrix, attack_stages)
 
-    dominant_stages = stage_matrix.apply(_pick_dominant_stage, axis=1)
-
-    # Stage distribution JSON
-    def _serialize_stage_dist(row: pd.Series) -> str:
-        non_zero = {k: int(v) for k, v in row.items() if v > 0}
-        return json.dumps(non_zero, sort_keys=True)
-
-    stage_distributions = stage_matrix.apply(_serialize_stage_dist, axis=1)
+    # Stage distribution JSON: {stage: count} of the non-zero stages, keys sorted
+    stage_distributions = _serialize_counts(stage_matrix)
 
     # Label confidence: ground_truth if strictly Benign, inferred if any attack stage proxy was mapped
     label_confidences = np.where(attack_present == 1, "inferred", "ground_truth")
@@ -286,9 +268,9 @@ def aggregate_host_windows(
         "attack_flow_ratio": attack_ratio.values,
         "benign_flow_ratio": benign_ratio.values,
         "attack_present": attack_present.values,
-        "dominant_class": dominant_classes.values,
-        "dominant_stage": dominant_stages.values,
-        "stage_distribution": stage_distributions.values,
+        "dominant_class": dominant_classes,
+        "dominant_stage": dominant_stages,
+        "stage_distribution": stage_distributions,
         "label_confidence": label_confidences,
     }, index=class_matrix.index).reset_index()
 
@@ -316,3 +298,22 @@ def aggregate_host_windows(
         benign_windows=int((windows_df["attack_present"] == 0).sum()),
     )
     return windows_df
+
+
+def _pick_dominant(count_matrix: pd.DataFrame, attack_columns: list[str]) -> np.ndarray:
+    """Per row, the attack column with the most flows (first one on ties), else "Benign"."""
+    out = np.full(len(count_matrix), "Benign", dtype=object)
+    if attack_columns:
+        counts = count_matrix[attack_columns].to_numpy()
+        has_attack = counts.sum(axis=1) > 0
+        names = np.array([str(c) for c in attack_columns], dtype=object)
+        out[has_attack] = names[counts[has_attack].argmax(axis=1)]
+    return out
+
+
+def _serialize_counts(count_matrix: pd.DataFrame) -> list[str]:
+    """Per row, json.dumps({column: count for non-zero counts}, sort_keys=True)."""
+    columns = sorted(count_matrix.columns, key=str)
+    counts = count_matrix[columns].to_numpy()
+    keys = [json.dumps(str(c)) + ": " for c in columns]
+    return ["{" + ", ".join(k + str(int(v)) for k, v in zip(keys, row) if v > 0) + "}" for row in counts.tolist()]
