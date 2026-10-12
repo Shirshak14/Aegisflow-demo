@@ -1022,11 +1022,39 @@ function AnomalyCard() {
   </section>`;
 }
 
+// Where every number on this page comes from, and what is not available. Reads GET /evaluation/provenance.
+function ProvenanceCard() {
+  const pv = useLoad(() => api("/evaluation/provenance"), []);
+  if (pv.error) return html`<section class="card span12"><h2>Where these numbers come from</h2><div class="small muted">Unavailable: ${pv.error.message}</div></section>`;
+  if (!pv.data) return html`<section class="card span12"><div class="skel"></div></section>`;
+  const d = pv.data, m = d.model, sp = d.split, tg = d.target, cp = d.class_performance;
+  const NA = x => html`<span class="muted">not available: ${x.reason}</span>`;
+  return html`<section class="card span12"><h2>Where these numbers come from</h2>
+    <div class="kv small">
+      <div>Model version</div><div>${m.available ? html`<span class="mono">${m.version}</span> · ${m.kind} · alert threshold ${fmt(m.alert_threshold, 4)} (${m.threshold_selection}, validation only) · ${m.calibrated ? "confidence calibrated" : "confidence NOT calibrated"}` : NA(m)}</div>
+      <div>Data source</div><div>${d.dataset.name}. <span class="muted">${d.dataset.caveat}</span></div>
+      <div>Prediction target</div><div>${tg.definition} Window ${tg.window_seconds} s, stride ${tg.stride_seconds} s, ${tg.input_windows} input windows, horizon ${tg.forecast_horizon_windows} window: ${tg.horizon_kind}.</div>
+      <div>Evaluation split</div><div>${sp.available ? html`${sp.kind}. Train ${sp.train_sequences.toLocaleString()} · validation ${sp.val_sequences.toLocaleString()} · test ${sp.test_sequences.toLocaleString()} sequences. Reported on ${sp.reported_on}.` : NA(sp)}</div>
+    </div>
+    <div class="row" style=${{ marginTop: "12px", alignItems: "stretch" }}>
+      ${[["Precomputed replay scores", d.sources.replay_scores], ["Live capture scores", d.sources.live_capture_scores], ["Ground-truth labels", d.sources.ground_truth_labels]].map(([k, v]) =>
+        html`<div class="note info" style=${{ flex: "1 1 240px" }} key=${k}><b>${k}.</b> ${v}</div>`)}
+    </div>
+    <h3 class="sub" style=${{ marginTop: "16px" }}>Detection by attack class (LSTM, test split)</h3>
+    ${!cp.available ? html`<div class="small muted">Not available: ${cp.reason}</div>` : html`<div class="scroll" data-lenis-prevent><table>
+      <thead><tr><th>Attack class</th><th class="num">Test sequences</th><th class="num">Detected</th><th class="num">Recall</th></tr></thead>
+      <tbody>${cp.classes.map(c => html`<tr key=${c.class} style=${{ cursor: "default" }}><td>${c.class}</td><td class="num">${c.positives}</td><td class="num">${c.detected}</td><td class="num">${fmt(c.recall, 3)}</td></tr>`)}</tbody></table></div>
+      <div class="small muted" style=${{ marginTop: "8px" }}>Overall false-positive rate ${fmt(cp.overall_false_positive_rate * 100, 2)}%${cp.host_check && cp.host_check["172.16.0.1"] ? `; on attacker host 172.16.0.1 it flags ${cp.host_check["172.16.0.1"].neg_flagged} of ${cp.host_check["172.16.0.1"].neg} benign sequences` : ""}.
+        ${cp.note} Source: ${cp.source}.</div>`}
+  </section>`;
+}
+
 function ModelsPage({ ctx }) {
   const { boot: { model, ev, feats, models, cfg } } = ctx;
   const lstm = model.test_metrics.lstm || {}, lr = model.test_metrics.logistic_regression || {}, cal = model.confidence_calibration;
   return html`<main class="page">
     <${PageHead} title="Models and evaluation" desc="Held-out numbers for the replayed model, a label-free baseline, and every model trained on this machine. Nothing here is recomputed or rounded for effect."/>
+    <${ProvenanceCard}/>
     <section class="card span12"><h2>Replayed model: LSTM on the chronological test split</h2>
       <div class="stats">
         <${Stat} label="F1" value=${fmt(lstm.f1, 3)} sub=${`logistic regression ${fmt(lr.f1, 3)}`}/>

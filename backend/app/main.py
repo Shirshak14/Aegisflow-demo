@@ -239,6 +239,11 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True, settings
     def evaluation() -> dict[str, Any]:
         return info.evaluation()
 
+    @app.get("/evaluation/provenance")
+    def evaluation_provenance() -> dict[str, Any]:
+        """Model version, data source, target horizon, evaluation split and score sources; missing items say so."""
+        return info.provenance()
+
     @app.get("/evaluation/anomaly")
     def anomaly_evaluation() -> dict[str, Any]:
         """Benign-only anomaly baseline from reports/anomaly_eval.json (read-only report; the replay's opt-in

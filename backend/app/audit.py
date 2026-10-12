@@ -15,6 +15,15 @@ recomputing the whole chain, neither of which the chain alone can see. If ``AEGI
 set the anchor is HMAC-SHA256 signed, so someone who can edit the DB and the anchor file but does not
 hold the key cannot forge it; without a key the anchor is only a second copy of the head.
 
+External checkpoint: ``Ledger.export_checkpoint(path)`` writes a small signed record (record count, newest id, head hash,
+time) that is meant to be stored OFF the host (another machine, a bucket, a printout). ``verify_checkpoint(path)``
+later proves the current ledger still contains the exact history the checkpoint saw, so truncation, rewriting or
+wholesale replacement of the DB is caught even when the attacker also rewrote the local anchor. Setting
+``AEGISFLOW_LEDGER_CHECKPOINT`` mirrors the checkpoint to that path after every append (point it at a synced or
+network location). ``recover_prefix`` copies the intact prefix into a NEW database and never edits the original. The
+CLI is ``python -m backend.app.audit {checkpoint,verify,recover}``. This is tamper-EVIDENT, not tamper-proof:
+nothing here stops someone with the signing key and the host from forging history; it makes undetected edits hard.
+
 Known limits: the anchor sits next to the DB by default, so an attacker with full filesystem access and
 no signing key can rewrite both; keep the key off the host and copy ``head_hash`` elsewhere for stronger
 guarantees. Records appended outside the API after the last anchor are reported as ``anchor: behind``.
@@ -34,6 +43,8 @@ from typing import Any
 
 GENESIS = "0" * 64
 KEY_ENV = "AEGISFLOW_LEDGER_KEY"
+CHECKPOINT_ENV = "AEGISFLOW_LEDGER_CHECKPOINT"
+CHECKPOINT_VERSION = 1
 
 # Every displayed alert field is covered by the hash (id/prev_hash/hash excluded).
 HASH_FIELDS: tuple[str, ...] = (
@@ -91,6 +102,7 @@ class Ledger:
         key = anchor_key if anchor_key is not None else os.environ.get(KEY_ENV)
         self._key = key.encode("utf-8") if isinstance(key, str) else (key or None)
         self.anchor_path = Path(self.db_path + ".head")
+        self.checkpoint_path = Path(os.environ[CHECKPOINT_ENV]) if os.environ.get(CHECKPOINT_ENV) else None
         self._lock = threading.Lock()
         self._conns_lock = threading.Lock()
         self._local = threading.local()
@@ -187,6 +199,8 @@ class Ledger:
                 cur = con.execute(f"INSERT INTO alerts ({cols}) VALUES ({', '.join('?' * (len(HASH_FIELDS) + 2))})",
                                   [rec[k] for k in HASH_FIELDS] + [prev, h])
             self._write_anchor(cur.lastrowid, h)  # after the commit, so the anchor never points at a missing row
+            if self.checkpoint_path is not None:
+                self._write_checkpoint(self.checkpoint_path, cur.lastrowid, h)
             return {"id": cur.lastrowid, **rec, "prev_hash": prev, "hash": h}
 
     def list(self, limit: int = 100, offset: int = 0, host_id: str | None = None,
@@ -230,7 +244,108 @@ class Ledger:
                 if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='alert_actions'").fetchone():
                     con.execute("DELETE FROM alert_actions")
                     con.execute("DELETE FROM sqlite_sequence WHERE name = 'alert_actions'")
-            self._write_anchor(0, GENESIS)
+            self._write_anchor(0, GENESIS)  # the external checkpoint, if any, is deliberately left alone
+
+    # ------------------------------------------------------------------ external checkpoint
+    def _sign_checkpoint(self, body: dict[str, Any]) -> str | None:
+        if not self._key:
+            return None
+        msg = json.dumps(body, sort_keys=True, separators=(",", ":"))
+        return hmac.new(self._key, b"checkpoint:" + msg.encode("utf-8"), hashlib.sha256).hexdigest()
+
+    def _write_checkpoint(self, path: Path, last_id: int, head_hash: str, records: int | None = None) -> dict[str, Any]:
+        if records is None:
+            with self._connect() as con:
+                records = int(con.execute("SELECT COUNT(*) FROM alerts").fetchone()[0])
+        body = {"version": CHECKPOINT_VERSION, "last_id": last_id, "head_hash": head_hash, "records": records,
+                "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "signed": bool(self._key)}
+        doc = {**body, "hmac": self._sign_checkpoint(body)}
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
+        return doc
+
+    def export_checkpoint(self, path: str | Path) -> dict[str, Any]:
+        """Write a signed checkpoint of the current head to ``path`` (store it away from this host).
+
+        Refuses to checkpoint a ledger that does not verify, so a checkpoint never certifies a corrupted chain."""
+        v = self.verify()
+        if v["status"] != "VERIFIED":
+            raise ValueError(f"ledger does not verify ({v['reason']}); refusing to checkpoint it")
+        with self._connect() as con:
+            row = con.execute("SELECT id, hash FROM alerts ORDER BY id DESC LIMIT 1").fetchone()
+        last_id, head = (row["id"], row["hash"]) if row else (0, GENESIS)
+        return self._write_checkpoint(Path(path), last_id, head, v["records_checked"])
+
+    def verify_checkpoint(self, path: str | Path) -> dict[str, Any]:
+        """Check the ledger against an externally stored checkpoint.
+
+        Returns ``{"status": "MATCHES" | "MISMATCH" | "CHECKPOINT_INVALID", ...}``. MATCHES means the checkpointed
+        record is still in the chain with the same hash (new records after it are expected and reported as
+        ``records_since_checkpoint``). The chain itself is verified first."""
+        try:
+            doc = json.loads(Path(path).read_text(encoding="utf-8"))
+            body = {k: doc[k] for k in ("version", "last_id", "head_hash", "records", "created_at", "signed")}
+            last_id, head = int(body["last_id"]), str(body["head_hash"])
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return {"status": "CHECKPOINT_INVALID", "reason": f"checkpoint unreadable or malformed ({exc!r})"}
+        if self._key:
+            expected = self._sign_checkpoint(body)
+            if not body["signed"] or not doc.get("hmac") or not hmac.compare_digest(str(doc["hmac"]), expected):
+                return {"status": "CHECKPOINT_INVALID",
+                        "reason": "checkpoint signature is missing or invalid (edited, or signed with another key)"}
+        elif body["signed"]:
+            return {"status": "CHECKPOINT_INVALID",
+                    "reason": f"checkpoint is signed but {KEY_ENV} is not set, so it cannot be authenticated"}
+        chain = self.verify()
+        if chain["status"] != "VERIFIED":
+            return {"status": "MISMATCH", "reason": f"the ledger chain itself is corrupted: {chain['reason']}",
+                    "checkpoint_last_id": last_id}
+        with self._connect() as con:
+            row = con.execute("SELECT hash FROM alerts WHERE id = ?", (last_id,)).fetchone() if last_id else None
+            total = int(con.execute("SELECT COUNT(*) FROM alerts").fetchone()[0])
+        base = {"checkpoint_last_id": last_id, "checkpoint_created_at": body["created_at"],
+                "signed": bool(self._key and body["signed"]), "records_now": total}
+        if last_id == 0:
+            return {"status": "MATCHES", **base, "records_since_checkpoint": total, "reason": None}
+        if row is None:
+            return {"status": "MISMATCH", **base, "reason": f"record {last_id}, the checkpointed head, is no longer "
+                                                            "in the ledger (records were deleted or the DB was replaced)"}
+        if row["hash"] != head:
+            return {"status": "MISMATCH", **base, "reason": f"record {last_id} exists but its hash differs from the "
+                                                            "checkpoint (history was rewritten)"}
+        return {"status": "MATCHES", **base, "records_since_checkpoint": total - int(body["records"]), "reason": None}
+
+    def recover_prefix(self, out_db: str | Path) -> dict[str, Any]:
+        """Copy the longest intact prefix of the chain into a NEW database (the original is never modified).
+
+        The copy gets its own head anchor (signed if a key is set). Records after the first bad one are not copied;
+        they stay in the original for investigation. Compare the result with an external checkpoint afterwards."""
+        out = Path(out_db)
+        if out.exists():
+            raise FileExistsError(f"{out} already exists; recovery never overwrites")
+        good, prev = [], GENESIS
+        for r in self._connect().execute("SELECT * FROM alerts ORDER BY id ASC"):
+            row = dict(r)
+            if row["prev_hash"] != prev or compute_hash(row, row["prev_hash"]) != row["hash"]:
+                break
+            good.append(row)
+            prev = row["hash"]
+        total = self.count()
+        new = Ledger(out, anchor_key=self._key)
+        try:
+            with new._connect() as con:
+                cols = ["id", *HASH_FIELDS, "prev_hash", "hash"]
+                con.executemany(f"INSERT INTO alerts ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+                                [[g[c] for c in cols] for g in good])
+            new._write_anchor(good[-1]["id"] if good else 0, prev)
+            verdict = new.verify()
+        finally:
+            new.close()
+        return {"recovered_records": len(good), "dropped_records": total - len(good), "output": str(out),
+                "output_verify": verdict["status"], "head_hash": prev}
 
     def verify(self) -> dict[str, Any]:
         expected_prev, checked, hash_by_id = GENESIS, 0, {}
@@ -261,3 +376,52 @@ class Ledger:
                 state = "signed" if self._key else "unsigned"
         return {"status": "VERIFIED", "record_id": None, "records_checked": checked,
                 "head_hash": expected_prev, "anchor": state, "reason": None}
+
+
+def _main(argv: list[str] | None = None) -> int:
+    import argparse
+    ap = argparse.ArgumentParser(prog="python -m backend.app.audit", description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name, hlp in (("checkpoint", "write a signed checkpoint of the ledger head (store it off this host)"),
+                      ("verify", "verify the chain, and a checkpoint if --checkpoint is given"),
+                      ("recover", "copy the intact prefix of the chain into a new database")):
+        p = sub.add_parser(name, help=hlp)
+        p.add_argument("--db", required=True, help="ledger SQLite file")
+        if name == "checkpoint":
+            p.add_argument("--out", required=True)
+        if name == "verify":
+            p.add_argument("--checkpoint")
+        if name == "recover":
+            p.add_argument("--out", required=True, help="new database to create (must not exist)")
+    a = ap.parse_args(argv)
+    if not Path(a.db).exists():
+        print(f"no such ledger: {a.db}")
+        return 2
+    led = Ledger(a.db)
+    try:
+        if a.cmd == "checkpoint":
+            try:
+                print(json.dumps(led.export_checkpoint(a.out), indent=2))
+            except ValueError as exc:
+                print(exc)
+                return 1
+            if not led._key:
+                print(f"warning: {KEY_ENV} is not set, so this checkpoint is NOT signed and only detects accidents")
+            return 0
+        if a.cmd == "verify":
+            chain = led.verify()
+            print(json.dumps(chain, indent=2))
+            ok = chain["status"] == "VERIFIED"
+            if a.checkpoint:
+                cp = led.verify_checkpoint(a.checkpoint)
+                print(json.dumps(cp, indent=2))
+                ok = ok and cp["status"] == "MATCHES"
+            return 0 if ok else 1
+        print(json.dumps(led.recover_prefix(a.out), indent=2))
+        return 0
+    finally:
+        led.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

@@ -181,6 +181,85 @@ def evaluation() -> dict[str, Any]:
     }
 
 
+def _unavailable(reason: str) -> dict[str, Any]:
+    return {"available": False, "reason": reason}
+
+
+def provenance() -> dict[str, Any]:
+    """Where every evaluation number on the dashboard comes from, in one place.
+
+    Reads only files that already exist (config, model and report JSON). Anything missing is reported as
+    ``{"available": False, "reason": ...}`` so the page can say so instead of showing a blank or a made-up value.
+    """
+    from aegisflow.config import load_config
+    w = load_config().config.windowing
+    out: dict[str, Any] = {
+        "target": {
+            "available": True,
+            "definition": ("Will this host's NEXT 60 s window (the target) contain attack traffic? "
+                           "Inputs are the previous 10 windows of this host."),
+            "input_windows": w["sequence_length"], "window_seconds": w["window_size_seconds"],
+            "stride_seconds": w["stride_seconds"], "forecast_horizon_windows": w["forecast_horizon"],
+            "horizon_kind": ("the next window in which the same host has traffic (rank 1 among that host's windows that "
+                             "start after the input ends), not a fixed wall-clock horizon: when a host was "
+                             "silent, the target can start long after the input ends"),
+        },
+        "sources": {
+            "replay_scores": ("Precomputed: the replay plays held-out test sequences through scores computed once "
+                              "at start-up. They fill the Overview, Alerts and Hosts pages and the ledger."),
+            "live_capture_scores": ("Computed live: Capture and export scores an uploaded capture or POST /stream/flows "
+                                    "with the same model. These results are NOT written to the alert ledger and have "
+                                    "no ground truth."),
+            "ground_truth_labels": ("Dataset labels (CIC-IDS2017). Used only to evaluate, never as model input. Shown "
+                                    "as 'Dataset label (eval)' and absent for live captures."),
+        },
+    }
+    try:
+        meta, metrics = _read(MODEL_DIR / "metadata.json"), _read(MODEL_DIR / "metrics.json")
+        cal = MODEL_DIR / "calibration.json"
+        out["model"] = {"available": True, "version": model_version(), "kind": "LSTM (demo model), logistic regression alongside",
+                        "alert_threshold": metrics["threshold"], "threshold_selection": metrics["threshold_selection"],
+                        "features": len(meta["feature_names"]), "input_shape": meta["input_shape"],
+                        "calibrated": cal.exists()}
+    except (OSError, KeyError, ValueError) as exc:
+        out["model"] = _unavailable(f"no trained model in artifacts/models/cic_ids2017 ({type(exc).__name__}); "
+                                    "run `python -m aegisflow doctor` for the command that creates it")
+    try:
+        split = _read(DATA_DIR / "split_metadata.json")
+        out["split"] = {"available": True, "kind": "chronological (by time, never random); train, then validation, then test",
+                        "train_sequences": split["train_sequences"], "val_sequences": split["val_sequences"],
+                        "test_sequences": split["test_sequences"],
+                        "boundary_excluded_sequences": split.get("boundary_excluded_sequences"),
+                        "reported_on": "test (the threshold was chosen on validation only)"}
+    except (OSError, KeyError, ValueError) as exc:
+        out["split"] = _unavailable(f"no processed dataset ({type(exc).__name__}); run `python -m aegisflow doctor`")
+    out["dataset"] = {"available": True, "name": "CIC-IDS2017 (GeneratedLabelledFlows)",
+                      "caveat": HOST_NOTE}
+    out["class_performance"] = _class_performance()
+    return out
+
+
+def _class_performance() -> dict[str, Any]:
+    """LSTM detection per attack class on the test split, from the committed anomaly/baseline reports."""
+    try:
+        r = _read(REPORTS / "anomaly_eval.json")
+        lstm = r["lstm_committed"]
+        hc = lstm["test_host_and_class"]
+        t = lstm["test"]
+    except (OSError, KeyError, ValueError) as exc:
+        return _unavailable(f"reports/anomaly_eval.json not available ({type(exc).__name__}); run "
+                            "scripts/evaluation/anomaly_eval.py")
+    classes = [{"class": c, "positives": v["n"], "detected": v["detected"],
+                "recall": (v["detected"] / v["n"]) if v["n"] else None}
+               for c, v in sorted(hc["per_class_detection"].items())]
+    return {"available": True, "source": "reports/anomaly_eval.json (lstm_committed, test split, alert threshold)",
+            "classes": classes, "overall_false_positive_rate": t.get("false_positive_rate"),
+            "host_check": hc.get("shortcut_host_vs_rest"),
+            "note": ("Benign traffic is a single negative class, so a per-class false-positive rate is not defined; "
+                     "the false-positive rate is overall and split by attacker host instead. Classes absent from the "
+                     "test split (for example Brute Force and Web Attack) are not evaluated here, not scored zero.")}
+
+
 def robustness() -> dict[str, Any] | None:
     """Robustness report (reports/robustness_eval.json) for the committed model; None if not run.
 
