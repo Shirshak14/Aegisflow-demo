@@ -1,4 +1,4 @@
-.PHONY: check setup validate ingest eda preprocess train serve test feature-registry
+.PHONY: smoke manifest check setup validate ingest eda preprocess train serve test feature-registry
 
 setup:
 	pip install -r requirements.txt
@@ -34,3 +34,11 @@ test:
 
 feature-registry:
 	python -m aegisflow feature-registry
+
+# synthetic end-to-end run in a temp directory; needs no dataset (prints a JSON report, exit 1 on failure)
+smoke:
+	python -m aegisflow.smoke
+
+# write manifest.json (file hashes, feature schema, threshold, training config) for the demo model; add --verify to check it
+manifest:
+	python -m aegisflow manifest --dataset cic_ids2017

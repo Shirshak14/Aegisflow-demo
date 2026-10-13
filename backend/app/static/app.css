@@ -376,3 +376,26 @@
   .det .track { position: relative; height: 8px; background: var(--panel2); border-radius: 4px; }
   .det .fill { position: absolute; left: 0; top: 0; bottom: 0; background: #3987e5; border-radius: 4px; }
   @media (max-width: 640px) { .sweep-plot { overflow-x: auto; } .sweep svg { min-width: 620px; } }
+  /* investigation workspace, temporal context, model health */
+  .warn-t { color: var(--warn); }
+  .export { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .export label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+  .filters input[type=datetime-local] { font-size: 12px; padding: 4px 8px; color-scheme: dark; }
+  .gapstrip { display: flex; gap: 3px; align-items: flex-end; height: 44px; margin: 10px 0 4px; }
+  .gapstrip > div { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+  .gapstrip span { width: 100%; background: #3987e5; border-radius: 2px 2px 0 0; min-height: 1px; }
+  .gapstrip span.long { background: var(--warn); }
+  .lvltag { font-size: 11px; padding: 1px 7px; border-radius: 9px; border: 1px solid var(--line); white-space: nowrap; }
+  .lvltag.investigate { color: var(--bad); border-color: rgba(229,100,92,.55); }
+  .lvltag.watch { color: var(--warn); border-color: rgba(207,160,66,.55); }
+  .lvltag.stable { color: var(--muted); }
+  .hist { display: flex; gap: 2px; align-items: flex-end; height: 120px; position: relative; }
+  .hist > div { flex: 1; height: 100%; display: flex; gap: 1px; align-items: flex-end; }
+  .hist span { flex: 1; border-radius: 2px 2px 0 0; min-height: 0; }
+  .hist .thr { position: absolute; top: 0; bottom: 0; border-left: 2px dashed var(--muted); }
+  .hist-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .vol { display: flex; gap: 2px; align-items: flex-end; height: 110px; position: relative; }
+  .vol > span { flex: 1; background: #3987e5; border-radius: 2px 2px 0 0; min-height: 1px; }
+  .vol .band { position: absolute; left: 0; right: 0; background: rgba(132,147,163,.13); border-top: 1px dashed var(--muted); border-bottom: 1px dashed var(--muted); pointer-events: none; }
+  .chart .legend i.dash { border-top: 2px dashed var(--muted); height: 0; border-radius: 0; background: none; vertical-align: 3px; }
+  .twocol > div { min-width: 0; }

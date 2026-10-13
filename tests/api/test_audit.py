@@ -1,3 +1,6 @@
+import json
+
+import pytest
 import sqlite3
 
 from fastapi.testclient import TestClient
@@ -217,3 +220,80 @@ def test_anchor_read_retries_a_transient_permission_error(tmp_path, monkeypatch)
     monkeypatch.setattr(Path, "read_text", flaky)
     anchor = led._read_anchor()
     assert anchor["head_hash"] == rec["hash"] and calls["n"] == 4
+
+
+# ---- external signed checkpoint, verify and recovery
+def _filled(tmp_path, n=5, key="k" * 32):
+    led = Ledger(tmp_path / "c.db", anchor_key=key)
+    for i in range(1, n + 1):
+        led.append(_alert(i))
+    return led
+
+
+def test_checkpoint_matches_and_allows_new_records(tmp_path):
+    led = _filled(tmp_path)
+    cp = tmp_path / "off_host" / "cp.json"
+    led.export_checkpoint(cp)
+    led.append(_alert(6))
+    r = led.verify_checkpoint(cp)
+    assert r["status"] == "MATCHES" and r["records_since_checkpoint"] == 1 and r["signed"]
+
+
+def test_checkpoint_catches_truncation_even_if_anchor_is_rewritten(tmp_path):
+    led = _filled(tmp_path)
+    cp = tmp_path / "cp.json"
+    led.export_checkpoint(cp)
+    with sqlite3.connect(led.db_path) as con:
+        con.execute("DELETE FROM alerts WHERE id >= 4")
+    led._write_anchor(3, led.get(3)["hash"])  # attacker with the key on the host repairs the local anchor
+    assert led.verify()["status"] == "VERIFIED"  # the local checks alone are fooled
+    assert led.verify_checkpoint(cp)["status"] == "MISMATCH"
+
+
+def test_checkpoint_rejects_edit_and_wrong_key(tmp_path):
+    led = _filled(tmp_path)
+    cp = tmp_path / "cp.json"
+    led.export_checkpoint(cp)
+    doc = json.loads(cp.read_text())
+    doc["head_hash"] = "0" * 64
+    cp.write_text(json.dumps(doc))
+    assert led.verify_checkpoint(cp)["status"] == "CHECKPOINT_INVALID"
+    led.export_checkpoint(cp)
+    other = Ledger(led.db_path, anchor_key="z" * 32)
+    assert other.verify_checkpoint(cp)["status"] == "CHECKPOINT_INVALID"
+
+
+def test_checkpoint_refuses_corrupted_ledger_and_mirror_env(tmp_path, monkeypatch):
+    mirror = tmp_path / "mirror.json"
+    monkeypatch.setenv("AEGISFLOW_LEDGER_CHECKPOINT", str(mirror))
+    led = _filled(tmp_path, 3)
+    assert json.loads(mirror.read_text())["last_id"] == 3
+    with sqlite3.connect(led.db_path) as con:
+        con.execute("UPDATE alerts SET risk_score = 1.0 WHERE id = 2")
+    with pytest.raises(ValueError):
+        led.export_checkpoint(tmp_path / "x.json")
+    assert led.verify_checkpoint(mirror)["status"] == "MISMATCH"
+
+
+def test_recover_prefix_copies_intact_records_into_new_db(tmp_path):
+    led = _filled(tmp_path, 6)
+    with sqlite3.connect(led.db_path) as con:
+        con.execute("UPDATE alerts SET risk_score = 1.0 WHERE id = 4")
+    r = led.recover_prefix(tmp_path / "recovered.db")
+    assert r["recovered_records"] == 3 and r["dropped_records"] == 3 and r["output_verify"] == "VERIFIED"
+    assert led.verify()["status"] == "CORRUPTED"  # original untouched
+    with pytest.raises(FileExistsError):
+        led.recover_prefix(tmp_path / "recovered.db")
+
+
+def test_audit_cli_roundtrip(tmp_path, monkeypatch, capsys):
+    from backend.app.audit import _main
+    monkeypatch.setenv("AEGISFLOW_LEDGER_KEY", "k" * 32)
+    led = _filled(tmp_path, 3)
+    led.close()
+    cp = str(tmp_path / "cp.json")
+    assert _main(["checkpoint", "--db", str(led.db_path), "--out", cp]) == 0
+    assert _main(["verify", "--db", str(led.db_path), "--checkpoint", cp]) == 0
+    with sqlite3.connect(led.db_path) as con:
+        con.execute("DELETE FROM alerts WHERE id = 3")
+    assert _main(["verify", "--db", str(led.db_path), "--checkpoint", cp]) == 1

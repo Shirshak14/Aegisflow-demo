@@ -444,8 +444,9 @@ function EvaluationCard({ ev, model, feats }) {
 
 // ------------------------------------------------------------------ routing (hash based, so the server needs no new routes)
 function parseRoute() {
-  const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
-  return { page: parts[0] || "overview", arg: parts[1] ?? null };
+  const [path, qs = ""] = location.hash.replace(/^#\/?/, "").split("?");
+  const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
+  return { page: parts[0] || "overview", arg: parts[1] ?? null, query: new URLSearchParams(qs) };
 }
 function useRoute() {
   const [route, setRoute] = useState(parseRoute);
@@ -458,6 +459,9 @@ function useRoute() {
 }
 const href = (...p) => "#/" + p.map(x => encodeURIComponent(String(x))).join("/");
 const go = (...p) => { location.hash = href(...p); };
+// href with a query string (alert filters travel this way between Alerts, an alert and its host)
+const hrefQ = (q, ...p) => href(...p) + (q ? "?" + q : "");
+const goQ = (q, ...p) => { location.hash = hrefQ(q, ...p); };
 
 const ICONS = {
   overview: "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z",
@@ -468,13 +472,14 @@ const ICONS = {
   audit: "M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6zM8.5 12l2.5 2.5 4.5-5",
   capture: "M12 16V4M7 9l5-5 5 5M4 16v4h16v-4",
   about: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v6M12 7.5h.01",
+  health: "M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10zM8 11h2l1-2 2 4 1-2h2",
 };
 function Icon({ name }) {
   return html`<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d=${ICONS[name]}/></svg>`;
 }
 const PAGES = [
   { id: "overview", label: "Overview" }, { id: "alerts", label: "Alerts" }, { id: "hosts", label: "Hosts" },
-  { id: "models", label: "Models and evaluation" }, { id: "robustness", label: "Robustness" }, { id: "audit", label: "Audit ledger" },
+  { id: "health", label: "Model health" }, { id: "models", label: "Models and evaluation" }, { id: "robustness", label: "Robustness" }, { id: "audit", label: "Audit ledger" },
   { id: "capture", label: "Capture and export" }, { id: "about", label: "How it works" },
 ];
 
@@ -620,6 +625,7 @@ function AlertDetail({ id, cfg, feats, models, onChange }) {
         ${hasLr && html`<div class="fact"><div class="fact-k">Logistic regression p</div>
           <div class="fact-v">${fmt(a.lr_probability, 4)} <span class="muted small">threshold ${fmt(a.lr_threshold, 5)}</span></div></div>`}
       </div>
+      <${TemporalContext} seqId=${a.sequence_id}/>
       <div class="section"><h3>How the score is built</h3><${RiskBreakdown} comp=${comp} cfg=${cfg}/></div>
       <div class="evalbox">
         <div class="evalbox-h"><span class="evalbox-tag">Evaluation only</span><span class="small muted">dataset ground truth, never shown to the model</span></div>
@@ -742,31 +748,107 @@ function AgreementCard({ alerts, rule }) {
   </section>`;
 }
 
-function AlertsPage({ ctx }) {
+// ------------------------------------------------------------------ investigation filters (kept in the URL, so they survive
+// moving to an alert, its host and back)
+const FILTER_KEYS = ["risk", "status", "host", "from", "to", "model", "agree"];
+let lastAlertQuery = "";  // the Alerts link in the sidebar reopens the last filters
+function readFilters(query) {
+  const f = {};
+  for (const k of FILTER_KEYS) f[k] = query.get(k) || (["risk", "status", "model", "agree"].includes(k) ? "all" : "");
+  return f;
+}
+function filterQuery(f) {
+  const q = new URLSearchParams();
+  for (const k of FILTER_KEYS) if (f[k] && f[k] !== "all") q.set(k, f[k]);
+  return q.toString();
+}
+const minute = iso => iso ? String(iso).slice(0, 16) : "";
+function applyFilters(alerts, f, statuses, cfg) {
+  const host = f.host.trim();
+  return alerts.filter(a => (f.risk === "all" || levelOf(a.risk_score, cfg) === f.risk)
+    && (f.status === "all" || (statuses[a.id] || "open") === f.status)
+    && (!host || a.host_id.includes(host))
+    && (!f.from || minute(a.target_window_start) >= f.from) && (!f.to || minute(a.target_window_start) <= f.to)
+    && (f.model === "all" || a.model_version === f.model)
+    && (f.agree === "all" || (f.agree === "both") === (a.anomaly_flag === true)));
+}
+function describeFilters(f) {
+  const parts = [];
+  if (f.risk !== "all") parts.push(`${LEVEL_LABEL[f.risk] || f.risk} risk`);
+  if (f.status !== "all") parts.push(STATUS_LABEL[f.status] || f.status);
+  if (f.host) parts.push(`host contains ${f.host}`);
+  if (f.from || f.to) parts.push(`target ${f.from ? t(f.from).slice(5) : "start"} to ${f.to ? t(f.to).slice(5) : "end"}`);
+  if (f.model !== "all") parts.push("one model version");
+  if (f.agree !== "all") parts.push(AGREE_FILTERS[f.agree]);
+  return parts.join(" · ");
+}
+
+// Download an investigation bundle (POST /evidence). Dataset labels are left out unless ticked.
+function EvidenceButton({ ids, label = "Export evidence" }) {
+  const [gt, setGt] = useState(false), [busy, setBusy] = useState(false), [err, setErr] = useState(null);
+  const run = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const r = await fetch("/evidence", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ alert_ids: ids, include_ground_truth: gt }) });
+      if (!r.ok) { let m = r.status; try { m = (await r.json()).detail || m; } catch (_) { /* not JSON */ } throw new Error(m); }
+      const name = (/filename="([^"]+)"/.exec(r.headers.get("content-disposition") || "") || [])[1] || "aegisflow-evidence.json";
+      const url = URL.createObjectURL(await r.blob()), el = document.createElement("a");
+      el.href = url; el.download = gt ? name.replace(/\.json$/, "-with-labels.json") : name;
+      document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+  return html`<span class="export">
+    <button class="primary" disabled=${busy || !ids.length} onClick=${run} title="Alert records, temporal context, host timeline, model version, configuration fingerprint, analyst actions and chain verification">${busy ? "Exporting…" : `${label}${ids.length > 1 ? ` (${ids.length})` : ""}`}</button>
+    <label class="small muted" title="Dataset ground truth, for evaluation only. Leave off for operational hand-over."><input type="checkbox" checked=${gt} onChange=${e => setGt(e.target.checked)}/> include dataset labels</label>
+    ${err && html`<span class="err small">${err}</span>`}</span>`;
+}
+
+function AlertsPage({ ctx, query }) {
   const { boot: { cfg, feats }, live: { statuses, st }, alerts } = ctx;
-  const [lvl, setLvl] = useState("all"), [status, setStatus] = useState("all"), [q, setQ] = useState(""), [agree, setAgree] = useState("all");
+  const [f, setF] = useState(() => readFilters(query));
+  const fq = filterQuery(f);
+  useEffect(() => {  // mirror filters into the URL without a hashchange (which would scroll to the top)
+    lastAlertQuery = fq;
+    history.replaceState(null, "", hrefQ(fq, "alerts"));
+  }, [fq]);
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   const anom = feats.anomaly_model && feats.anomaly_model.available;
-  const rows = alerts.filter(a => (lvl === "all" || levelOf(a.risk_score, cfg) === lvl)
-    && (status === "all" || (statuses[a.id] || "open") === status) && (!q || a.host_id.includes(q.trim()))
-    && (!anom || agree === "all" || (agree === "both") === (a.anomaly_flag === true)));
-  const cols = anom ? 10 : 9;
+  const versions = useMemo(() => [...new Set(alerts.map(a => a.model_version).filter(Boolean))], [alerts]);
+  const rows = applyFilters(alerts, f, statuses, cfg);
+  const win = st && st.replay_window, lo = win ? minute(win[0]) : undefined, hi = win ? minute(win[1]) : undefined;
+  const cols = anom ? 10 : 9, active = fq !== "";
   return html`<main class="page">
-    <${PageHead} title="Alerts" desc="Every alert in the current replay session, newest first. Open one to see why it fired and to review it."/>
+    <${PageHead} title="Alerts" desc="Every alert in the current replay session, newest first. Filters stay in the address, so opening an alert or its host and coming back keeps them.">
+      <${EvidenceButton} ids=${rows.map(a => a.id)} label=${active ? "Export filtered" : "Export all"}/>
+    <//>
     ${anom && alerts.length > 0 && html`<${AgreementCard} alerts=${alerts} rule=${st && st.anomaly && st.anomaly.threshold_rule}/>`}
     <section class="card span12">
       <div class="filters">
         <div class="segctl" role="group" aria-label="risk level"><span class="segctl-k">Risk</span>${LEVEL_FILTERS.map(k =>
-          html`<button key=${k} class=${lvl === k ? "on" : ""} onClick=${() => setLvl(k)}>${k === "all" ? "All" : LEVEL_LABEL[k]}</button>`)}</div>
+          html`<button key=${k} class=${f.risk === k ? "on" : ""} onClick=${() => set("risk", k)}>${k === "all" ? "All" : LEVEL_LABEL[k]}</button>`)}</div>
         ${anom && html`<div class="segctl" role="group" aria-label="model agreement"><span class="segctl-k">Anomaly model</span>${Object.entries(AGREE_FILTERS).map(([k, v]) =>
-          html`<button key=${k} class=${agree === k ? "on" : ""} onClick=${() => setAgree(k)}>${v}</button>`)}</div>`}
-        <select value=${status} onChange=${e => setStatus(e.target.value)} aria-label="status">
-          <option value="all">Any status</option>${Object.entries(STATUS_LABEL).map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}</select>
-        <input type="text" placeholder="Filter by host IP" value=${q} onInput=${e => setQ(e.target.value)} style=${{ width: "180px" }}/>
+          html`<button key=${k} class=${f.agree === k ? "on" : ""} onClick=${() => set("agree", k)}>${v}</button>`)}</div>`}
+        <select value=${f.status} onChange=${e => set("status", e.target.value)} aria-label="review status">
+          <option value="all">Any review status</option>${Object.entries(STATUS_LABEL).map(([k, v]) => html`<option key=${k} value=${k}>${v}</option>`)}</select>
+        <input type="text" placeholder="Filter by host IP" value=${f.host} onInput=${e => set("host", e.target.value)} style=${{ width: "160px" }} aria-label="host"/>
+      </div>
+      <div class="filters">
+        <label class="small muted">Target window from</label>
+        <input type="datetime-local" value=${f.from} min=${lo} max=${hi} onInput=${e => set("from", e.target.value)} aria-label="target window from"/>
+        <label class="small muted">to</label>
+        <input type="datetime-local" value=${f.to} min=${lo} max=${hi} onInput=${e => set("to", e.target.value)} aria-label="target window to"/>
+        <select value=${f.model} onChange=${e => set("model", e.target.value)} aria-label="model version" disabled=${versions.length < 2}
+          title=${versions.length < 2 ? "Every alert in this session comes from the same model" : ""}>
+          <option value="all">${versions.length === 1 ? `Model ${versions[0].slice(-12)}` : "Any model version"}</option>
+          ${versions.length > 1 && versions.map(v => html`<option key=${v} value=${v}>${v}</option>`)}</select>
+        ${active && html`<button onClick=${() => setF(readFilters(new URLSearchParams()))}>Clear filters</button>`}
         <span class="small muted">${rows.length} of ${alerts.length} alerts</span>
       </div>
       <div class="scroll tall" data-lenis-prevent><table>
         <thead><tr><th>#</th><th>Host</th><th>Target window</th><th class="num">Risk</th><th class="num">LSTM p</th><th>Confidence</th><th>Stage</th>${anom && html`<th title="Label-free isolation forest, second opinion only">Anomaly</th>`}<th>Status</th><th>Dataset label <span class="muted">(eval)</span></th></tr></thead>
-        <tbody>${rows.length ? rows.map(a => { const s = statuses[a.id] || "open"; return html`<tr key=${a.id} onClick=${() => go("alerts", a.id)}>
+        <tbody>${rows.length ? rows.map(a => { const s = statuses[a.id] || "open"; return html`<tr key=${a.id} onClick=${() => goQ(fq, "alerts", a.id)}>
           <td>${a.id}</td><td class="mono">${a.host_id}</td><td class="mono">${t(a.target_window_start).slice(5)}</td>
           <${RiskCell} v=${a.risk_score} cfg=${cfg}/><td class="num">${fmt(a.lstm_probability)}</td>
           <td class=${a.confidence_label === cfg.uncertain_label ? "muted" : ""}>${a.confidence_label}</td><td>${a.predicted_stage}</td>
@@ -778,18 +860,82 @@ function AlertsPage({ ctx }) {
   </main>`;
 }
 
-function AlertPage({ ctx, id }) {
-  const { boot: { cfg, feats, models }, alerts, poll } = ctx;
-  const n = +id, i = alerts.findIndex(a => a.id === n);
-  const newer = i > 0 ? alerts[i - 1].id : null, older = i >= 0 && i < alerts.length - 1 ? alerts[i + 1].id : null;
-  const a = alerts[i];
+// Alerts that belong to the same investigation: this host's other alerts, and other hosts alerting around the same time.
+const RELATED_WINDOW_MS = 10 * 60 * 1000;
+function RelatedAlerts({ a, alerts, fq, cfg, statuses }) {
+  const at = Date.parse(a.target_window_start);
+  const near = x => Math.abs(Date.parse(x.target_window_start) - at) <= RELATED_WINDOW_MS;
+  const same = alerts.filter(x => x.id !== a.id && x.host_id === a.host_id);
+  const others = alerts.filter(x => x.host_id !== a.host_id && near(x));
+  const table = (rows, empty, showHost) => rows.length ? html`<div class="scroll" style=${{ maxHeight: "220px" }} data-lenis-prevent><table>
+      <thead><tr><th>#</th>${showHost && html`<th>Host</th>`}<th>Target window</th><th class="num">Risk</th><th>Status</th></tr></thead>
+      <tbody>${rows.map(x => { const s = statuses[x.id] || "open"; return html`<tr key=${x.id} onClick=${() => goQ(fq, "alerts", x.id)}>
+        <td>${x.id}</td>${showHost && html`<td class="mono">${x.host_id}</td>`}<td class="mono">${t(x.target_window_start).slice(5)}</td>
+        <${RiskCell} v=${x.risk_score} cfg=${cfg}/><td><span class=${"status " + s}>${STATUS_LABEL[s] || s}</span></td></tr>`; })}</tbody></table></div>`
+    : html`<div class="small muted">${empty}</div>`;
+  return html`<section class="card span12"><h2>Related alerts</h2>
+    <div class="twocol">
+      <div><h3 class="sub">Same host <span class="mono">${a.host_id}</span> · ${same.length}</h3>${table(same, "No other alerts for this host in this session.", false)}</div>
+      <div><h3 class="sub">Other hosts within 10 min · ${others.length}</h3>${table(others, "No other host alerted within 10 minutes of this target window.", true)}</div>
+    </div>
+    <div class="small muted" style=${{ marginTop: "6px" }}>From the whole session, not just the current filters. Alerting at the same time is a lead to check, not a link the model found.</div>
+  </section>`;
+}
+
+const dur = sec => {
+  if (sec === null || sec === undefined) return "–";
+  const s = Math.round(sec);
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ""}`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h${Math.round(s % 3600 / 60) ? ` ${Math.round(s % 3600 / 60)} min` : ""}`;
+  return `${Math.floor(s / 86400)} d ${Math.round(s % 86400 / 3600)} h`;
+};
+const pctRank = r => r === null || r === undefined ? "" : r >= 0.995 ? "longer than nearly every test sequence" : `longer than ${Math.round(r * 100)}% of test sequences`;
+
+// Temporal context (GET /context/{sequence}): how much real time the input covers and how far ahead the target is.
+function TemporalContext({ seqId }) {
+  const c = useLoad(() => api(`/context/${encodeURIComponent(seqId)}`), [seqId]);
+  if (c.loading) return html`<div class="section"><h3>Temporal context</h3><div class="skel"></div></div>`;
+  if (c.error) return html`<div class="section"><h3>Temporal context</h3><div class="small muted">${c.error.message}</div></div>`;
+  const d = c.data, nominal = d.window_seconds + d.stride_seconds * (d.observed_windows - 1);
+  const leadLong = d.lead_seconds !== null && d.lead_seconds > d.min_lead_seconds;
+  const gaps = d.window_starts.length ? d.window_starts.slice(1).map((w, i) => w && d.window_starts[i] ? (Date.parse(w) - Date.parse(d.window_starts[i])) / 1000 : null) : [];
+  const gmax = Math.max(d.stride_seconds, ...gaps.filter(g => g !== null));
+  return html`<div class="section"><h3>Temporal context</h3>
+    <div class="facts">
+      <div class="fact"><div class="fact-k">Input history</div><div class="fact-v">${dur(d.input_span_seconds)}</div>
+        <div class="small muted">${t(d.input_start).slice(5)} → ${hm(d.input_end)}${d.input_span_seconds > nominal ? ` · ${pctRank(d.span_rank_in_test)}` : " · contiguous"}</div></div>
+      <div class="fact"><div class="fact-k">Windows</div><div class="fact-v">${d.observed_windows} with traffic${d.silent_windows ? html`, <span class="warn-t">${d.silent_windows} silent</span>` : ""}</div>
+        <div class="small muted">${d.expected_windows} slots of ${d.window_seconds} s every ${d.stride_seconds} s in that span</div></div>
+      <div class="fact"><div class="fact-k">Time since previous observation</div><div class="fact-v">${dur(d.previous_gap_seconds)}</div>
+        <div class="small muted">between the last two input windows${d.largest_gap_seconds !== null && d.largest_gap_seconds > d.stride_seconds ? `; largest gap ${dur(d.largest_gap_seconds)}` : ""}</div></div>
+      <div class="fact"><div class="fact-k">Target window</div><div class="fact-v mono">${t(d.target_window_start).slice(5)} → ${hm(d.target_window_end)}</div>
+        <div class=${"small " + (leadLong ? "warn-t" : "muted")}>starts ${dur(d.lead_seconds)} after the input ends${leadLong ? ` (shortest possible ${dur(d.min_lead_seconds)}; ${pctRank(d.lead_rank_in_test)})` : " (the shortest possible)"}</div></div>
+    </div>
+    ${gaps.length > 0 && html`<div class="gapstrip" role="img" aria-label="gap before each input window">${gaps.map((g, i) => html`<div key=${i} title=${g === null ? "unknown" : `gap ${dur(g)}`}>
+      <span class=${g !== null && g > d.stride_seconds ? "long" : ""} style=${{ height: g === null ? "0" : Math.max(8, Math.log1p(g) / Math.log1p(gmax) * 100) + "%" }}></span></div>`)}</div>
+      <div class="small muted">Gap before each of the ${gaps.length} later input windows, oldest first (log scale; amber = longer than one ${d.stride_seconds} s step).</div>`}
+    <div class="small muted" style=${{ marginTop: "6px" }}>Windows exist only when the host sent traffic, so "the last 10 windows" and "the next window" can span very different amounts of time. Read the forecast against these spans.</div>
+  </div>`;
+}
+
+function AlertPage({ ctx, id, query }) {
+  const { boot: { cfg, feats, models }, alerts, poll, live: { statuses } } = ctx;
+  const f = readFilters(query), fq = filterQuery(f), filtered = applyFilters(alerts, f, statuses, cfg);
+  const n = +id, i = filtered.findIndex(a => a.id === n);
+  const newer = i > 0 ? filtered[i - 1].id : null, older = i >= 0 && i < filtered.length - 1 ? filtered[i + 1].id : null;
+  const a = alerts.find(x => x.id === n);
+  const hostQ = [fq, `alert=${n}`].filter(Boolean).join("&");
   return html`<main class="page">
-    <div class="crumbs span12"><a href="#/alerts">← Alerts</a></div>
-    <${PageHead} title=${`Alert #${id}`} desc=${a ? html`Host <a class="mono" href=${href("hosts", a.host_id)}>${a.host_id}</a> · target window ${t(a.target_window_start)}` : null}>
-      <button disabled=${!newer} onClick=${() => go("alerts", newer)}>← Newer</button>
-      <button disabled=${!older} onClick=${() => go("alerts", older)}>Older →</button>
+    <div class="crumbs span12"><a href=${hrefQ(fq, "alerts")}>← Alerts${fq ? ` (${describeFilters(f)})` : ""}</a></div>
+    <${PageHead} title=${`Alert #${id}`} desc=${a ? html`Host <a class="mono" href=${hrefQ(hostQ, "hosts", a.host_id)}>${a.host_id}</a> · target window ${t(a.target_window_start)}` : null}>
+      <button disabled=${!newer} onClick=${() => goQ(fq, "alerts", newer)} title=${fq ? "Next newer alert matching the filters" : ""}>← Newer</button>
+      <button disabled=${!older} onClick=${() => goQ(fq, "alerts", older)} title=${fq ? "Next older alert matching the filters" : ""}>Older →</button>
+      ${i >= 0 && html`<span class="small muted">${i + 1} of ${filtered.length}${fq ? " filtered" : ""}</span>`}
+      <${EvidenceButton} ids=${[n]}/>
     <//>
     <${AlertDetail} key=${id} id=${n} cfg=${cfg} feats=${feats} models=${models} onChange=${poll}/>
+    ${a && html`<${RelatedAlerts} a=${a} alerts=${alerts} fq=${fq} cfg=${cfg} statuses=${statuses}/>`}
   </main>`;
 }
 
@@ -817,13 +963,18 @@ function HostsPage({ ctx }) {
   </main>`;
 }
 
-function HostPage({ ctx, id }) {
+function HostPage({ ctx, id, query }) {
   const { boot: { cfg }, tick } = ctx;
   const h = useLoad(() => api(`/hosts/${encodeURIComponent(id)}`), [id, Math.floor(tick / 3)]);
   const d = h.data;
+  // Arriving from an alert: keep its filters for the way back and for opening this host's alerts.
+  const f = readFilters(query), fq = filterQuery(f), from = query.get("alert");
   return html`<main class="page">
-    <div class="crumbs span12"><a href="#/hosts">← Hosts</a></div>
-    <${PageHead} title=${html`Host <span class="mono">${id}</span>`} desc="Risk for every sequence this host produced in the replay, and the alerts it raised."/>
+    <div class="crumbs span12">${from ? html`<a href=${hrefQ(fq, "alerts", from)}>← Alert #${from}</a><span class="muted"> · </span><a href=${hrefQ(fq, "alerts")}>Alerts${fq ? ` (${describeFilters(f)})` : ""}</a>`
+      : html`<a href="#/hosts">← Hosts</a>`}</div>
+    <${PageHead} title=${html`Host <span class="mono">${id}</span>`} desc="Risk for every sequence this host produced in the replay, and the alerts it raised.">
+      ${d && d.alerts_list.length > 0 && html`<${EvidenceButton} ids=${d.alerts_list.map(a => a.id)} label="Export host evidence"/>`}
+    <//>
     ${!d ? html`<section class="card span12">${h.error ? (h.error.status === 404 ? html`<${Empty}>This host has not appeared in the current replay yet. The page fills in once it does.<//>` : html`<div class="err">${h.error.message}</div>`) : html`<div class="skel"></div>`}</section>` : html`<${React.Fragment}>
       <section class="card span12"><div class="stats">
         <${Stat} label="Sequences replayed" value=${d.sequences}/>
@@ -835,7 +986,7 @@ function HostPage({ ctx, id }) {
         <div class="small muted">Red dots are alerts; grid lines mark the level bands.</div></section>
       <section class="card span12"><h2>Alerts for this host</h2><div class="scroll" data-lenis-prevent><table>
         <thead><tr><th>#</th><th>Target window</th><th class="num">Risk</th><th class="num">LSTM p</th><th>Stage</th><th>Dataset label <span class="muted">(eval)</span></th></tr></thead>
-        <tbody>${d.alerts_list.length ? d.alerts_list.map(a => html`<tr key=${a.id} onClick=${() => go("alerts", a.id)}><td>${a.id}</td>
+        <tbody>${d.alerts_list.length ? d.alerts_list.map(a => html`<tr key=${a.id} class=${String(a.id) === from ? "hl" : ""} onClick=${() => goQ(fq, "alerts", a.id)}><td>${a.id}</td>
           <td class="mono">${t(a.target_window_start).slice(5)}</td><${RiskCell} v=${a.risk_score} cfg=${cfg}/>
           <td class="num">${fmt(a.lstm_probability)}</td><td>${a.predicted_stage}</td><td><span class=${"lbl " + (a.truth_attack ? "atk" : "ben")}>${a.truth_class}</span></td></tr>`)
           : html`<tr><td colspan="6" class="muted">No alerts for this host.</td></tr>`}</tbody></table></div></section>
@@ -871,11 +1022,39 @@ function AnomalyCard() {
   </section>`;
 }
 
+// Where every number on this page comes from, and what is not available. Reads GET /evaluation/provenance.
+function ProvenanceCard() {
+  const pv = useLoad(() => api("/evaluation/provenance"), []);
+  if (pv.error) return html`<section class="card span12"><h2>Where these numbers come from</h2><div class="small muted">Unavailable: ${pv.error.message}</div></section>`;
+  if (!pv.data) return html`<section class="card span12"><div class="skel"></div></section>`;
+  const d = pv.data, m = d.model, sp = d.split, tg = d.target, cp = d.class_performance;
+  const NA = x => html`<span class="muted">not available: ${x.reason}</span>`;
+  return html`<section class="card span12"><h2>Where these numbers come from</h2>
+    <div class="kv small">
+      <div>Model version</div><div>${m.available ? html`<span class="mono">${m.version}</span> · ${m.kind} · alert threshold ${fmt(m.alert_threshold, 4)} (${m.threshold_selection}, validation only) · ${m.calibrated ? "confidence calibrated" : "confidence NOT calibrated"}` : NA(m)}</div>
+      <div>Data source</div><div>${d.dataset.name}. <span class="muted">${d.dataset.caveat}</span></div>
+      <div>Prediction target</div><div>${tg.definition} Window ${tg.window_seconds} s, stride ${tg.stride_seconds} s, ${tg.input_windows} input windows, horizon ${tg.forecast_horizon_windows} window: ${tg.horizon_kind}.</div>
+      <div>Evaluation split</div><div>${sp.available ? html`${sp.kind}. Train ${sp.train_sequences.toLocaleString()} · validation ${sp.val_sequences.toLocaleString()} · test ${sp.test_sequences.toLocaleString()} sequences. Reported on ${sp.reported_on}.` : NA(sp)}</div>
+    </div>
+    <div class="row" style=${{ marginTop: "12px", alignItems: "stretch" }}>
+      ${[["Precomputed replay scores", d.sources.replay_scores], ["Live capture scores", d.sources.live_capture_scores], ["Ground-truth labels", d.sources.ground_truth_labels]].map(([k, v]) =>
+        html`<div class="note info" style=${{ flex: "1 1 240px" }} key=${k}><b>${k}.</b> ${v}</div>`)}
+    </div>
+    <h3 class="sub" style=${{ marginTop: "16px" }}>Detection by attack class (LSTM, test split)</h3>
+    ${!cp.available ? html`<div class="small muted">Not available: ${cp.reason}</div>` : html`<div class="scroll" data-lenis-prevent><table>
+      <thead><tr><th>Attack class</th><th class="num">Test sequences</th><th class="num">Detected</th><th class="num">Recall</th></tr></thead>
+      <tbody>${cp.classes.map(c => html`<tr key=${c.class} style=${{ cursor: "default" }}><td>${c.class}</td><td class="num">${c.positives}</td><td class="num">${c.detected}</td><td class="num">${fmt(c.recall, 3)}</td></tr>`)}</tbody></table></div>
+      <div class="small muted" style=${{ marginTop: "8px" }}>Overall false-positive rate ${fmt(cp.overall_false_positive_rate * 100, 2)}%${cp.host_check && cp.host_check["172.16.0.1"] ? `; on attacker host 172.16.0.1 it flags ${cp.host_check["172.16.0.1"].neg_flagged} of ${cp.host_check["172.16.0.1"].neg} benign sequences` : ""}.
+        ${cp.note} Source: ${cp.source}.</div>`}
+  </section>`;
+}
+
 function ModelsPage({ ctx }) {
   const { boot: { model, ev, feats, models, cfg } } = ctx;
   const lstm = model.test_metrics.lstm || {}, lr = model.test_metrics.logistic_regression || {}, cal = model.confidence_calibration;
   return html`<main class="page">
     <${PageHead} title="Models and evaluation" desc="Held-out numbers for the replayed model, a label-free baseline, and every model trained on this machine. Nothing here is recomputed or rounded for effect."/>
+    <${ProvenanceCard}/>
     <section class="card span12"><h2>Replayed model: LSTM on the chronological test split</h2>
       <div class="stats">
         <${Stat} label="F1" value=${fmt(lstm.f1, 3)} sub=${`logistic regression ${fmt(lr.f1, 3)}`}/>
@@ -1070,6 +1249,90 @@ function RobustnessPage() {
   </main>`;
 }
 
+// ------------------------------------------------------------------ model health and drift page (GET /health/model)
+const LEVEL_TEXT = { investigate: "investigate", watch: "watch", stable: "stable", "n/a": "n/a" };
+function LvlTag({ level }) { return html`<span class=${"lvltag " + level}>${LEVEL_TEXT[level] || level}</span>`; }
+
+function ScoreHist({ s }) {
+  const share = xs => { const n = Math.max(1, xs.reduce((a, b) => a + b, 0)); return xs.map(x => x / n); };
+  const r = share(s.replay), v = s.validation ? share(s.validation) : null;
+  const max = Math.max(1e-9, ...r, ...(v || []));
+  return html`<div class="chart">
+    <div class="legend small"><span><i style=${{ background: SERIES.attack }}></i>replayed so far</span>
+      ${v && html`<span><i style=${{ background: "#8493a3" }}></i>validation split</span>`}<span><i class="dash"></i>alert threshold ${fmt(s.threshold, 4)}</span></div>
+    <div class="hist" role="img" aria-label="share of sequences per LSTM probability bin">
+      ${r.map((x, i) => html`<div key=${i} title=${`p ${fmt(s.bins[i], 2)}–${fmt(s.bins[i + 1], 2)}: replay ${fmt(x * 100, 1)}%${v ? `, validation ${fmt(v[i] * 100, 1)}%` : ""}`}>
+        <span style=${{ height: x / max * 100 + "%", background: SERIES.attack }}></span>${v && html`<span style=${{ height: v[i] / max * 100 + "%", background: "#8493a3" }}></span>`}</div>`)}
+      <div class="thr" style=${{ left: s.threshold * 100 + "%" }}></div>
+    </div>
+    <div class="hist-axis"><span>0</span><span>0.5</span><span>1</span></div>
+  </div>`;
+}
+
+function VolumeChart({ v }) {
+  const rows = v.replay, ref = v.train.flows, max = Math.max(1, ref.p90, ...rows.map(r => r.flows));
+  return html`<div>
+    <div class="vol" role="img" aria-label="flows per 15 minutes of replay time">
+      <div class="band" style=${{ bottom: ref.p10 / max * 100 + "%", height: Math.max(0.5, (ref.p90 - ref.p10) / max * 100) + "%" }} title=${`training: 10th–90th percentile ${fmt(ref.p10, 0)}–${fmt(ref.p90, 0)} flows per 15 min`}></div>
+      ${rows.map(r => html`<span key=${r.t} style=${{ height: r.flows / max * 100 + "%" }} title=${`${hm(r.t)}: ${r.flows.toLocaleString()} flows in last input windows, ${r.sequences} sequences`}></span>`)}
+    </div>
+    <div class="hist-axis"><span>${rows.length ? hm(rows[0].t) : ""}</span><span>${rows.length ? hm(rows[rows.length - 1].t) : ""}</span></div>
+    <div class="small muted">Bars: flows in the last input window of each sequence, per 15 minutes of replay time. Shaded band: the middle 80% of the same number in training (median ${fmt(ref.median, 0)}). The last bar may be a partial bucket.</div>
+  </div>`;
+}
+
+function HealthPage({ ctx }) {
+  const { live: { st }, tick } = ctx;
+  const hd = useLoad(() => api("/health/model"), [st && st.session_id, Math.floor(tick / 20)]);
+  const [all, setAll] = useState(false);
+  const head = html`<${PageHead} title="Model health" desc="How the traffic being scored compares with what the model was trained on. Computed without labels; drift is a reason to investigate, not evidence of an attack."/>`;
+  if (hd.error) return html`<main class="page">${head}<section class="card span12"><div class="err">${hd.error.message}</div></section></main>`;
+  if (!hd.data) return html`<main class="page">${head}<section class="card span12"><div class="skel" style=${{ height: "140px" }}></div></section></main>`;
+  const d = hd.data, ing = d.ingestion;
+  const ingestion = ing && html`<section class="card span12"><h2>Ingestion checks (at preprocessing time)</h2>
+    <div class="stats">
+      <${Stat} label="Raw rows" value=${ing.raw_rows.toLocaleString()}/>
+      <${Stat} label="Rows dropped" value=${ing.dropped_rows.toLocaleString()} sub=${`${fmt(ing.dropped_rows / ing.raw_rows * 100, 1)}% of raw rows`}/>
+      <${Stat} label="Features unavailable" value=${ing.unavailable_features.length} sub=${ing.unavailable_features.join(", ") || "none"}/>
+    </div>
+    <div class="kv small" style=${{ marginTop: "10px" }}>${Object.entries(ing.dropped_by_reason).map(([k, n]) => html`<${React.Fragment} key=${k}><div>${k.replace(/_/g, " ")}</div><div>${n.toLocaleString()}</div><//>`)}</div>
+    <div class="small muted" style=${{ marginTop: "6px" }}>From ${ing.source}. These are schema and cleaning failures when the dataset was preprocessed; the replay reads the already-processed table, so it has no live schema failures to count.</div>
+  </section>`;
+  if (d.state !== "ok") return html`<main class="page">${head}
+    <section class="card span12"><${Empty}>${d.state === "model_not_ready" ? "The model is still loading." : `Drift needs at least ${d.min_sequences} replayed sequences (${d.replayed} so far). Start the replay on the Overview page.`}<//></section>
+    ${ingestion}</main>`;
+  const feats = all ? d.features : d.features.slice(0, 10), lv = d.features_by_level, sc = d.scores;
+  return html`<main class="page">${head}
+    <section class="card span12"><div class="stats">
+      <${Stat} label="Sequences compared" value=${d.replayed.toLocaleString()} sub=${`replayed ${hm(d.window[0])}–${hm(d.window[1])} vs ${d.train_sequences.toLocaleString()} training`}/>
+      <${Stat} label="Features shifted" value=${`${lv.investigate} / ${lv.watch}`} sub=${`large (PSI ≥ ${d.psi_levels.investigate}) / moderate (≥ ${d.psi_levels.watch}) of ${d.features.length}`} tone=${lv.investigate ? "bad" : ""}/>
+      <${Stat} label="Score drift (PSI)" value=${sc.psi === null ? "–" : fmt(sc.psi, 2)} sub=${sc.validation ? "LSTM probabilities vs validation" : "no validation scores on this machine"} tone=${sc.level === "investigate" ? "bad" : ""}/>
+      <${Stat} label="Alert rate" value=${fmt(sc.replay_alert_rate * 100, 2) + "%"} sub=${sc.validation_alert_rate !== undefined ? `validation ${fmt(sc.validation_alert_rate * 100, 2)}% at the same threshold` : ""}/>
+      <${Stat} label="Non-finite inputs" value=${d.non_finite_inputs} sub="NaN or infinite model inputs"/>
+    </div>
+    <div class="note" style=${{ marginTop: "12px" }}><b>Reading:</b> a shifted feature or score distribution says today's traffic looks different from training. That can be an attack,
+      but also a new service, a time-of-day effect or a data-collection change, so it is a reason to look at the affected hosts, not a verdict.
+      Recomputed as the replay advances. Processing lag is ${d.processing_lag}.</div>
+    </section>
+    <section class="card span6"><h2>Score distribution</h2>${sc.validation || sc.replay ? html`<${ScoreHist} s=${sc}/>` : null}
+      <div class="small muted" style=${{ marginTop: "6px" }}>Share of sequences per LSTM probability bin.${sc.psi !== null ? html` PSI ${fmt(sc.psi, 3)} <${LvlTag} level=${sc.level}/>.` : ""}</div></section>
+    <section class="card span6"><h2>Traffic volume</h2><${VolumeChart} v=${d.volume}/></section>
+    <section class="card span12"><h2>Input drift by feature (last input window)</h2>
+      <div class="scroll" data-lenis-prevent><table>
+        <thead><tr><th>Feature</th><th class="num">PSI</th><th></th><th class="num">Outside training range</th><th class="num">Zeros now</th><th class="num">Zeros in training</th></tr></thead>
+        <tbody>${feats.map(f => html`<tr key=${f.feature} style=${{ cursor: "default" }}><td class="mono small" title=${`training range ${fmt(f.train_range[0], 3)} to ${fmt(f.train_range[1], 3)}`}>${f.feature}</td>
+          <td class="num">${fmt(f.psi, 3)}</td><td><${LvlTag} level=${f.level}/></td>
+          <td class=${"num " + (f.outside_train_range > 0.01 ? "warn-t" : "")}>${fmt(f.outside_train_range * 100, 2)}%</td>
+          <td class="num">${fmt(f.zero_share * 100, 1)}%</td><td class="num muted">${fmt(f.train_zero_share * 100, 1)}%</td></tr>`)}</tbody></table></div>
+      ${d.features.length > 10 && html`<button style=${{ marginTop: "8px" }} onClick=${() => setAll(x => !x)}>${all ? "Show top 10" : `Show all ${d.features.length}`}</button>`}
+      <div class="small muted" style=${{ marginTop: "6px" }}>PSI compares each feature's distribution with training, binned at the training deciles (below ${d.psi_levels.watch} stable, ${d.psi_levels.watch}–${d.psi_levels.investigate} moderate, above large).
+        "Outside training range" is the share of values below the training minimum or above its maximum: inputs the model never saw.
+        The windowing step stores missing values as 0, so a missing measurement cannot be told apart from a real zero; the share of zeros is shown instead of a missing rate.</div>
+    </section>
+    ${ingestion}
+  </main>`;
+}
+
 function AuditPage({ ctx }) {
   const sessions = useLoad(() => api("/audit/sessions"), [ctx.live.st && ctx.live.st.session_id, ctx.alerts.length]);
   return html`<main class="page">
@@ -1142,7 +1405,7 @@ function AboutPage({ ctx }) {
 function Sidebar({ page, st, counts }) {
   return html`<nav class="side" aria-label="Pages">
     <a class="brand" href="#/overview"><span class="brand-mark" aria-hidden="true"></span><span>AegisFlow</span></a>
-    <div class="nav">${PAGES.map(p => html`<a key=${p.id} href=${"#/" + p.id} class=${page === p.id ? "on" : ""} aria-current=${page === p.id ? "page" : undefined}>
+    <div class="nav">${PAGES.map(p => html`<a key=${p.id} href=${p.id === "alerts" ? hrefQ(lastAlertQuery, "alerts") : "#/" + p.id} class=${page === p.id ? "on" : ""} aria-current=${page === p.id ? "page" : undefined}>
       <${Icon} name=${p.id}/><span>${p.label}</span>${counts[p.id] ? html`<span class="count">${counts[p.id]}</span>` : null}</a>`)}</div>
     <div class="side-foot">
       <span class=${"chip " + (st ? st.state : "idle")}>${st ? st.state + (st.state === "running" ? ` · ${st.speed}×` : "") : "idle"}</span>
@@ -1208,8 +1471,9 @@ function App() {
   let body;
   if (bootErr) body = html`<main class="page"><section class="card span12"><h2>Cannot load</h2><div class="err">${bootErr.message}</div></section></main>`;
   else if (!boot) body = html`<main class="page"><section class="card span12"><div class="skel" style=${{ width: "38%" }}></div><div class="skel" style=${{ height: "160px" }}></div></section></main>`;
-  else if (page === "alerts") body = arg ? html`<${AlertPage} key=${arg} ctx=${ctx} id=${arg}/>` : html`<${AlertsPage} ctx=${ctx}/>`;
-  else if (page === "hosts") body = arg ? html`<${HostPage} key=${arg} ctx=${ctx} id=${arg}/>` : html`<${HostsPage} ctx=${ctx}/>`;
+  else if (page === "alerts") body = arg ? html`<${AlertPage} key=${arg} ctx=${ctx} id=${arg} query=${route.query}/>` : html`<${AlertsPage} ctx=${ctx} query=${route.query}/>`;
+  else if (page === "hosts") body = arg ? html`<${HostPage} key=${arg} ctx=${ctx} id=${arg} query=${route.query}/>` : html`<${HostsPage} ctx=${ctx}/>`;
+  else if (page === "health") body = html`<${HealthPage} ctx=${ctx}/>`;
   else if (page === "models") body = html`<${ModelsPage} ctx=${ctx}/>`;
   else if (page === "robustness") body = html`<${RobustnessPage} ctx=${ctx}/>`;
   else if (page === "audit") body = html`<${AuditPage} ctx=${ctx}/>`;

@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from aegisflow.config import load_config
 
 from . import features, info, live
+from .investigate import router as investigate_router
 from .analyst import ActionError, AnalystLog
 from .audit import Ledger
 from .replay import ReplayEngine
@@ -140,6 +141,7 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True, settings
             "`python -m aegisflow train --dataset cic_ids2017` (see README).")})
     if warm_up:
         engine.warm_up()
+    app.include_router(investigate_router)  # /context, /health/model, /evidence; see investigate.py
 
     static = Path(__file__).parent / "static"
 
@@ -236,6 +238,11 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True, settings
     @app.get("/evaluation")
     def evaluation() -> dict[str, Any]:
         return info.evaluation()
+
+    @app.get("/evaluation/provenance")
+    def evaluation_provenance() -> dict[str, Any]:
+        """Model version, data source, target horizon, evaluation split and score sources; missing items say so."""
+        return info.provenance()
 
     @app.get("/evaluation/anomaly")
     def anomaly_evaluation() -> dict[str, Any]:

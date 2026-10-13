@@ -14,6 +14,7 @@ Implemented commands:
 - window: host-level temporal window aggregation
 - train: train the majority / logistic-regression / LSTM baselines
 - predict: run the trained LSTM on a sequences Parquet file
+- manifest: write or --verify manifest.json (file hashes, feature schema, threshold, training config) for a model dir
 - doctor: list the files the demo needs that are missing, and the command that creates each
 
 The replay engine, audit ledger and dashboard are served by the FastAPI app, not by this CLI:
@@ -23,6 +24,8 @@ The `evaluate`, `replay` and `serve` subcommands below are placeholders that onl
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
+import json
 import sys
 
 from .config import load_config
@@ -257,6 +260,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_ex.add_argument("--syslog-port", type=int, default=514)
     _common_args(p_ex)
 
+    p_man = sub.add_parser("manifest", help="Write (or --verify) manifest.json for a trained model directory: file "
+                                            "hashes, feature schema, threshold, training configuration.")
+    p_man.add_argument("--dataset", default="cic_ids2017")
+    p_man.add_argument("--model-dir", default=None, help="default: artifacts/models/<dataset>")
+    p_man.add_argument("--verify", action="store_true", help="recompute hashes against the existing manifest; exit 1 on any difference")
+    p_man.add_argument("--bundle", default=None, metavar="ZIP", help="also zip the model files + manifest (never any data) to ZIP")
+    _common_args(p_man)
+
     p_doc = sub.add_parser("doctor", help="Check that the data, model and report files the demo needs exist; "
                                           "exit 1 and print the fix command for each missing one.")
     _common_args(p_doc)
@@ -294,6 +305,20 @@ def _dispatch(args: argparse.Namespace, cfg) -> int:
         results = run_checks(cfg.root)
         print(format_report(results))
         return 0 if demo_ready(results) else 1
+    if args.command == "manifest":
+        from .manifest import verify_manifest, write_manifest
+        mdir = cfg.path(args.model_dir) if args.model_dir else cfg.path("artifacts", "models", args.dataset)
+        if args.verify:
+            res = verify_manifest(mdir)
+            print(json.dumps(res, indent=2))
+            return 0 if res["ok"] else 1
+        out = write_manifest(mdir, root=cfg.root, config=cfg,
+                             split_metadata=cfg.path(cfg.config.paths.data_processed, args.dataset, "split_metadata.json"))
+        print(f"Manifest written: {out}")
+        if args.bundle:
+            from .manifest import make_bundle
+            print(f"Bundle written: {make_bundle(mdir, Path(args.bundle))} (model files only; see NOTICE.txt inside)")
+        return 0
     if args.command == "list-datasets":
         return _cmd_list_datasets(cfg)
     if args.command == "validate-dataset":
