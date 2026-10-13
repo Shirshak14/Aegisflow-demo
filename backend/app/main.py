@@ -366,7 +366,8 @@ def create_app(db_path: str | Path | None = None, warm_up: bool = True, settings
                 cfg = load_config()
                 st = cfg.config.get("stream") or {}
                 model_dir = ROOT / str(st.get("model_dir") or "artifacts/models/cic_ids2017")
-                app.state.stream = StreamScorer(model_dir, cfg, allowed_lateness=float(st.get("allowed_lateness_seconds") or 0))
+                app.state.stream = StreamScorer(model_dir, cfg, allowed_lateness=float(st.get("allowed_lateness_seconds") or 0),
+                                                 max_missing_windows=st.get("max_missing_windows"))
             return app.state.stream
 
     @app.post("/stream/flows", dependencies=[Depends(require("analyst", bucket="inference"))])

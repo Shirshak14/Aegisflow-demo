@@ -22,7 +22,8 @@ from ..config import AegisFlowConfig
 from .features.flow_features import compute_flow_features
 from .modeling import LSTMForecaster, MODEL_FEATURES
 from .preprocessing.cleaning import clean_canonical_frame
-from .temporal.windowing import aggregate_host_windows
+from .temporal.sequences import sequence_continuity
+from .temporal.windowing import WindowingConfig, aggregate_host_windows
 
 # Flow-level extras that CICFlowMeter CSVs lack but packet captures provide; summarised per scored
 # sequence for analysts. They are NOT model inputs (the model was trained without them).
@@ -30,8 +31,16 @@ PACKET_EXTRAS = ("ttl_mean", "ttl_std", "retransmission_count")
 
 
 def build_inference_sequences(windows: pd.DataFrame, sequence_length: int,
-                              feature_names: list[str] | None = None) -> tuple[np.ndarray, pd.DataFrame]:
-    """Every run of ``sequence_length`` consecutive windows per host (no future target required)."""
+                              feature_names: list[str] | None = None, *, stride_seconds: float = 30.0,
+                              window_seconds: float = 60.0,
+                              max_missing_windows: int | None = None) -> tuple[np.ndarray, pd.DataFrame]:
+    """Every run of ``sequence_length`` consecutive windows (rows) per host (no future target required).
+
+    A host only has a window in grid slots where it sent traffic, so consecutive rows may skip silent
+    slots. Each sequence's metadata reports that (see ``sequence_continuity``). With
+    ``max_missing_windows=None`` (the default, and how the model was trained) such sequences are still
+    scored and only flagged; with an integer, sequences with more silent slots than that are not scored.
+    """
     names = list(feature_names or MODEL_FEATURES)
     if windows.empty:
         return np.empty((0, sequence_length, len(names)), np.float32), pd.DataFrame()
@@ -45,10 +54,14 @@ def build_inference_sequences(windows: pd.DataFrame, sequence_length: int,
         feats = g[names].to_numpy(np.float32)
         starts, ends = g["window_start"].to_numpy(), g["window_end"].to_numpy()
         for i in range(0, len(g) - sequence_length + 1):
-            X.append(feats[i:i + sequence_length])
+            span = slice(i, i + sequence_length)
+            cont = sequence_continuity(starts[span], ends[span], stride_seconds, window_seconds)
+            if max_missing_windows is not None and cont["input_missing_windows"] > max_missing_windows:
+                continue
+            X.append(feats[span])
             meta.append({"sequence_id": f"{host}_seq_{i}", "host_id": str(host),
                          "seq_start_time": pd.Timestamp(starts[i]),
-                         "seq_end_time": pd.Timestamp(ends[i + sequence_length - 1])})
+                         "seq_end_time": pd.Timestamp(ends[i + sequence_length - 1]), **cont})
     if not X:
         return np.empty((0, sequence_length, len(names)), np.float32), pd.DataFrame()
     return np.stack(X), pd.DataFrame(meta)
@@ -112,12 +125,15 @@ def prepare_flows(flows: pd.DataFrame) -> pd.DataFrame:
 
 
 def score_flows(flows: pd.DataFrame, model_dir: str | Path, cfg: AegisFlowConfig, *,
-                threshold: float | None = None) -> pd.DataFrame:
+                threshold: float | None = None, max_missing_windows: int | None = None) -> pd.DataFrame:
     """Return one row per scored sequence: host, time span, attack probability, alert flag, packet extras."""
     scorer = LSTMScorer(model_dir, threshold)
     cleaned = prepare_flows(flows)
     windows = aggregate_host_windows(cleaned, cfg=cfg)
-    X, meta = build_inference_sequences(windows, scorer.sequence_length, scorer.feature_names)
+    w = WindowingConfig.from_config(cfg)
+    X, meta = build_inference_sequences(windows, scorer.sequence_length, scorer.feature_names,
+                                        stride_seconds=w.stride_seconds, window_seconds=w.window_size_seconds,
+                                        max_missing_windows=max_missing_windows)
     cols = ["sequence_id", "host_id", "seq_start_time", "seq_end_time", "attack_probability", "predicted_attack",
             "threshold"]
     if len(X) == 0:

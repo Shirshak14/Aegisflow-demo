@@ -248,6 +248,44 @@ def build_host_sequences(
     return seq_df
 
 
+def slot_gaps(window_starts: Any, stride_seconds: float) -> np.ndarray:
+    """Silent stride slots between each pair of adjacent windows of one host (0 = consecutive).
+
+    Windows sit on a grid ``t0 + k * stride``; a host only has a window in slots where it sent at
+    least ``min_flows_per_window`` flows, so consecutive *rows* are not necessarily consecutive
+    *slots*. ``window_starts`` is sorted ascending. Returns ``len(window_starts) - 1`` integers.
+    """
+    starts = np.asarray(window_starts, dtype="datetime64[ns]")
+    if len(starts) < 2:
+        return np.zeros(0, dtype=np.int64)
+    steps = np.diff(starts).astype("timedelta64[ns]").astype(np.int64) / 1e9 / float(stride_seconds)
+    return np.maximum(np.rint(steps).astype(np.int64) - 1, 0)
+
+
+def sequence_continuity(window_starts: Any, window_ends: Any, stride_seconds: float,
+                        window_seconds: float) -> dict[str, Any]:
+    """Temporal facts about one inference sequence, from its input windows (sorted ascending).
+
+    ``input_span_seconds`` is the real time the input covers (a gap-free sequence of L windows spans
+    (L - 1) * stride + window). ``input_missing_windows`` counts silent stride slots inside it and
+    ``max_gap_windows`` is the longest silent run. ``target_not_before`` is the first grid slot that
+    starts strictly after the input ends: the earliest the predicted window can be. The target is the
+    host's next OBSERVED window after that, not a fixed horizon, so it can lie later when the host is
+    silent (the same rule ``build_host_sequences`` uses for training targets).
+    """
+    starts = np.asarray(window_starts, dtype="datetime64[ns]")
+    ends = np.asarray(window_ends, dtype="datetime64[ns]")
+    gaps = slot_gaps(starts, stride_seconds)
+    slots_after_end = int(window_seconds // stride_seconds) + 1
+    return {
+        "input_span_seconds": float((ends[-1] - starts[0]) / np.timedelta64(1, "s")),
+        "input_missing_windows": int(gaps.sum()),
+        "max_gap_windows": int(gaps.max()) if len(gaps) else 0,
+        "contiguous": bool(gaps.sum() == 0),
+        "target_not_before": pd.Timestamp(starts[-1] + np.timedelta64(int(slots_after_end * stride_seconds * 1e9), "ns")),
+    }
+
+
 def _as_str(values: np.ndarray) -> np.ndarray:
     return np.array([str(v) for v in values], dtype=object)
 
